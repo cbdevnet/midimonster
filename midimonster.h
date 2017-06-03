@@ -1,3 +1,5 @@
+#ifndef MIDIMONSTER_HEADER
+#define MIDIMONSTER_HEADER
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -8,12 +10,12 @@ struct _channel_value;
 struct _backend_channel;
 struct _backend_instance;
 
-typedef int (*mmbackend_handle_event)(struct _backend_channel* c, struct _channel_value v);
-typedef struct _backend_channel* (*mmbackend_parse_channel)(char* spec);
-typedef int (*mmbackend_configure)(char* option, char* value);
+typedef int (*mmbackend_handle_event)(size_t channels, struct _backend_channel* c, struct _channel_value* v);
 typedef struct _backend_instance* (*mmbackend_create_instance)();
-typedef int (*mmbackend_configure_instance)(char* option, char* value);
-typedef int (*mmbackend_process_fd)(int fd, void** impl);
+typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_instance* instance, char* spec);
+typedef int (*mmbackend_configure)(char* option, char* value);
+typedef int (*mmbackend_configure_instance)(struct _backend_instance* instance, char* option, char* value);
+typedef int (*mmbackend_process_fd)(size_t fds, int* fd, void** impl);
 typedef int (*mmbackend_shutdown)();
 
 typedef struct _channel_value {
@@ -46,6 +48,7 @@ typedef struct _backend_channel {
 	void* impl;
 } channel;
 
+//FIXME might be replaced by struct pollfd
 typedef struct /*_mm_managed_fd*/ {
 	int fd;
 	backend* backend;
@@ -55,3 +58,6 @@ typedef struct /*_mm_managed_fd*/ {
 backend* mm_backend_register(backend b);
 int mm_manage_fd(int fd, backend* b, int manage, void* impl);
 int mm_channel_event(channel* c, channel_value v);
+
+void mm_instance_free(instance* i);
+#endif

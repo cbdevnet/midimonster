@@ -1,2 +1,2 @@
 #include "midimonster.h"
-int midi_start();
+int osc_start();

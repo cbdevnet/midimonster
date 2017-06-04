@@ -14,6 +14,7 @@ int midi_init(){
 		.channel = midi_channel,
 		.handle = midi_set,
 		.process = midi_handle,
+		.start = midi_start,
 		.shutdown = midi_shutdown
 	};
 
@@ -79,6 +80,10 @@ static int midi_set(size_t num, channel* c, channel_value* v){
 
 static int midi_handle(size_t num, int* fd, void** data){
 	//TODO
+	return 1;
+}
+
+static int midi_start(){
 	return 1;
 }
 

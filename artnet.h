@@ -7,9 +7,13 @@ static instance* artnet_instance();
 static channel* artnet_channel(instance* instance, char* spec);
 static int artnet_set(size_t num, channel* c, channel_value* v);
 static int artnet_handle(size_t num, int* fd, void** data);
+static int artnet_start();
 static int artnet_shutdown();
+
+#define MODE_OUTPUT 1
 
 typedef struct /*_artnet_instance_model*/ {
 	uint8_t net;
 	uint8_t uni;
+	uint8_t mode;
 } artnet_instance_data;

@@ -85,6 +85,11 @@ int config_read(char* cfg_file){
 					goto bail;
 				}
 
+				if(instance_match(separator)){
+					fprintf(stderr, "Duplicate instance name %s\n", separator);
+					goto bail;
+				}
+
 				current_instance = current_backend->create();
 				if(!current_instance){
 					fprintf(stderr, "Failed to instantiate backend %s\n", line);

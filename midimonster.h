@@ -34,19 +34,20 @@ typedef struct /*_mm_backend*/ {
 	mmbackend_parse_channel channel;
 	mmbackend_handle_event handle;
 	mmbackend_process_fd process;
+	mmbackend_start start;
 	mmbackend_shutdown shutdown;
 } backend;
 
 typedef struct _backend_instance {
 	backend* backend;
-	size_t ident;
+	uint64_t ident; /*FIXME needed? identification provided by name*/
 	void* impl;
 	char* name;
 } instance;
 
 typedef struct _backend_channel {
 	instance* instance;
-	size_t ident;
+	uint64_t ident;
 	void* impl;
 } channel;
 

@@ -13,6 +13,7 @@ int artnet_init(){
 		.channel = artnet_channel,
 		.handle = artnet_set,
 		.process = artnet_handle,
+		.start = artnet_start,
 		.shutdown = artnet_shutdown
 	};
 
@@ -64,6 +65,15 @@ static int artnet_configure_instance(instance* instance, char* option, char* val
 		data->uni = strtoul(value, NULL, 10);
 		return 0;
 	}
+	else if(!strcmp(option, "output")){
+		if(!strcmp(value, "true")){
+			data->mode |= MODE_OUTPUT;
+		}
+		else{
+			data->mode &= ~MODE_OUTPUT;
+		}
+		return 0;
+	}
 
 	fprintf(stderr, "Unknown ArtNet instance option %s\n", option);
 	return 1;
@@ -81,6 +91,11 @@ static int artnet_set(size_t num, channel* c, channel_value* v){
 }
 
 static int artnet_handle(size_t num, int* fd, void** data){
+	//TODO
+	return 1;
+}
+
+static int artnet_start(){
 	//TODO
 	return 1;
 }

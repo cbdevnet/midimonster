@@ -1,12 +1,12 @@
 #include <string.h>
 #include "artnet.h"
 
-size_t ninstances = 0;
-instance* instances = NULL;
+#define BACKEND_NAME "artnet"
+static uint8_t default_net = 0;
 
 int artnet_init(){
 	backend artnet = {
-		.name = "artnet",
+		.name = BACKEND_NAME,
 		.conf = artnet_configure,
 		.create = artnet_instance,
 		.conf_instance = artnet_configure_instance,
@@ -17,7 +17,7 @@ int artnet_init(){
 	};
 
 	//register backend
-	if(!mm_backend_register(artnet)){
+	if(mm_backend_register(artnet)){
 		fprintf(stderr, "Failed to register ArtNet backend\n");
 		return 1;
 	}
@@ -25,50 +25,78 @@ int artnet_init(){
 }
 
 static int artnet_configure(char* option, char* value){
-	fprintf(stderr, "ArtNet backend configured: %s -> %s\n", option, value);
-	return 0;
+	if(!strcmp(option, "bind")){
+		//TODO create socket, hand over to be managed (unregister previous socket?)
+		return 0;
+	}
+	else if(!strcmp(option, "net")){
+		//configure default net
+		default_net = strtoul(value, NULL, 10);
+		return 0;
+	}
+	fprintf(stderr, "Unknown ArtNet backend option %s\n", option);
+	return 1;
 }
 
 static instance* artnet_instance(){
-	fprintf(stderr, "Creating new ArtNet instance\n");
-	instances = realloc(instances, (ninstances + 1) * sizeof(instance));
-	if(!instances){
-		fprintf(stderr, "Failed to allocate memory\n");
-		ninstances = 0;
+	instance* inst = mm_instance();
+	if(!inst){
 		return NULL;
 	}
-	memset(instances + ninstances, 0, sizeof(instance));
-	ninstances++;
-	return instances + (ninstances - 1);
+
+	inst->impl = calloc(1, sizeof(artnet_instance_data));
+	if(!inst->impl){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return NULL;
+	}
+
+	return inst;
 }
 
 static int artnet_configure_instance(instance* instance, char* option, char* value){
-	fprintf(stderr, "ArtNet instance configured: %s -> %s\n", option, value);
+	artnet_instance_data* data = (artnet_instance_data*) instance->impl;
+
+	if(!strcmp(option, "net")){
+		data->net = strtoul(value, NULL, 10);
+		return 0;
+	}
+	else if(!strcmp(option, "uni")){
+		data->uni = strtoul(value, NULL, 10);
+		return 0;
+	}
+
+	fprintf(stderr, "Unknown ArtNet instance option %s\n", option);
 	return 1;
 }
 
 static channel* artnet_channel(instance* instance, char* spec){
 	fprintf(stderr, "Parsing ArtNet channelspec %s\n", spec);
+	//TODO
 	return NULL;
 }
 
 static int artnet_set(size_t num, channel* c, channel_value* v){
+	//TODO
 	return 1;
 }
 
 static int artnet_handle(size_t num, int* fd, void** data){
+	//TODO
 	return 1;
 }
 
 static int artnet_shutdown(){
-	size_t u;
-
-	for(u = 0; u < ninstances; u++){
-		mm_instance_free(instances + u);
+	size_t n, p;
+	instance** inst = NULL;
+	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
+		fprintf(stderr, "Failed to fetch instance list\n");
+		return 1;
 	}
-	free(instances);
-	ninstances = 0;
 
+	for(p = 0; p < n; p++){
+		free(inst[p]->impl);
+	}
+	free(inst);
 	fprintf(stderr, "ArtNet backend shut down\n");
 	return 0;
 }

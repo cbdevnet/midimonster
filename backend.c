@@ -15,21 +15,21 @@ backend* backend_match(char* name){
 	return NULL;
 }
 
-backend* mm_backend_register(backend b){
+int mm_backend_register(backend b){
 	if(!backend_match(b.name)){
 		backends = realloc(backends, (nbackends + 1) * sizeof(backend));
 		if(!backends){
 			fprintf(stderr, "Failed to allocate memory\n");
 			nbackends = 0;
-			return NULL;
+			return 1;
 		}
 		backends[nbackends] = b;
 		nbackends++;
 
 		fprintf(stderr, "Registered backend %s\n", b.name);
-		return backends + (nbackends - 1);
+		return 0;
 	}
-	return NULL;
+	return 1;
 }
 
 int backends_stop(){

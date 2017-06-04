@@ -130,9 +130,3 @@ bail:
 	free(line_raw);
 	return rv;
 }
-
-void mm_instance_free(instance* inst){
-	free(inst->name);
-	inst->name = NULL;
-	inst->backend = NULL;
-}

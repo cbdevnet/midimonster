@@ -55,9 +55,9 @@ typedef struct /*_mm_managed_fd*/ {
 	void* impl;
 } managed_fd;
 
-backend* mm_backend_register(backend b);
-int mm_manage_fd(int fd, backend* b, int manage, void* impl);
+int mm_backend_register(backend b);
+instance* mm_instance();
+int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 int mm_channel_event(channel* c, channel_value v);
-
-void mm_instance_free(instance* i);
+int mm_backend_instances(char* backend, size_t* n, instance*** i);
 #endif

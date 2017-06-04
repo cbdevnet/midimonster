@@ -6,6 +6,35 @@ static size_t nbackends = 0;
 static backend* backends = NULL;
 static size_t ninstances = 0;
 static instance** instances = NULL;
+static size_t nchannels = 0;
+static channel** channels = NULL;
+
+channel* mm_channel(instance* i, uint64_t ident){
+	size_t u;
+	for(u = 0; u < nchannels; u++){
+		if(channels[u]->instance == 0 && channels[u]->ident == ident){
+			return channels[u];
+		}
+	}
+
+	channel** new_chan = realloc(channels, (nchannels + 1) * sizeof(channel*));
+	if(!new_chan){
+		fprintf(stderr, "Failed to allocate memory\n");
+		nchannels = 0;
+		return NULL;
+	}
+
+	channels = new_chan;
+	channels[nchannels] = calloc(1, sizeof(channel));
+	if(!channels[nchannels]){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return NULL;
+	}
+
+	channels[nchannels]->instance = i;
+	channels[nchannels]->ident = ident;
+	return channels[nchannels++];
+}
 
 instance* mm_instance(){
 	instance** new_inst = realloc(instances, (ninstances + 1) * sizeof(instance*));
@@ -63,6 +92,19 @@ void instances_free(){
 	}
 	free(instances);
 	ninstances = 0;
+}
+
+void channels_free(){
+	size_t u;
+	for(u = 0; u < nchannels; u++){
+		if(channels[u]->impl){
+			channels[u]->instance->backend->channel_free(channels[u]);
+		}
+		free(channels[u]);
+		channels[u] = NULL;
+	}
+	free(channels);
+	nchannels = 0;
 }
 
 backend* backend_match(char* name){

@@ -16,6 +16,8 @@ typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_inst
 typedef int (*mmbackend_configure)(char* option, char* value);
 typedef int (*mmbackend_configure_instance)(struct _backend_instance* instance, char* option, char* value);
 typedef int (*mmbackend_process_fd)(size_t fds, int* fd, void** impl);
+typedef int (*mmbackend_start)();
+typedef uint32_t (*mmbackend_max_interval)();
 typedef int (*mmbackend_shutdown)();
 
 typedef struct _channel_value {

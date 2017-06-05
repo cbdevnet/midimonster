@@ -80,9 +80,12 @@ static int artnet_configure_instance(instance* instance, char* option, char* val
 }
 
 static channel* artnet_channel(instance* instance, char* spec){
-	fprintf(stderr, "Parsing ArtNet channelspec %s\n", spec);
-	//TODO
-	return NULL;
+	unsigned channel = strtoul(spec, NULL, 10);
+	if(channel > 512 || channel < 1){
+		fprintf(stderr, "Invalid ArtNet channel %s\n", spec);
+		return NULL;
+	}
+	return mm_channel(instance, channel);
 }
 
 static int artnet_set(size_t num, channel* c, channel_value* v){

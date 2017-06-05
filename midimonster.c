@@ -50,6 +50,16 @@ int mm_map_channel(channel* from, channel* to){
 	return 0;
 }
 
+void map_free(){
+	size_t u;
+	for(u = 0; u < mappings; u++){
+		free(map[u].to);
+	}
+	free(map);
+	mappings = 0;
+	map = NULL;
+}
+
 int usage(char* fn){
 	fprintf(stderr, "MIDIMonster v0.1\n");
 	fprintf(stderr, "Usage:\n");
@@ -75,7 +85,9 @@ int main(int argc, char** argv){
 	if(config_read(cfg_file)){
 		fprintf(stderr, "Failed to read configuration file %s\n", cfg_file);
 		backends_stop();
+		channels_free();
 		instances_free();
+		map_free();
 		return usage(argv[0]);
 	}
 
@@ -93,6 +105,7 @@ bail:
 	backends_stop();
 	channels_free();
 	instances_free();
+	map_free();
 
 	return rv;
 }

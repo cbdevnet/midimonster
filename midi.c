@@ -5,6 +5,18 @@
 #define BACKEND_NAME "midi"
 static snd_seq_t* sequencer = NULL;
 
+/*
+ * TODO
+ * 	Optionally send note-off messages
+ */
+
+enum /*_midi_channel_type*/ {
+	none = 0,
+	note,
+	cc,
+	sysmsg
+};
+
 int midi_init(){
 	backend midi = {
 		.name = BACKEND_NAME,
@@ -68,8 +80,53 @@ static int midi_configure_instance(instance* instance, char* option, char* value
 }
 
 static channel* midi_channel(instance* instance, char* spec){
-	fprintf(stderr, "Parsing MIDI channelspec %s\n", spec);
-	//TODO
+	union {
+		struct {
+			uint8_t pad[5];
+			uint8_t type;
+			uint8_t channel;
+			uint8_t control;
+		} fields;
+		uint64_t label;
+	} ident = {
+		.label = 0
+	};
+
+	char* channel;
+
+	if(!strncmp(spec, "cc", 2)){
+		ident.fields.type = cc;
+		channel = spec + 2;
+	}
+	else if(!strncmp(spec, "note", 4)){
+		ident.fields.type = note;
+		channel = spec + 4;
+	}
+	else{
+		fprintf(stderr, "Unknown MIDI channel specification %s\n", spec);
+		return NULL;
+	}
+
+	ident.fields.channel = strtoul(channel, &channel, 10);
+
+	//FIXME test this
+	if(ident.fields.channel > 16){
+		fprintf(stderr, "Channel out of range in channel spec %s\n", spec);
+		return NULL;
+	}
+
+	if(*channel != '.'){
+		fprintf(stderr, "Need MIDI channel specification of form channel.control, had %s\n", spec);
+		return NULL;
+	}
+	channel++;
+
+	ident.fields.control = strtoul(channel, NULL, 10);
+
+	if(ident.label){
+		return mm_channel(instance, ident.label);
+	}
+
 	return NULL;
 }
 

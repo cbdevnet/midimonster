@@ -14,6 +14,7 @@ enum /*_midi_channel_type*/ {
 	none = 0,
 	note,
 	cc,
+	nrpn,
 	sysmsg
 };
 
@@ -125,6 +126,10 @@ static channel* midi_channel(instance* instance, char* spec){
 		ident.fields.type = note;
 		channel = spec + 4;
 	}
+	else if(!strncmp(spec, "nrpn", 4)){
+		ident.fields.type = nrpn;
+		channel = spec + 4;
+	}
 	else{
 		fprintf(stderr, "Unknown MIDI channel specification %s\n", spec);
 		return NULL;
@@ -153,14 +158,84 @@ static channel* midi_channel(instance* instance, char* spec){
 	return NULL;
 }
 
-static int midi_set(size_t num, channel* c, channel_value* v){
-	//TODO
-	return 1;
+static int midi_set(instance* inst, size_t num, channel* c, channel_value* v){
+	size_t u;
+	midi_instance_data* data;
+
+	for(u = 0; u < num; u++){
+		data = (midi_instance_data*) c[u].instance->impl;
+		//TODO write out event
+	}
+
+	return 0;
 }
 
-static int midi_handle(size_t num, int* fd, void** data){
-	//TODO
-	return 1;
+static int midi_handle(size_t num, managed_fd* fds){
+	snd_seq_event_t* ev = NULL;
+	instance* inst = NULL;
+	channel* changed = NULL;
+	channel_value val;
+	union {
+		struct {
+			uint8_t pad[5];
+			uint8_t type;
+			uint8_t channel;
+			uint8_t control;
+		} fields;
+		uint64_t label;
+	} ident = {
+		.label = 0
+	};
+
+	while(snd_seq_event_input(sequencer, &ev) > 0){
+		ident.label = 0;
+		switch(ev->type){
+			case SND_SEQ_EVENT_NOTEON:
+			case SND_SEQ_EVENT_NOTEOFF:
+			case SND_SEQ_EVENT_KEYPRESS:
+			case SND_SEQ_EVENT_NOTE:
+				ident.fields.type = note;
+				ident.fields.channel = ev->data.note.channel;
+				ident.fields.control = ev->data.note.note;
+				val.normalised = (double)ev->data.note.velocity / 127.0;
+				break;
+			case SND_SEQ_EVENT_CONTROLLER:
+				ident.fields.type = cc;
+				ident.fields.channel = ev->data.control.channel;
+				ident.fields.control = ev->data.control.param;
+				val.raw.u64 = ev->data.control.value;
+				val.normalised = (double)ev->data.control.value / 127.0;
+				break;
+			case SND_SEQ_EVENT_CONTROL14:
+			case SND_SEQ_EVENT_NONREGPARAM:
+			case SND_SEQ_EVENT_REGPARAM:
+				//FIXME value calculation
+				ident.fields.type = nrpn;
+				ident.fields.channel = ev->data.control.channel;
+				ident.fields.control = ev->data.control.param;
+				break;
+			default:
+				fprintf(stderr, "Ignored MIDI event of unsupported type\n");
+				continue;
+		}
+
+		inst = mm_instance_find(BACKEND_NAME, ev->dest.port);
+		if(!inst){
+			//FIXME might want to return failure
+			fprintf(stderr, "Delivered MIDI event did not match any instance\n");
+			continue;
+		}
+
+		changed = mm_channel(inst, ident.label, 0);
+		if(changed){
+			if(mm_channel_event(changed, val)){
+				free(ev);
+				return 1;
+			}
+		}
+	}
+	free(ev);
+	return 0;
 }
 
 static int midi_start(){
@@ -180,6 +255,7 @@ static int midi_start(){
 	for(p = 0; p < n; p++){
 		data = (midi_instance_data*) inst[p]->impl;
 		data->port = snd_seq_create_simple_port(sequencer, inst[p]->name, SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE | SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ, SND_SEQ_PORT_TYPE_MIDI_GENERIC);
+		inst[p]->ident = data->port;
 
 		//make connections
 		if(data->write){
@@ -218,7 +294,9 @@ static int midi_start(){
 
 	fprintf(stderr, "Registering %d descriptors to core\n", nfds);
 	for(p = 0; p < nfds; p++){
-		mm_manage_fd(pfds[p].fd, BACKEND_NAME, 1, NULL);
+		if(mm_manage_fd(pfds[p].fd, BACKEND_NAME, 1, NULL)){
+			goto bail;
+		}
 	}
 
 	rv = 0;
@@ -232,12 +310,18 @@ bail:
 static int midi_shutdown(){
 	size_t n, p;
 	instance** inst = NULL;
+	midi_instance_data* data = NULL;
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
 		fprintf(stderr, "Failed to fetch instance list\n");
 		return 1;
 	}
 
 	for(p = 0; p < n; p++){
+		data = (midi_instance_data*) inst[p]->impl;
+		free(data->read);
+		free(data->write);
+		data->read = NULL;
+		data->write = NULL;
 		free(inst[p]->impl);
 	}
 	free(inst);

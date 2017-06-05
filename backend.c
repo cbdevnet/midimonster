@@ -9,10 +9,37 @@ static instance** instances = NULL;
 static size_t nchannels = 0;
 static channel** channels = NULL;
 
+int backends_handle(size_t nfds, managed_fd* fds){
+	size_t u, p, n;
+	int rv = 0;
+	managed_fd xchg;
+
+	for(u = 0; u < nbackends && !rv; u++){
+		n = 0;
+
+		for(p = 0; p < nfds; p++){
+			if(fds[p].backend == backends + u){
+				xchg = fds[n];
+				fds[n] = fds[p];
+				fds[p] = xchg;
+				n++;
+			}
+		}
+
+		rv |= backends[u].process(n, fds);
+	}
+	return rv;
+}
+
+int backends_notify(size_t nev, channel* c, channel_value* v){
+	//TODO
+	return 1;
+}
+
 channel* mm_channel(instance* i, uint64_t ident, uint8_t create){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
-		if(channels[u]->instance == 0 && channels[u]->ident == ident){
+		if(channels[u]->instance == i && channels[u]->ident == ident){
 			return channels[u];
 		}
 	}
@@ -56,6 +83,22 @@ instance* mm_instance(){
 	}
 
 	return instances[ninstances++];
+}
+
+instance* mm_instance_find(char* name, uint64_t ident){
+	size_t u;
+	backend* b = backend_match(name);
+	if(!b){
+		return NULL;
+	}
+
+	for(u = 0; u < ninstances; u++){
+		if(instances[u]->backend == b && instances[u]->ident == ident){
+			return instances[u];
+		}
+	}
+
+	return NULL;
 }
 
 int mm_backend_instances(char* name, size_t* ninst, instance*** inst){
@@ -132,12 +175,25 @@ instance* instance_match(char* name){
 }
 
 struct timeval backend_timeout(){
-	//TODO fetch minimum poll interval from backends
-	struct timeval tv = {
-		0,
-		10000
-	};
+	size_t u;
+	uint32_t res, secs = 1, msecs = 0;
 
+	for(u = 0; u < nbackends; u++){
+		if(backends[u].interval){
+			res = backends[u].interval();
+			if((res / 1000) <= secs){
+				secs = res / 1000;
+				if((res % 1000) < msecs){
+					msecs = res % 1000;
+				}
+			}
+		}
+	}
+
+	struct timeval tv = {
+		secs,
+		msecs
+	};
 	return tv;
 }
 

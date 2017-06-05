@@ -133,6 +133,12 @@ void fds_free(){
 	fd = NULL;
 }
 
+int mm_channel_event(channel* c, channel_value v){
+	//TODO
+	fprintf(stderr, "Stub implementation: Channel on %s at value %f\n", c->instance->name, v.normalised);
+	return 0;
+}
+
 int usage(char* fn){
 	fprintf(stderr, "MIDIMonster v0.1\n");
 	fprintf(stderr, "Usage:\n");
@@ -143,7 +149,8 @@ int usage(char* fn){
 int main(int argc, char** argv){
 	fd_set all_fds, read_fds;
 	struct timeval tv;
-	size_t u;
+	size_t u, n;
+	managed_fd* signaled_fds;
 	int rv = EXIT_FAILURE, error, maxfd = -1;
 	char* cfg_file = DEFAULT_CFG;
 	if(argc > 1){
@@ -176,6 +183,13 @@ int main(int argc, char** argv){
 
 	signal(SIGINT, signal_handler);
 
+	//allocate data buffers
+	signaled_fds = calloc(fds, sizeof(managed_fd));
+	if(!signaled_fds){
+		fprintf(stderr, "Failed to allocate memory\n");
+		goto bail;
+	}
+
 	//create initial fd set
 	FD_ZERO(&all_fds);
 	for(u = 0; u < fds; u++){
@@ -195,14 +209,29 @@ int main(int argc, char** argv){
 			fprintf(stderr, "select failed: %s\n", strerror(errno));
 			break;
 		}
-		//TODO process all backends, collect events
-		//TODO push all events to backends
-		//FIXME notify non-fd backends
+
+		//find all signaled fds
+		n = 0;
+		for(u = 0; u < fds; u++){
+			if(fd[u].fd >= 0 && FD_ISSET(fd[u].fd, &read_fds)){
+				signaled_fds[n] = fd[u];
+				n++;
+			}
+		}
+
+		//run backend processing, collect events
+		if(backends_handle(n, signaled_fds)){
+			fprintf(stderr, "Backends failed to handle input\n");
+			goto bail;
+		}
+
+		//TODO push collected events to target backends
 	}
 	
 	rv = EXIT_SUCCESS;
 bail:
 	//free all data
+	free(signaled_fds);
 	backends_stop();
 	channels_free();
 	instances_free();

@@ -1,4 +1,8 @@
 #include <string.h>
+#include <signal.h>
+#include <sys/select.h>
+#include <unistd.h>
+#include <errno.h>
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
@@ -10,6 +14,13 @@ int osc_init();
 
 static size_t mappings = 0;
 static channel_mapping* map = NULL;
+static size_t fds = 0;
+static managed_fd* fd = NULL;
+volatile static sig_atomic_t shutdown_requested = 0;
+
+void signal_handler(int signum){
+	shutdown_requested = 1;
+}
 
 int mm_map_channel(channel* from, channel* to){
 	size_t u, m;
@@ -60,6 +71,68 @@ void map_free(){
 	map = NULL;
 }
 
+int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
+	backend* b = backend_match(back);
+	size_t u;
+
+	if(!b){
+		fprintf(stderr, "Unknown backend %s registered for managed fd\n", back);
+		return 1;
+	}
+
+	//find exact match
+	for(u = 0; u < fds; u++){
+		if(fd[u].fd == new_fd && fd[u].backend == b){
+			if(!manage){
+				fd[u].fd = -1;
+				fd[u].backend = NULL;
+				fd[u].impl = NULL;
+			}
+			return 0;
+		}
+	}
+
+	if(!manage){
+		return 0;
+	}
+
+	//find free slot
+	for(u = 0; u < fds; u++){
+		if(fd[u].fd < 0){
+			break;
+		}
+	}
+	//if necessary expand
+	if(u == fds){
+		fd = realloc(fd, (fds + 1) * sizeof(managed_fd));
+		if(!fd){
+			fprintf(stderr, "Failed to allocate memory\n");
+			return 1;
+		}
+		fds++;
+	}
+
+	//store new fd
+	fd[u].fd = new_fd;
+	fd[u].backend = b;
+	fd[u].impl = impl;
+	return 0;
+}
+
+void fds_free(){
+	size_t u;
+	for(u = 0; u < fds; u++){
+		//TODO free impl
+		if(fd[u].fd >= 0){
+			close(fd[u].fd);
+			fd[u].fd = -1;
+		}
+	}
+	free(fd);
+	fds = 0;
+	fd = NULL;
+}
+
 int usage(char* fn){
 	fprintf(stderr, "MIDIMonster v0.1\n");
 	fprintf(stderr, "Usage:\n");
@@ -68,7 +141,10 @@ int usage(char* fn){
 }
 
 int main(int argc, char** argv){
-	int rv = EXIT_FAILURE;
+	fd_set all_fds, read_fds;
+	struct timeval tv;
+	size_t u;
+	int rv = EXIT_FAILURE, error, maxfd = -1;
 	char* cfg_file = DEFAULT_CFG;
 	if(argc > 1){
 		cfg_file = argv[1];
@@ -88,6 +164,7 @@ int main(int argc, char** argv){
 		channels_free();
 		instances_free();
 		map_free();
+		fds_free();
 		return usage(argv[0]);
 	}
 
@@ -97,7 +174,31 @@ int main(int argc, char** argv){
 		goto bail;
 	}
 
-	//TODO wait for & translate events
+	signal(SIGINT, signal_handler);
+
+	//create initial fd set
+	FD_ZERO(&all_fds);
+	for(u = 0; u < fds; u++){
+		if(fd[u].fd >= 0){
+			FD_SET(fd[u].fd, &all_fds);
+			maxfd = max(maxfd, fd[u].fd);
+		}
+	}
+
+	//process events
+	while(!shutdown_requested){
+		//wait for & translate events
+		read_fds = all_fds;
+		tv = backend_timeout();
+		error = select(maxfd + 1, &read_fds, NULL, NULL, &tv);
+		if(error < 0){
+			fprintf(stderr, "select failed: %s\n", strerror(errno));
+			break;
+		}
+		//TODO process all backends, collect events
+		//TODO push all events to backends
+		//FIXME notify non-fd backends
+	}
 	
 	rv = EXIT_SUCCESS;
 bail:
@@ -106,6 +207,7 @@ bail:
 	channels_free();
 	instances_free();
 	map_free();
+	fds_free();
 
 	return rv;
 }

@@ -141,7 +141,7 @@ static int midi_handle(size_t num, int* fd, void** data){
 }
 
 static int midi_start(){
-	return 1;
+	return 0;
 }
 
 static int midi_shutdown(){

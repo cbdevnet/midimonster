@@ -3,6 +3,13 @@
 
 #define BACKEND_NAME "artnet"
 static uint8_t default_net = 0;
+static struct {
+	char* host;
+	char* port;
+} bind = {
+	.host = NULL,
+	.port = NULL
+};
 
 int artnet_init(){
 	backend artnet = {
@@ -26,8 +33,20 @@ int artnet_init(){
 }
 
 static int artnet_configure(char* option, char* value){
+	char* separator = value;
 	if(!strcmp(option, "bind")){
-		//TODO create socket, hand over to be managed (unregister previous socket?)
+		for(; *separator && *separator != ' '; separator++){
+		}
+
+		if(*separator){
+			*separator = 0;
+			separator++;
+			free(bind.port);
+			bind.port = strdup(separator);
+		}
+
+		free(bind.host);
+		bind.host = strdup(value);
 		return 0;
 	}
 	else if(!strcmp(option, "net")){
@@ -67,10 +86,10 @@ static int artnet_configure_instance(instance* instance, char* option, char* val
 	}
 	else if(!strcmp(option, "output")){
 		if(!strcmp(value, "true")){
-			data->mode |= MODE_OUTPUT;
+			data->mode |= output;
 		}
 		else{
-			data->mode &= ~MODE_OUTPUT;
+			data->mode &= ~output;
 		}
 		return 0;
 	}
@@ -99,8 +118,25 @@ static int artnet_handle(size_t num, int* fd, void** data){
 }
 
 static int artnet_start(){
-	//TODO
-	return 1;
+	if(!bind.host){
+		bind.host = strdup("127.0.0.1");
+	}
+
+	if(!bind.port){
+		bind.port = strdup("6454");
+	}
+
+	if(!bind.host || !bind.port){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return 1;
+	}
+
+	//TODO allocate all active universes
+	//TODO open socket
+	fprintf(stderr, "Listening for ArtNet data on %s port %s\n", bind.host, bind.port);
+	//TODO parse all universe destinations
+
+	return 0;
 }
 
 static int artnet_shutdown(){
@@ -115,6 +151,9 @@ static int artnet_shutdown(){
 		free(inst[p]->impl);
 	}
 	free(inst);
+
+	free(bind.host);
+	free(bind.port);
 	fprintf(stderr, "ArtNet backend shut down\n");
 	return 0;
 }

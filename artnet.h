@@ -10,10 +10,23 @@ static int artnet_handle(size_t num, int* fd, void** data);
 static int artnet_start();
 static int artnet_shutdown();
 
-#define MODE_OUTPUT 1
-
 typedef struct /*_artnet_instance_model*/ {
 	uint8_t net;
 	uint8_t uni;
 	uint8_t mode;
+	char* dest;
 } artnet_instance_data;
+
+enum {
+	output = 1,
+	mark = 2
+};
+
+typedef struct /*_artnet_universe_model*/ {
+	uint8_t net;
+	uint8_t uni;
+	uint8_t flags;
+	uint8_t last_frame;
+	uint8_t data[512];
+	uint8_t mask[512];
+} artnet_universe;

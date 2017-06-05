@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#define max(a,b) (((a) > (b)) ? (a) : (b))
 
 #define DEFAULT_CFG "monster.cfg"
 
@@ -54,6 +55,7 @@ typedef struct _backend_channel {
 } channel;
 
 //FIXME might be replaced by struct pollfd
+//FIXME who frees impl
 typedef struct /*_mm_managed_fd*/ {
 	int fd;
 	backend* backend;
@@ -97,6 +99,12 @@ instance* mm_instance();
  * will receive a call to its channel_free function.
  */
 channel* mm_channel(instance* i, uint64_t ident);
+/*
+ * Register a file descriptor to be selected on. The backend
+ * will be notified via the mmbackend_process_fd call.
+ * This function may only be called from within the
+ * mmbackend_start procedure.
+ */
 int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 int mm_channel_event(channel* c, channel_value v);
 /*

@@ -127,6 +127,16 @@ instance* instance_match(char* name){
 	return NULL;
 }
 
+struct timeval backend_timeout(){
+	//TODO fetch minimum poll interval from backends
+	struct timeval tv = {
+		0,
+		10000
+	};
+
+	return tv;
+}
+
 int mm_backend_register(backend b){
 	if(!backend_match(b.name)){
 		backends = realloc(backends, (nbackends + 1) * sizeof(backend));

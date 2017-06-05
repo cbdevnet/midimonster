@@ -9,12 +9,16 @@ static instance** instances = NULL;
 static size_t nchannels = 0;
 static channel** channels = NULL;
 
-channel* mm_channel(instance* i, uint64_t ident){
+channel* mm_channel(instance* i, uint64_t ident, uint8_t create){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
 		if(channels[u]->instance == 0 && channels[u]->ident == ident){
 			return channels[u];
 		}
+	}
+
+	if(!create){
+		return NULL;
 	}
 
 	channel** new_chan = realloc(channels, (nchannels + 1) * sizeof(channel*));

@@ -9,3 +9,9 @@ static int midi_set(size_t num, channel* c, channel_value* v);
 static int midi_handle(size_t num, int* fd, void** data);
 static int midi_start();
 static int midi_shutdown();
+
+typedef struct /*_midi_instance_data*/ {
+	int port;
+	char* read;
+	char* write;
+} midi_instance_data;

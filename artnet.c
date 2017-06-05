@@ -104,7 +104,7 @@ static channel* artnet_channel(instance* instance, char* spec){
 		fprintf(stderr, "Invalid ArtNet channel %s\n", spec);
 		return NULL;
 	}
-	return mm_channel(instance, channel);
+	return mm_channel(instance, channel, 1);
 }
 
 static int artnet_set(size_t num, channel* c, channel_value* v){

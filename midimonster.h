@@ -98,7 +98,7 @@ instance* mm_instance();
  * For each channel with a non-NULL impl field, the backend
  * will receive a call to its channel_free function.
  */
-channel* mm_channel(instance* i, uint64_t ident);
+channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
 /*
  * Register a file descriptor to be selected on. The backend
  * will be notified via the mmbackend_process_fd call.

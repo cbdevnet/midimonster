@@ -31,9 +31,34 @@ int backends_handle(size_t nfds, managed_fd* fds){
 	return rv;
 }
 
-int backends_notify(size_t nev, channel* c, channel_value* v){
-	//TODO
-	return 1;
+int backends_notify(size_t nev, channel** c, channel_value* v){
+	size_t u, p, n;
+	int rv = 0;
+	channel_value xval;
+	channel* xchnl;
+
+	//TODO eliminate duplicates
+	for(u = 0; u < ninstances && !rv; u++){
+		n = 0;
+
+		for(p = 0; p < nev; p++){
+			if(c[p]->instance == instances[u]){
+				xval = v[n];
+				xchnl = c[n];
+				
+				v[n] = v[p];
+				c[n] = c[p];
+
+				v[p] = xval;
+				c[p] = xchnl;
+				n++;
+			}
+		}
+
+		rv |= instances[u]->backend->handle(instances[u], n, c, v);
+	}
+
+	return 0;
 }
 
 channel* mm_channel(instance* i, uint64_t ident, uint8_t create){

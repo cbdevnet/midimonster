@@ -4,10 +4,20 @@
 
 #define BACKEND_NAME "midi"
 static snd_seq_t* sequencer = NULL;
+typedef union {
+	struct {
+		uint8_t pad[5];
+		uint8_t type;
+		uint8_t channel;
+		uint8_t control;
+	} fields;
+	uint64_t label;
+} midi_channel_ident;
 
 /*
  * TODO
  * 	Optionally send note-off messages
+ * 	Optionally send updates as after-touch
  */
 
 enum /*_midi_channel_type*/ {
@@ -104,15 +114,7 @@ static int midi_configure_instance(instance* instance, char* option, char* value
 }
 
 static channel* midi_channel(instance* instance, char* spec){
-	union {
-		struct {
-			uint8_t pad[5];
-			uint8_t type;
-			uint8_t channel;
-			uint8_t control;
-		} fields;
-		uint64_t label;
-	} ident = {
+	midi_channel_ident ident = {
 		.label = 0
 	};
 
@@ -158,15 +160,39 @@ static channel* midi_channel(instance* instance, char* spec){
 	return NULL;
 }
 
-static int midi_set(instance* inst, size_t num, channel* c, channel_value* v){
+static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u;
+	snd_seq_event_t ev;
 	midi_instance_data* data;
+	midi_channel_ident ident = {
+		.label = 0
+	};
 
 	for(u = 0; u < num; u++){
-		data = (midi_instance_data*) c[u].instance->impl;
-		//TODO write out event
+		data = (midi_instance_data*) c[u]->instance->impl;
+		ident.label = c[u]->ident;
+
+		snd_seq_ev_clear(&ev);
+		snd_seq_ev_set_source(&ev, data->port);
+		snd_seq_ev_set_subs(&ev);
+		snd_seq_ev_set_direct(&ev);
+		
+		switch(ident.fields.type){
+			case note:
+				snd_seq_ev_set_noteon(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
+				break;
+			case cc:
+				snd_seq_ev_set_controller(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
+				break;
+			case nrpn:
+				//FIXME set to nrpn output
+				break;
+		}
+
+		snd_seq_event_output(sequencer, &ev);
 	}
 
+	snd_seq_drain_output(sequencer);
 	return 0;
 }
 
@@ -175,17 +201,13 @@ static int midi_handle(size_t num, managed_fd* fds){
 	instance* inst = NULL;
 	channel* changed = NULL;
 	channel_value val;
-	union {
-		struct {
-			uint8_t pad[5];
-			uint8_t type;
-			uint8_t channel;
-			uint8_t control;
-		} fields;
-		uint64_t label;
-	} ident = {
+	midi_channel_ident ident = {
 		.label = 0
 	};
+
+	if(!num){
+		return 0;
+	}
 
 	while(snd_seq_event_input(sequencer, &ev) > 0){
 		ident.label = 0;

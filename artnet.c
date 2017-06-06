@@ -107,7 +107,7 @@ static channel* artnet_channel(instance* instance, char* spec){
 	return mm_channel(instance, channel, 1);
 }
 
-static int artnet_set(instance* inst, size_t num, channel* c, channel_value* v){
+static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
 	//TODO
 	return 1;
 }

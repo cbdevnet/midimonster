@@ -16,6 +16,10 @@ static size_t mappings = 0;
 static channel_mapping* map = NULL;
 static size_t fds = 0;
 static managed_fd* fd = NULL;
+static size_t ev_alloc = 0;
+static size_t evs = 0;
+static channel** ev_channel = NULL;
+static channel_value* ev_value = NULL;
 volatile static sig_atomic_t shutdown_requested = 0;
 
 void signal_handler(int signum){
@@ -40,6 +44,7 @@ int mm_map_channel(channel* from, channel* to){
 		}
 		memset(map + mappings, 0, sizeof(channel_mapping));
 		mappings++;
+		map[u].from = from;
 	}
 
 	//check whether the target is already mapped
@@ -134,9 +139,50 @@ void fds_free(){
 }
 
 int mm_channel_event(channel* c, channel_value v){
-	//TODO
-	fprintf(stderr, "Stub implementation: Channel on %s at value %f\n", c->instance->name, v.normalised);
+	size_t u, p;
+	
+	//find mapped channels
+	for(u = 0; u < mappings; u++){
+		if(map[u].from == c){
+			break;
+		}
+	}
+
+	if(u == mappings){
+		//target-only channel
+		return 0;
+	}
+
+	//resize event structures to fit additional events
+	if(evs + map[u].destinations >= ev_alloc){
+		ev_channel = realloc(ev_channel, (ev_alloc + map[u].destinations) * sizeof(channel*));
+		ev_value = realloc(ev_value, (ev_alloc + map[u].destinations) * sizeof(channel_value));
+
+		if(!ev_channel || !ev_value){
+			fprintf(stderr, "Failed to allocate memory\n");
+			ev_alloc = 0;
+			evs = 0;
+			return 1;
+		}
+
+		ev_alloc += map[u].destinations;
+	}
+
+	//enqueue channel events
+	//FIXME this might lead to one channel being mentioned multiple times in an apply call
+	for(p = 0; p < map[u].destinations; p++){
+		ev_channel[evs + p] = map[u].to[p];
+		ev_value[evs + p] = v;
+	}
+
+	evs += map[u].destinations;
 	return 0;
+}
+
+void event_free(){
+	free(ev_channel);
+	free(ev_value);
+	ev_alloc = 0;
 }
 
 int usage(char* fn){
@@ -225,7 +271,14 @@ int main(int argc, char** argv){
 			goto bail;
 		}
 
-		//TODO push collected events to target backends
+		//push collected events to target backends
+		if(evs && backends_notify(evs, ev_channel, ev_value)){
+			fprintf(stderr, "Backends failed to handle output\n");
+			goto bail;
+		}
+
+		//reset the event count
+		evs = 0;
 	}
 	
 	rv = EXIT_SUCCESS;
@@ -237,6 +290,7 @@ bail:
 	instances_free();
 	map_free();
 	fds_free();
+	event_free();
 
 	return rv;
 }

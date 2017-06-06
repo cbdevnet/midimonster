@@ -12,7 +12,7 @@ struct _backend_channel;
 struct _backend_instance;
 struct _managed_fd;
 
-typedef int (*mmbackend_handle_event)(struct _backend_instance* inst, size_t channels, struct _backend_channel* c, struct _channel_value* v);
+typedef int (*mmbackend_handle_event)(struct _backend_instance* inst, size_t channels, struct _backend_channel** c, struct _channel_value* v);
 typedef struct _backend_instance* (*mmbackend_create_instance)();
 typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_instance* instance, char* spec);
 typedef void (*mmbackend_free_channel)(struct _backend_channel* c);

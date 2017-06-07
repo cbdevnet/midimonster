@@ -51,21 +51,13 @@ enum {
 	mark = 2
 };
 
-typedef struct /*_artnet_pkt_header*/ {
+typedef struct /*_artnet_hdr*/ {
 	uint8_t magic[8];
 	uint16_t opcode;
 	uint16_t version;
-} artnet_header;
+} artnet_hdr;
 
-typedef struct /*_artnet_input_pkt*/ {
-	uint8_t sequence;
-	uint8_t port;
-	uint8_t universe;
-	uint8_t net;
-	uint16_t length;
-} artnet_input_pkt;
-
-typedef struct /*_artnet_output_pkt*/ {
+typedef struct /*_artnet_pkt*/ {
 	uint8_t magic[8];
 	uint16_t opcode;
 	uint16_t version;
@@ -75,7 +67,7 @@ typedef struct /*_artnet_output_pkt*/ {
 	uint8_t net;
 	uint16_t length;
 	uint8_t data[512];
-} artnet_output_pkt;
+} artnet_pkt;
 
 enum artnet_pkt_opcode {
 	OpDmx = 0x0050

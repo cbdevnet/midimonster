@@ -199,7 +199,7 @@ static channel* artnet_channel(instance* instance, char* spec){
 		fprintf(stderr, "Invalid ArtNet channel %s\n", spec);
 		return NULL;
 	}
-	return mm_channel(instance, channel, 1);
+	return mm_channel(instance, channel - 1, 1);
 }
 
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
@@ -222,7 +222,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 
 	if(mark){
 		//output frame
-		artnet_output_pkt frame = {
+		artnet_pkt frame = {
 			.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
 			.opcode = htobe16(OpDmx),
 			.version = htobe16(ARTNET_VERSION),
@@ -244,9 +244,17 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 }
 
 static int artnet_handle(size_t num, managed_fd* fds){
-	size_t u;
+	size_t u, p;
 	ssize_t bytes_read;
 	char recv_buf[ARTNET_RECV_BUF];
+	artnet_instance_id inst_id = {
+		.label = 0
+	};
+	instance* inst = NULL;
+	channel* chan = NULL;
+	channel_value val;
+	artnet_instance_data* data;
+	artnet_pkt* frame = (artnet_pkt*) recv_buf;
 	if(!num){
 		//early exit
 		return 0;
@@ -255,8 +263,30 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	for(u = 0; u < num; u++){
 		do{
 			bytes_read = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
-			if(bytes_read > sizeof(artnet_header)){
-				fprintf(stderr, "Possible artnet data\n");
+			if(bytes_read > sizeof(artnet_hdr)){
+				if(!memcmp(frame->magic, "Art-Net\0", 8) && be16toh(frame->opcode) == OpDmx){
+					//find matching instance
+					inst_id.fields.net = frame->net;
+					inst_id.fields.uni = frame->universe;
+					inst = mm_instance_find(BACKEND_NAME, inst_id.label);
+					if(inst){
+						data = (artnet_instance_data*) inst->impl;
+
+						//read data, notify of changes
+						for(p = 0; p < be16toh(frame->length); p++){
+							if(frame->data[p] != data->data.in[p]){
+								data->data.in[p] = frame->data[p];
+								chan = mm_channel(inst, p, 0);
+								val.raw.u64 = frame->data[p];
+								val.normalised = (double)frame->data[p] / 255.0;
+								if(chan && mm_channel_event(chan, val)){
+									fprintf(stderr, "Failed to push ArtNet channel event to core\n");
+									return 1;
+								}
+							}
+						}
+					}
+				}
 			}
 		} while(bytes_read > 0);
 

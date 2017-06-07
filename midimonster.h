@@ -111,6 +111,7 @@ instance* mm_instance_find(char* backend, uint64_t ident);
  * will receive a call to its channel_free function.
  */
 channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
+//TODO channel* mm_channel_find()
 /*
  * Register a file descriptor to be selected on. The backend
  * will be notified via the mmbackend_process_fd call.

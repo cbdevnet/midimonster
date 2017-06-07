@@ -1,3 +1,4 @@
+#include <sys/socket.h>
 #include "midimonster.h"
 
 /*
@@ -16,16 +17,24 @@ static int artnet_handle(size_t num, managed_fd* fds);
 static int artnet_start();
 static int artnet_shutdown();
 
+#define ARTNET_PORT "6454"
+#define ARTNET_VERSION 14
+#define ARTNET_RECV_BUF 4096
+#define ARTNET_KEEPALIVE_INTERVAL 15e5
+
 typedef struct /*_artnet_universe_model*/ {
 	uint8_t last_frame;
-	uint8_t data[512];
+	uint8_t seq;
+	uint8_t in[512];
+	uint8_t out[512];
 } artnet_universe;
 
 typedef struct /*_artnet_instance_model*/ {
 	uint8_t net;
 	uint8_t uni;
 	uint8_t mode;
-	char* dest;
+	struct sockaddr_storage dest_addr;
+	socklen_t dest_len;
 	artnet_universe data;
 } artnet_instance_data;
 
@@ -41,3 +50,34 @@ enum {
 	output = 1,
 	mark = 2
 };
+
+typedef struct /*_artnet_pkt_header*/ {
+	uint8_t magic[8];
+	uint16_t opcode;
+	uint16_t version;
+} artnet_header;
+
+typedef struct /*_artnet_input_pkt*/ {
+	uint8_t sequence;
+	uint8_t port;
+	uint8_t universe;
+	uint8_t net;
+	uint16_t length;
+} artnet_input_pkt;
+
+typedef struct /*_artnet_output_pkt*/ {
+	uint8_t magic[8];
+	uint16_t opcode;
+	uint16_t version;
+	uint8_t sequence;
+	uint8_t port;
+	uint8_t universe;
+	uint8_t net;
+	uint16_t length;
+	uint8_t data[512];
+} artnet_output_pkt;
+
+enum artnet_pkt_opcode {
+	OpDmx = 0x0050
+};
+

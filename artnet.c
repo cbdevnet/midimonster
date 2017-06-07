@@ -4,6 +4,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define BACKEND_NAME "artnet"
 static uint8_t default_net = 0;
@@ -66,6 +68,25 @@ static int artnet_listener(char* host, char* port){
 	return fd;
 }
 
+static int artnet_parse_addr(char* host, char* port, struct sockaddr_storage* addr, socklen_t* len){
+	struct addrinfo* head;
+	struct addrinfo hints = {
+		.ai_family = AF_UNSPEC,
+		.ai_socktype = SOCK_DGRAM
+	};
+	
+	int error = getaddrinfo(host, port, &hints, &head);
+	if(error || !head){
+		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(error));
+		return 1;
+	}
+
+	memcpy(addr, head->ai_addr, head->ai_addrlen);
+	*len = head->ai_addrlen;
+
+	freeaddrinfo(head);
+	return 0;
+}
 
 int artnet_init(){
 	backend artnet = {
@@ -133,6 +154,7 @@ static instance* artnet_instance(){
 }
 
 static int artnet_configure_instance(instance* instance, char* option, char* value){
+	char* separator;
 	artnet_instance_data* data = (artnet_instance_data*) instance->impl;
 
 	if(!strcmp(option, "net")){
@@ -152,6 +174,20 @@ static int artnet_configure_instance(instance* instance, char* option, char* val
 		}
 		return 0;
 	}
+	else if(!strcmp(option, "dest")){
+		for(separator = value; *separator && *separator != ' '; separator++){
+		}
+
+		if(!*separator){
+			fprintf(stderr, "No port supplied in destination address\n");
+			return 1;
+		}
+
+		*separator = 0;
+		separator++;
+
+		return artnet_parse_addr(value, separator, &data->dest_addr, &data->dest_len); 
+	}
 
 	fprintf(stderr, "Unknown ArtNet instance option %s\n", option);
 	return 1;
@@ -167,18 +203,79 @@ static channel* artnet_channel(instance* instance, char* spec){
 }
 
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
-	//TODO
-	return 1;
+	size_t u, mark = 0;
+	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
+	
+	if(!(data->mode & output)){
+		fprintf(stderr, "ArtNet instance %s not enabled for output\n", inst->name);
+		return 0;
+	}
+
+	//FIXME maybe introduce minimum frame interval
+	for(u = 0; u < num; u++){
+		if(data->data.out[c[u]->ident] != (v[u].normalised * 255.0)){
+			mark = 1;
+
+			data->data.out[c[u]->ident] = v[u].normalised * 255.0;
+		}
+	}
+
+	if(mark){
+		//output frame
+		artnet_output_pkt frame = {
+			.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
+			.opcode = htobe16(OpDmx),
+			.version = htobe16(ARTNET_VERSION),
+			.sequence = data->data.seq++,
+			.port = 0,
+			.universe = data->uni,
+			.net = data->net,
+			.length = htobe16(512),
+			.data = {}
+		};
+		memcpy(frame.data, data->data.out, 512);
+
+		if(sendto(artnet_fd, &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+			fprintf(stderr, "Failed to output ArtNet frame for instance %s: %s\n", inst->name, strerror(errno));
+		}
+	}
+
+	return 0;
 }
 
 static int artnet_handle(size_t num, managed_fd* fds){
-	//TODO
+	size_t u;
+	ssize_t bytes_read;
+	char recv_buf[ARTNET_RECV_BUF];
+	if(!num){
+		//early exit
+		return 0;
+	}
+
+	for(u = 0; u < num; u++){
+		do{
+			bytes_read = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
+			if(bytes_read > sizeof(artnet_header)){
+				fprintf(stderr, "Possible artnet data\n");
+			}
+		} while(bytes_read > 0);
+
+		if(bytes_read < 0 && errno != EAGAIN){
+			fprintf(stderr, "ArtNet failed to receive data: %s\n", strerror(errno));
+		}
+
+		if(bytes_read == 0){
+			fprintf(stderr, "ArtNet listener closed\n");
+			return 1;
+		}
+	}
+
 	return 0;
 }
 
 static int artnet_start(){
 	size_t n, u, p;
-	int rv = 1;
+	int rv = 1i, flags;
 	instance** inst = NULL;
 	artnet_instance_data* data_a, *data_b;
 	artnet_instance_id id = {
@@ -215,6 +312,18 @@ static int artnet_start(){
 		id.fields.uni = data_a->uni;
 		inst[u]->ident = id.label;
 
+		//set destination address if not provided
+		if(!data_a->dest_len){
+			struct sockaddr_in bcast4 = {
+				.sin_addr.s_addr = htobe32(-1),
+				.sin_port = htobe16(strtoul(ARTNET_PORT, NULL, 10)),
+				.sin_family = PF_INET
+			};
+
+			memcpy(&(data_a->dest_addr), &bcast4, sizeof(bcast4));
+			data_a->dest_len = sizeof(bcast4);
+		}
+
 		//check for duplicate instances
 		for(p = u + 1; p < n; p++){
 			data_b = (artnet_instance_data*) inst[p]->impl;
@@ -234,7 +343,15 @@ static int artnet_start(){
 		goto bail;
 	}
 	fprintf(stderr, "Listening for ArtNet data on %s port %s\n", bind_info.host, bind_info.port);
+	
+	//set nonblocking
+	flags = fcntl(artnet_fd, F_GETFL, 0);
+	if(fcntl(artnet_fd, F_SETFL, flags | O_NONBLOCK) < 0){
+		fprintf(stderr, "Failed to set ArtNet input nonblocking\n");
+		goto bail;
+	}
 
+	fprintf(stderr, "ArtNet backend registering 1 descriptors to core\n");
 	if(mm_manage_fd(artnet_fd, BACKEND_NAME, 1, NULL)){
 		goto bail;
 	}

@@ -314,7 +314,7 @@ static int midi_start(){
 	}
 	nfds = snd_seq_poll_descriptors(sequencer, pfds, nfds, POLLIN | POLLOUT);	
 
-	fprintf(stderr, "Registering %d descriptors to core\n", nfds);
+	fprintf(stderr, "MIDI backend registering %d descriptors to core\n", nfds);
 	for(p = 0; p < nfds; p++){
 		if(mm_manage_fd(pfds[p].fd, BACKEND_NAME, 1, NULL)){
 			goto bail;

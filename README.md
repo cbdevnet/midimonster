@@ -24,9 +24,21 @@ A section may either be a *backend configuration* section, started by `[backend 
 an *instance configuration* section, started by `[<backend-name> <instance-name>]` or a *mapping*
 section started by `[map]`.
 
+The `[map]` section consists of lines of channel-to-channel assignments, reading like
+
+```
+instance.target-channel = instance.source-channel
+```
+
+Assignments are one-way only, so to create a bi-directional mapping two assignments are needed.
+An example configuration can be found in [monster.cfg](monster.cfg).
+
 The options accepted by the implemented backends are documented in the next section.
 
 ### The `artnet` backend
+
+The ArtNet backend provides read-write access to the UDP-based ArtNet protocol for lighting
+fixture control.
 
 #### Global configuration
 
@@ -37,17 +49,63 @@ The options accepted by the implemented backends are documented in the next sect
 
 #### Instance configuration
 
+| Option	| Example value		| Default value 	| Description		|
+|---------------|-----------------------|-----------------------|-----------------------|
+| `net`		| `0`			| `0`			| ArtNet net to use	|
+| `uni`		| `0`			| `0`			| ArtNet universe to use|
+| `output`	| `true`		| `false`		| Controls whether ArtNet frames for this universe are output |
+| `dest`	| `10.2.2.2`		| `255.255.255.255`	| Destination address for sent ArtNet frames |
+
+#### Channel specification
+
+A channel is specified by it's universe index. Channel indices start at 1 and end at 512.
+
+Example mapping:
+```
+net1.231 = net2.123
+```
+
+#### Known bugs / problems
+
+Currently, no keep-alive frames are sent and the minimum inter-frame-time is disregarded.
+
 ### The `midi` backend
+
+The MIDI backend provides read-write access to the MIDI protocol via virtual ports.
 
 #### Global configuration
 
+| Option	| Example value		| Default value 	| Description		|
+|---------------|-----------------------|-----------------------|-----------------------|
+| `name`	| `MIDIMonster`		| none			| MIDI client name	|
+
 #### Instance configuration
+
+| Option	| Example value		| Default value 	| Description		|
+|---------------|-----------------------|-----------------------|-----------------------|
+| `read`	| `20:0`		| none			| MIDI device to connect for input |
+| `write`	| `DeviceName`		| none			| MIDI device to connect for output |
+
+MIDI device names may either be `client:port` portnames or prefixes of MIDI device names.
+
+#### Channel specification
+
+The MIDI backend supports multiple channel types
+
+* `cc` - Control Changes
+* `note` - Note On/Off messages
+* `nrpn` - NRPNs (not yet implemented)
+
+A channel is specified using `<type><channel>.<index>`.
+
+Example mapping:
+```
+midi1.cc0.9 = midi2.note1.4
+```
 
 ### The `osc` backend
 
-#### Global configuration
-
-#### Instance configuration
+TBD
 
 ## Building
 
@@ -61,7 +119,17 @@ support for the protocols to translate.
 
 * libasound2-dev
 * A C compiler
+* GNUmake
 
-### Building
+### Build
 
 Just running `make` in the source directory should do the trick.
+
+## Development
+
+The architecture is split into the `midimonster` core, handling mapping
+and resource management, and the backends, which are shared objects loaded
+at start time, which provide a protocol mapping to instances / channels.
+
+The API and structures is more-or-less documented in (midimonster.h)[midimonster.h],
+more detailed documentation may follow.

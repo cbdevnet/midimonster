@@ -50,6 +50,11 @@ static int artnet_listener(char* host, char* port){
 			fprintf(stderr, "Failed to set SO_BROADCAST on socket\n");
 		}
 
+		yes = 0;
+		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
+			fprintf(stderr, "Failed to unset IP_MULTICAST_LOOP option: %s\n", strerror(errno));
+		}
+
 		status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
 		if(status < 0){
 			close(fd);

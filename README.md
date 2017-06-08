@@ -140,5 +140,5 @@ The architecture is split into the `midimonster` core, handling mapping
 and resource management, and the backends, which are shared objects loaded
 at start time, which provide a protocol mapping to instances / channels.
 
-The API and structures is more-or-less documented in [midimonster.h](midimonster.h),
+The API and structures are more-or-less documented in [midimonster.h](midimonster.h),
 more detailed documentation may follow.

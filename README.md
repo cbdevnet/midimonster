@@ -53,7 +53,7 @@ fixture control.
 |---------------|-----------------------|-----------------------|-----------------------|
 | `net`		| `0`			| `0`			| ArtNet net to use	|
 | `uni`		| `0`			| `0`			| ArtNet universe to use|
-| `output`	| `true`		| `false`		| Controls whether ArtNet frames for this universe are output |
+| `output`	| `true`		| `false`		| Controls whether ArtNet frames for this universe are output (otherwise the universe is input-only) |
 | `dest`	| `10.2.2.2`		| `255.255.255.255`	| Destination address for sent ArtNet frames |
 
 #### Channel specification
@@ -102,6 +102,15 @@ Example mapping:
 ```
 midi1.cc0.9 = midi2.note1.4
 ```
+#### Known bugs / problems
+
+Currently, no Note Off messages are sent (instead, Note On messages with a velocity of 0 are
+generated, which amount to the same thing according to the spec). This may be implemented as
+a configuration option at a later time.
+
+NRPNs are not yet fully implemented, though rudimentary support is in the codebase.
+
+The channel specification syntax is currently a bit clunky.
 
 ### The `osc` backend
 
@@ -117,7 +126,7 @@ This section will explain how to build the provided sources to be able to run
 In order to build the MIDIMonster, you'll need some libraries that provide
 support for the protocols to translate.
 
-* libasound2-dev
+* libasound2-dev (for the MIDI backend)
 * A C compiler
 * GNUmake
 

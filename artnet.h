@@ -7,7 +7,7 @@
  * 	destination per instance
  */
 
-int artnet_init();
+int init();
 static int artnet_configure(char* option, char* value);
 static int artnet_configure_instance(instance* instance, char* option, char* value);
 static instance* artnet_instance();

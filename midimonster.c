@@ -6,11 +6,7 @@
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
-
-//temporary prototypes
-int artnet_init();
-int midi_init();
-int osc_init();
+#include "plugin.h"
 
 static size_t mappings = 0;
 static channel_mapping* map = NULL;
@@ -196,7 +192,7 @@ int main(int argc, char** argv){
 	fd_set all_fds, read_fds;
 	struct timeval tv;
 	size_t u, n;
-	managed_fd* signaled_fds;
+	managed_fd* signaled_fds = NULL;
 	int rv = EXIT_FAILURE, error, maxfd = -1;
 	char* cfg_file = DEFAULT_CFG;
 	if(argc > 1){
@@ -204,8 +200,7 @@ int main(int argc, char** argv){
 	}
 
 	//initialize backends
-	//TODO replace this with loading shared objects
-	if(artnet_init() || midi_init() /* || osc_init()*/){
+	if(plugins_load(PLUGINS)){
 		fprintf(stderr, "Failed to initialize a backend\n");
 		goto bail;
 	}
@@ -218,6 +213,7 @@ int main(int argc, char** argv){
 		instances_free();
 		map_free();
 		fds_free();
+		plugins_close();
 		return usage(argv[0]);
 	}
 
@@ -291,6 +287,7 @@ bail:
 	map_free();
 	fds_free();
 	event_free();
+	plugins_close();
 
 	return rv;
 }

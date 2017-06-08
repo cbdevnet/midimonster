@@ -28,7 +28,7 @@ enum /*_midi_channel_type*/ {
 	sysmsg
 };
 
-int midi_init(){
+int init(){
 	backend midi = {
 		.name = BACKEND_NAME,
 		.conf = midi_configure,

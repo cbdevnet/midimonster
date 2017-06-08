@@ -88,7 +88,7 @@ static int artnet_parse_addr(char* host, char* port, struct sockaddr_storage* ad
 	return 0;
 }
 
-int artnet_init(){
+int init(){
 	backend artnet = {
 		.name = BACKEND_NAME,
 		.conf = artnet_configure,

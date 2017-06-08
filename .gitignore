@@ -1,3 +1,4 @@
 midimonster
 *.swp
 *.o
+*.so

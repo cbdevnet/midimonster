@@ -20,9 +20,12 @@ The configuration is stored in a file with a format very similar to the common
 INI file format. A section is started by a header in `[]` braces, followed by
 lines of the form `option = value`.
 
-A section may either be a *backend configuration* section, started by `[backend <backend-name>]`,
-an *instance configuration* section, started by `[<backend-name> <instance-name>]` or a *mapping*
-section started by `[map]`.
+Lines starting with a semicolon are treated as comments and ignored. Inline comments
+are not currently supported.
+
+A configuration section may either be a *backend configuration* section, started by
+`[backend <backend-name>]`, an *instance configuration* section, started by
+`[<backend-name> <instance-name>]` or a *mapping* section started by `[map]`.
 
 The `[map]` section consists of lines of channel-to-channel assignments, reading like
 

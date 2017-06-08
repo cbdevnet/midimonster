@@ -69,6 +69,10 @@ int plugins_load(char* path){
 	}
 
 	for(entry = readdir(directory); entry; entry = readdir(directory)){
+		if(strlen(entry->d_name) < 4 || strncmp(".so", entry->d_name + (strlen(entry->d_name) - 3), 3)){
+			continue;
+		}
+
 		if(fstatat(dirfd(directory), entry->d_name, &file_stat, 0) < 0){
 			fprintf(stderr, "Failed to stat %s: %s\n", entry->d_name, strerror(errno));
 			continue;

@@ -12,6 +12,55 @@ struct _backend_channel;
 struct _backend_instance;
 struct _managed_fd;
 
+/*
+ * Backend module callback defines
+ *
+ * The lifecycle of a backend module is as follows
+ * 	* int init()
+ * 		The only function that should be exported by the shared object.
+ * 		Called when the shared object is attached. Should register
+ * 		a backend structure with the core.
+ * 		Returning anything other than zero causes midimonster to fail the
+ * 		startup checks.
+ * 	* mmbackend_configure
+ * 		Parse backend-global configuration options from the user-supplied
+ * 		configuration file. Returning a non-zero value fails config parsing.
+ * 	* mmbackend_instance
+ * 		Allocate space for a backend instance. Returning NULL signals an out-of-memory
+ * 		condition and terminates the program.
+ * 	* mmbackend_configure_instance
+ * 		Parse instance configuration from the user-supplied configuration
+ * 		file. Returning a non-zero value fails config parsing.
+ * 	* mmbackend_channel
+ * 		Parse a channel-spec to be mapped to/from. Returning NULL signals an
+ * 		out-of-memory condition and terminates the program.
+ * 	* mmbackend_start
+ * 		Called after all instances have been created and all mappings
+ * 		have been set up. May be used to connect to backing hardware
+ * 		or to update runtime-specific data in the various data structures.
+ * 		Returning a non-zero value signals an error starting the backend
+ * 		and stops further progress.
+ * 	* Normal processing loop starts here
+ * 		* mmbackend_process_fd
+ * 			Handle data from signaled fds registered via mm_manage_fd.
+ * 			Push generated events to the core with mm_channel_event.
+ * 			All registered fds that are ready to read are pushed at once.
+ * 			Backends that have not registered any fds are still called with
+ * 			nfds set to 0 in order to support polling backends.
+ * 			Returning a non-zero value signals an error and gracefully terminates
+ * 			the program.
+ *		* mmbackend_handle_event
+ *			An event resulted in a channel for an instance being set.
+ *			Called once per changed instance with all updated channels for that
+ *			specific instance.
+ *			Returning a non-zero value terminates the program.
+ *		* (optional) mmbackend_interval
+ *			Return the maximum sleep interval for this backend in milliseconds.
+ *			If not implemented, a maximum interval of one second is used.
+ *	* mmbackend_shutdown
+ *		Clean up all allocations, finalize all hardware connections.
+ *		Return value is currently ignored.
+ */
 typedef int (*mmbackend_handle_event)(struct _backend_instance* inst, size_t channels, struct _backend_channel** c, struct _channel_value* v);
 typedef struct _backend_instance* (*mmbackend_create_instance)();
 typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_instance* instance, char* spec);

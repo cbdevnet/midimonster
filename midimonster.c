@@ -8,14 +8,24 @@
 #include "backend.h"
 #include "plugin.h"
 
+typedef struct /*_event_collection*/ {
+	size_t alloc;
+	size_t n;
+	channel** channel;
+	channel_value* value;
+} event_collection;
+
 static size_t mappings = 0;
 static channel_mapping* map = NULL;
 static size_t fds = 0;
 static managed_fd* fd = NULL;
-static size_t ev_alloc = 0;
-static size_t evs = 0;
-static channel** ev_channel = NULL;
-static channel_value* ev_value = NULL;
+
+static event_collection event_pool[2] = {
+	{0},
+	{0}
+};
+static event_collection* primary = event_pool;
+
 volatile static sig_atomic_t shutdown_requested = 0;
 
 void signal_handler(int signum){
@@ -150,35 +160,39 @@ int mm_channel_event(channel* c, channel_value v){
 	}
 
 	//resize event structures to fit additional events
-	if(evs + map[u].destinations >= ev_alloc){
-		ev_channel = realloc(ev_channel, (ev_alloc + map[u].destinations) * sizeof(channel*));
-		ev_value = realloc(ev_value, (ev_alloc + map[u].destinations) * sizeof(channel_value));
+	if(primary->n + map[u].destinations >= primary->alloc){
+		primary->channel = realloc(primary->channel, (primary->alloc + map[u].destinations) * sizeof(channel*));
+		primary->value = realloc(primary->value, (primary->alloc + map[u].destinations) * sizeof(channel_value));
 
-		if(!ev_channel || !ev_value){
+		if(!primary->channel || !primary->value){
 			fprintf(stderr, "Failed to allocate memory\n");
-			ev_alloc = 0;
-			evs = 0;
+			primary->alloc = 0;
+			primary->n = 0;
 			return 1;
 		}
 
-		ev_alloc += map[u].destinations;
+		primary->alloc += map[u].destinations;
 	}
 
 	//enqueue channel events
 	//FIXME this might lead to one channel being mentioned multiple times in an apply call
 	for(p = 0; p < map[u].destinations; p++){
-		ev_channel[evs + p] = map[u].to[p];
-		ev_value[evs + p] = v;
+		primary->channel[primary->n + p] = map[u].to[p];
+		primary->value[primary->n + p] = v;
 	}
 
-	evs += map[u].destinations;
+	primary->n += map[u].destinations;
 	return 0;
 }
 
 void event_free(){
-	free(ev_channel);
-	free(ev_value);
-	ev_alloc = 0;
+	size_t u;
+
+	for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
+		free(event_pool[u].channel);
+		free(event_pool[u].value);
+		event_pool[u].alloc = 0;
+	}
 }
 
 int usage(char* fn){
@@ -190,6 +204,7 @@ int usage(char* fn){
 
 int main(int argc, char** argv){
 	fd_set all_fds, read_fds;
+	event_collection* secondary = NULL;
 	struct timeval tv;
 	size_t u, n;
 	managed_fd* signaled_fds = NULL;
@@ -267,14 +282,25 @@ int main(int argc, char** argv){
 			goto bail;
 		}
 
-		//push collected events to target backends
-		if(evs && backends_notify(evs, ev_channel, ev_value)){
-			fprintf(stderr, "Backends failed to handle output\n");
-			goto bail;
-		}
+		while(primary->n){
+			//swap primary and secondary event collectors
+			for(u = 0; u < sizeof(event_pool)/sizeof(event_collection); u++){
+				if(primary != event_pool + u){
+					secondary = primary;
+					primary = event_pool + u;
+					break;
+				}
+			}
 
-		//reset the event count
-		evs = 0;
+			//push collected events to target backends
+			if(secondary->n && backends_notify(secondary->n, secondary->channel, secondary->value)){
+				fprintf(stderr, "Backends failed to handle output\n");
+				goto bail;
+			}
+
+			//reset the event count
+			secondary->n = 0;
+		}
 	}
 	
 	rv = EXIT_SUCCESS;

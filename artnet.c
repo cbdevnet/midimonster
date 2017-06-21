@@ -310,7 +310,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 
 static int artnet_start(){
 	size_t n, u, p;
-	int rv = 1i, flags;
+	int rv = 1, flags;
 	instance** inst = NULL;
 	artnet_instance_data* data_a, *data_b;
 	artnet_instance_id id = {

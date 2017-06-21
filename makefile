@@ -1,17 +1,18 @@
 .PHONY: clean
-BACKENDS = artnet.so midi.so osc.so
+BACKENDS = artnet.so midi.so osc.so loopback.so
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./\""
 
-LDLIBS = -lasound -ldl
 CFLAGS ?= -g -Wall
-
-midimonster: CFLAGS += -rdynamic -DPLUGINS=$(PLUGINDIR)
 %.so: CFLAGS += -fPIC
 %.so: LDFLAGS += -shared
 
+midimonster: LDLIBS = -ldl
+midimonster: CFLAGS += -rdynamic -DPLUGINS=$(PLUGINDIR)
+midi.so: LDLIBS = -lasound
+
 %.so :: %.c %.h
-	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@ $(LDFLAGS)
 
 all: midimonster $(BACKENDS)
 

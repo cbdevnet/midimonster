@@ -337,6 +337,7 @@ static int artnet_start(){
 	}
 
 	if(!n){
+		free(inst);
 		return 0;
 	}
 

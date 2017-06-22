@@ -29,7 +29,7 @@ static int backend_configure(char* option, char* value){
 	return 0;
 }
 
-static int backend_configure_instance(instance* instance, char* option, char* value){
+static int backend_configure_instance(instance* inst, char* option, char* value){
 	//intentionally ignored
 	return 0;
 }

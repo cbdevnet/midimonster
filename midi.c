@@ -273,6 +273,12 @@ static int midi_start(){
 		return 1;
 	}
 
+	//if there are no ports, do nothing
+	if(!n){
+		free(inst);
+		return 0;
+	}
+
 	//create all ports
 	for(p = 0; p < n; p++){
 		data = (midi_instance_data*) inst[p]->impl;
@@ -281,8 +287,8 @@ static int midi_start(){
 
 		//make connections
 		if(data->write){
-			fprintf(stderr, "Connecting output of instance %s to MIDI device %s\n", inst[p]->name, data->write);
 			if(snd_seq_parse_address(sequencer, &addr, data->write) == 0){
+				fprintf(stderr, "Connecting output of instance %s to MIDI device %s (%d:%d)\n", inst[p]->name, data->write, addr.client, addr.port);
 				snd_seq_connect_to(sequencer, data->port, addr.client, addr.port);
 			}
 			else{
@@ -293,8 +299,8 @@ static int midi_start(){
 		}
 
 		if(data->read){
-			fprintf(stderr, "Connecting input from MIDI device %s to instance %s\n", data->read, inst[p]->name);
 			if(snd_seq_parse_address(sequencer, &addr, data->read) == 0){
+				fprintf(stderr, "Connecting input from MIDI device %s to instance %s (%d:%d)\n", data->read, inst[p]->name, addr.client, addr.port);
 				snd_seq_connect_from(sequencer, data->port, addr.client, addr.port);
 			}
 			else{

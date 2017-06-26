@@ -11,6 +11,12 @@ It allows the user to translate channels on one protocol into channels on anothe
 * Translate MIDI Notes into ArtNet
 * Translate OSC messages into MIDI
 
+## Usage
+
+The MIDImonster takes as it's first argument the name of an optional configuration file
+to use (`monster.cfg` is used as default if none is specified). The configuration
+file syntax is explained in the next section.
+
 ## Configuration
 
 Each protocol supported by MIDIMonster is implemented by a *backend*, which takes
@@ -34,9 +40,10 @@ instance.target-channel = instance.source-channel
 ```
 
 Assignments are one-way only, so to create a bi-directional mapping two assignments are needed.
-An example configuration can be found in [monster.cfg](monster.cfg).
+An example configuration file can be found in [unifest-17.cfg](unifest-17.cfg).
 
-The options accepted by the implemented backends are documented in the next section.
+## Backend documentation
+This section documents the configuration options supported by the various backends.
 
 ### The `artnet` backend
 
@@ -90,6 +97,9 @@ The MIDI backend provides read-write access to the MIDI protocol via virtual por
 | `write`	| `DeviceName`		| none			| MIDI device to connect for output |
 
 MIDI device names may either be `client:port` portnames or prefixes of MIDI device names.
+Run `aconnect -i` to list input ports and `aconnect -o` to list output ports.
+
+Each instance also provides a virtual port, so MIDI devices can also be connected with `aconnect <sender> <receiver>`.
 
 #### Channel specification
 

@@ -36,10 +36,19 @@ A configuration section may either be a *backend configuration* section, started
 The `[map]` section consists of lines of channel-to-channel assignments, reading like
 
 ```
-instance.target-channel = instance.source-channel
+instance.channel-a < instance.channel-b
+instance.channel-a > instance.channel-b
+instance.channel-c <> instance.channel-d
 ```
 
-Assignments are one-way only, so to create a bi-directional mapping two assignments are needed.
+The first line above maps any event originating from `instance.channel-b` to be output
+on `instance.channel-a` (right-to-left mapping).
+
+The second line makes that mapping a bi-directional mapping, so both of those channels
+output eachothers events.
+
+The last line is a shorter way to create a bi-directional mapping.
+
 An example configuration file can be found in [unifest-17.cfg](unifest-17.cfg).
 
 ## Backend documentation
@@ -151,6 +160,8 @@ loop.foo = loop.bar123
 
 It is possible to configure loops using this backend. Triggering a loop
 will create a deadlock, preventing any other backends from generating events.
+Be careful with bidirectional channel mappings, as any input will be immediately
+output to the same channel again.
 
 ### The `osc` backend
 

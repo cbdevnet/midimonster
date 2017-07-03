@@ -11,6 +11,12 @@ static enum {
 	map
 } parser_state = none;
 
+typedef enum {
+	map_ltr,
+	map_rtl,
+	map_bidir
+} map_type;
+
 static backend* current_backend = NULL;
 static instance* current_instance = NULL;
 
@@ -28,10 +34,18 @@ static char* config_trim_line(char* in){
 	return in;
 }
 
-static int config_map(char* to, char* from){
+static int config_map(char* to_raw, char* from_raw){
+	//create a copy because the original pointer may be used multiple times
+	char* to = strdup(to_raw), *from = strdup(from_raw);
 	char* chanspec_to = to, *chanspec_from = from;
 	instance* instance_to = NULL, *instance_from = NULL;
 	channel* channel_from = NULL, *channel_to = NULL;
+	int rv = 1;
+
+	if(!from || !to){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return 1;
+	}
 
 	//separate channel spec from instance
 	for(; *chanspec_to && *chanspec_to != '.'; chanspec_to++){
@@ -42,7 +56,7 @@ static int config_map(char* to, char* from){
 
 	if(!*chanspec_to || !*chanspec_from){
 		fprintf(stderr, "Mapping does not contain a proper instance specification\n");
-		return 1;
+		goto done;
 	}
 
 	//terminate
@@ -56,7 +70,7 @@ static int config_map(char* to, char* from){
 
 	if(!instance_to || !instance_from){
 		fprintf(stderr, "No such instance %s\n", instance_from ? to : from);
-		return 1;
+		goto done;
 	}
 
 	channel_from = instance_from->backend->channel(instance_from, chanspec_from);
@@ -64,16 +78,21 @@ static int config_map(char* to, char* from){
 
 	if(!channel_from || !channel_to){
 		fprintf(stderr, "Failed to parse channel specifications\n");
-		return 1;
+		goto done;
 	}
 
-	return mm_map_channel(channel_from, channel_to);
+	rv = mm_map_channel(channel_from, channel_to);
+done:
+	free(from);
+	free(to);
+	return rv;
 }
 
 int config_read(char* cfg_file){
 	int rv = 1;
 	size_t line_alloc = 0;
 	ssize_t status;
+	map_type mapping_type = map_rtl;
 	char* line_raw = NULL, *line, *separator;
 	FILE* source = fopen(cfg_file, "r");
 	if(!source){
@@ -149,6 +168,48 @@ int config_read(char* cfg_file){
 				fprintf(stderr, "Created %s instance %s\n", line, separator);
 			}
 		}
+		else if(parser_state == map){
+			mapping_type = map_rtl;
+			//find separator
+			for(separator = line; *separator && *separator != '<' && *separator != '>'; separator++){
+			}
+
+			switch(*separator){
+				case '>':
+					mapping_type = map_ltr;
+					//fall through
+				case '<': //default
+					*separator = 0;
+					separator++;
+					break;
+				case 0:
+				default:
+					fprintf(stderr, "Not a channel mapping: %s\n", line);
+					goto bail;
+			}
+
+			if((mapping_type == map_ltr && *separator == '<')
+					|| (mapping_type == map_rtl && *separator == '>')){
+				mapping_type = map_bidir;
+				separator++;
+			}
+
+			line = config_trim_line(line);
+			separator = config_trim_line(separator);
+
+			if(mapping_type == map_ltr || mapping_type == map_bidir){
+				if(config_map(separator, line)){
+					fprintf(stderr, "Failed to map channel %s to %s\n", line, separator);
+					goto bail;
+				}
+			}
+			if(mapping_type == map_rtl || mapping_type == map_bidir){
+				if(config_map(line, separator)){
+					fprintf(stderr, "Failed to map channel %s to %s\n", separator, line);
+					goto bail;
+				}
+			}
+		}
 		else{
 			//pass to parser
 			//find separator
@@ -156,7 +217,7 @@ int config_read(char* cfg_file){
 			}
 
 			if(!*separator){
-				fprintf(stderr, "No assignment: %s\n", line);
+				fprintf(stderr, "Not an assignment: %s\n", line);
 				goto bail;
 			}
 
@@ -172,12 +233,6 @@ int config_read(char* cfg_file){
 			else if(parser_state == instance_cfg && current_backend->conf_instance(current_instance, line, separator)){
 				fprintf(stderr, "Failed to configure instance %s\n", current_instance->name);
 				goto bail;
-			}
-			else if(parser_state == map){
-				if(config_map(line, separator)){
-					fprintf(stderr, "Failed to map channel\n");
-					goto bail;
-				}
 			}
 		}
 	}

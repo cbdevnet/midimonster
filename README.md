@@ -81,7 +81,7 @@ A channel is specified by it's universe index. Channel indices start at 1 and en
 
 Example mapping:
 ```
-net1.231 = net2.123
+net1.231 < net2.123
 ```
 
 #### Known bugs / problems
@@ -122,7 +122,7 @@ A channel is specified using `<type><channel>.<index>`.
 
 Example mapping:
 ```
-midi1.cc0.9 = midi2.note1.4
+midi1.cc0.9 > midi2.note1.4
 ```
 #### Known bugs / problems
 
@@ -153,7 +153,7 @@ A channel may have any string for a name.
 
 Example mapping:
 ```
-loop.foo = loop.bar123
+loop.foo < loop.bar123
 ```
 
 #### Known bugs / problems

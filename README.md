@@ -197,25 +197,25 @@ osc1./1/xy1:0 > osc2./1/fader1
 Note that any multi-value channel that is to be output will need to be set up in the instance
 configuration (not yet implemented).
 
-#### Value ranges
+#### Supported types & value ranges
 
 OSC allows controls to have individual value ranges and supports different parameter types.
 The following types are currently supported by the MIDImonster:
 
-* `i`: 32-bit signed integer
-* `f`: 32-bit IEEE floating point
-* `h`: 64-bit signed integer
-* `d`: 64-bit double precision floating point
+* **i**: 32-bit signed integer
+* **f**: 32-bit IEEE floating point
+* **h**: 64-bit signed integer
+* **d**: 64-bit double precision floating point
 
 For each type, there is a default value range which will be assumed if the channel is not otherwise
 configured using the instance configuration. Values out of a channels range will be clipped.
 
 The default ranges are:
 
-* `i`: `0` to `255`
-* `f`: `0.0` to `1.0`
-* `h`: `0` to `1024`
-* `d`: `0.0` to `1.0`
+* **i**: `0` to `255`
+* **f**: `0.0` to `1.0`
+* **h**: `0` to `1024`
+* **d**: `0.0` to `1.0`
 
 #### Known bugs / problems
 

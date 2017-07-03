@@ -93,7 +93,7 @@ static int midi_configure_instance(instance* instance, char* option, char* value
 	if(!strcmp(option, "read")){
 		//connect input device
 		if(data->read){
-			fprintf(stderr, "Port already connected to an input device\n");
+			fprintf(stderr, "MIDI port already connected to an input device\n");
 			return 1;
 		}
 		data->read = strdup(value);
@@ -102,7 +102,7 @@ static int midi_configure_instance(instance* instance, char* option, char* value
 	else if(!strcmp(option, "write")){
 		//connect output device
 		if(data->write){
-			fprintf(stderr, "Port already connected to an output device\n");
+			fprintf(stderr, "MIDI port already connected to an output device\n");
 			return 1;
 		}
 		data->write = strdup(value);
@@ -141,7 +141,7 @@ static channel* midi_channel(instance* instance, char* spec){
 
 	//FIXME test this
 	if(ident.fields.channel > 16){
-		fprintf(stderr, "Channel out of range in channel spec %s\n", spec);
+		fprintf(stderr, "MIDI channel out of range in channel spec %s\n", spec);
 		return NULL;
 	}
 
@@ -292,7 +292,7 @@ static int midi_start(){
 				snd_seq_connect_to(sequencer, data->port, addr.client, addr.port);
 			}
 			else{
-				fprintf(stderr, "Failed to get destination device address: %s\n", data->write);
+				fprintf(stderr, "Failed to get destination MIDI device address: %s\n", data->write);
 			}
 			free(data->write);
 			data->write = NULL;
@@ -304,7 +304,7 @@ static int midi_start(){
 				snd_seq_connect_from(sequencer, data->port, addr.client, addr.port);
 			}
 			else{
-				fprintf(stderr, "Failed to get source device address: %s\n", data->read);
+				fprintf(stderr, "Failed to get source MIDI device address: %s\n", data->read);
 			}
 			free(data->read);
 			data->read = NULL;

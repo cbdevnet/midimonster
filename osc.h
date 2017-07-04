@@ -2,7 +2,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define OSC_RECV_BUF 4096
+#define OSC_RECV_BUF 8192
+#define OSC_XMIT_BUF 8192
 
 int init();
 static int backend_configure(char* option, char* value);
@@ -34,7 +35,6 @@ typedef struct /*_osc_channel*/ {
 	char* path;
 	size_t params;
 	size_t param_index;
-	size_t* param;
 	uint8_t mark;
 
 	osc_parameter_type type;
@@ -46,9 +46,10 @@ typedef struct /*_osc_channel*/ {
 typedef struct /*_osc_instance_data*/ {
 	size_t channels;
 	osc_channel* channel;
-	uint8_t output;
 	char* root;
 	socklen_t dest_len;
 	struct sockaddr_storage dest;
 	int fd;
+	uint8_t learn;
+	uint16_t forced_rport;
 } osc_instance;

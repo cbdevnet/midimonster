@@ -10,6 +10,7 @@ It allows the user to translate channels on one protocol into channels on anothe
 * Translate MIDI Control Changes into Notes
 * Translate MIDI Notes into ArtNet
 * Translate OSC messages into MIDI
+* Use an OSC app as a simple lighting controller via ArtNet
 
 ## Usage
 
@@ -165,7 +166,7 @@ output to the same channel again.
 
 ### The `osc` backend
 
-This backend will allow read and write access to the Open Sound Control protocol,
+This backend offers read and write access to the Open Sound Control protocol,
 spoken primarily by visual interface tools and hardware such as TouchOSC.
 
 #### Global configuration
@@ -178,10 +179,32 @@ This backend does not take any global configuration.
 |---------------|-----------------------|-----------------------|-----------------------|
 | `root`	| `/my/osc/path`	| none			| An OSC path prefix to be prepended to all channels |
 | `bind`	| `:: 8000`		| none			| The host and port to listen on |
-| `dest`	| `10.11.12.13 8001`	| none			| Remote address to send OSC data to. Setting this enables the instance for output |
+| `dest`	| `10.11.12.13 8001`	| none			| Remote address to send OSC data to. Setting this enables the instance for output. The special value `learn` causes the MIDImonster to always reply to the address the last incoming packet came from. A different remote port for responses can be forced with the syntax `learn@<port> |
 
 Note that specifying an instance root speeds up matching, as packets not matching
 it are ignored early in processing.
+
+Channels that are to be output or require a value range different from the default ranges (see below)
+require special configuration, as their types and limits have to be set.
+
+This is done in the instance configuration using an assignment of the syntax
+
+```
+/local/osc/path = <format> <min> <max> <min> <max> ...
+```
+
+The OSC path to be configured must only be the local part (omitting a configured instance root).
+**<format>** may be any sequence of valid OSC type characters. See below for a table of supported
+OSC types.
+For each component of the path, the minimum and maximum values must be given separated by spaces.
+Components may be accessed in the mapping section as detailed in the next section.
+
+An example configuration for transmission of an OSC message with 2 floating point components with
+a range between 0.0 and 2.0 (for example, an X-Y control), would look as follows:
+
+```
+/1/xy1 = ff 0.0 2.0 0.0 2.0
+```
 
 #### Channel specification
 
@@ -194,8 +217,8 @@ Example mapping:
 osc1./1/xy1:0 > osc2./1/fader1
 ```
 
-Note that any multi-value channel that is to be output will need to be set up in the instance
-configuration (not yet implemented).
+Note that any channel that is to be output will need to be set up in the instance
+configuration.
 
 #### Supported types & value ranges
 
@@ -219,10 +242,7 @@ The default ranges are:
 
 #### Known bugs / problems
 
-Output is not yet implemented for this backend.
-
-Channels which are to be output require individual configuration to set their types and limits,
-as do input channels presenting a custom value range.
+Ping requests are not yet answered. There may be some problems using broadcast output and input.
 
 ## Building
 

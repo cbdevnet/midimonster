@@ -8,7 +8,6 @@
 
 /*
  * TODO
- * dest = learn for learning client addresses
  * ping method
  */
 

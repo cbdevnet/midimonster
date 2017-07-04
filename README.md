@@ -194,8 +194,10 @@ This is done in the instance configuration using an assignment of the syntax
 ```
 
 The OSC path to be configured must only be the local part (omitting a configured instance root).
-**<format>** may be any sequence of valid OSC type characters. See below for a table of supported
+
+**format** may be any sequence of valid OSC type characters. See below for a table of supported
 OSC types.
+
 For each component of the path, the minimum and maximum values must be given separated by spaces.
 Components may be accessed in the mapping section as detailed in the next section.
 

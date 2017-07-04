@@ -179,7 +179,7 @@ This backend does not take any global configuration.
 |---------------|-----------------------|-----------------------|-----------------------|
 | `root`	| `/my/osc/path`	| none			| An OSC path prefix to be prepended to all channels |
 | `bind`	| `:: 8000`		| none			| The host and port to listen on |
-| `dest`	| `10.11.12.13 8001`	| none			| Remote address to send OSC data to. Setting this enables the instance for output. The special value `learn` causes the MIDImonster to always reply to the address the last incoming packet came from. A different remote port for responses can be forced with the syntax `learn@<port> |
+| `dest`	| `10.11.12.13 8001`	| none			| Remote address to send OSC data to. Setting this enables the instance for output. The special value `learn` causes the MIDImonster to always reply to the address the last incoming packet came from. A different remote port for responses can be forced with the syntax `learn@<port>` |
 
 Note that specifying an instance root speeds up matching, as packets not matching
 it are ignored early in processing.

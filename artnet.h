@@ -1,12 +1,6 @@
 #include <sys/socket.h>
 #include "midimonster.h"
 
-/*
- * TODO
- * 	bind per instance
- * 	destination per instance
- */
-
 int init();
 static int artnet_configure(char* option, char* value);
 static int artnet_configure_instance(instance* instance, char* option, char* value);
@@ -32,24 +26,20 @@ typedef struct /*_artnet_universe_model*/ {
 typedef struct /*_artnet_instance_model*/ {
 	uint8_t net;
 	uint8_t uni;
-	uint8_t mode;
 	struct sockaddr_storage dest_addr;
 	socklen_t dest_len;
 	artnet_universe data;
+	size_t fd_index;
 } artnet_instance_data;
 
 typedef union /*_artnet_instance_id*/ {
 	struct {
+		uint8_t fd_index;
 		uint8_t net;
 		uint8_t uni;
 	} fields;
 	uint64_t label;
 } artnet_instance_id;
-
-enum {
-	output = 1,
-	mark = 2
-};
 
 typedef struct /*_artnet_hdr*/ {
 	uint8_t magic[8];

@@ -1,2 +1,6 @@
 Wide channels (DMX/MIDI)
 Note source in channel value struct
+Optimize core channel search (store backend offset)
+OSC backend transmit alignment fails on multifader
+Function generator
+Printing backend

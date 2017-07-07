@@ -11,6 +11,7 @@ It allows the user to translate channels on one protocol into channels on anothe
 * Translate MIDI Notes into ArtNet
 * Translate OSC messages into MIDI
 * Use an OSC app as a simple lighting controller via ArtNet
+* Visualize ArtNet data using OSC servers
 
 ## Usage
 
@@ -50,7 +51,7 @@ output eachothers events.
 
 The last line is a shorter way to create a bi-directional mapping.
 
-An example configuration file can be found in [unifest-17.cfg](unifest-17.cfg).
+An example configuration file can be found in [configs/unifest-17.cfg](configs/unifest-17.cfg).
 
 ## Backend documentation
 This section documents the configuration options supported by the various backends.
@@ -64,7 +65,7 @@ fixture control.
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `bind`	| `127.0.0.1 6454`	| *none*		| What address and port to bind the ArtNet socket to |
+| `bind`	| `127.0.0.1 6454`	| none		| Binds a network address to listen for data. This option may be set multiple times, with each descriptor being assigned an index starting from 0 to be used with the `iface` instance configuration option |
 | `net`		| `0`			| `0`			| The default net to use |
 
 #### Instance configuration
@@ -73,8 +74,8 @@ fixture control.
 |---------------|-----------------------|-----------------------|-----------------------|
 | `net`		| `0`			| `0`			| ArtNet net to use	|
 | `uni`		| `0`			| `0`			| ArtNet universe to use|
-| `output`	| `true`		| `false`		| Controls whether ArtNet frames for this universe are output (otherwise the universe is input-only) |
-| `dest`	| `10.2.2.2`		| `255.255.255.255`	| Destination address for sent ArtNet frames |
+| `dest`	| `10.2.2.2`		| none			| Destination address for sent ArtNet frames. Setting this enables the universe for output |
+| `iface`	| `1`			| `0`			| The bound address to use for data input/output |
 
 #### Channel specification
 

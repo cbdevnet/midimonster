@@ -5,21 +5,18 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ctype.h>
 #include <errno.h>
 
+#define MAX_FDS 255
 #define BACKEND_NAME "artnet"
+
 static uint8_t default_net = 0;
-static struct {
-	char* host;
-	char* port;
-} bind_info = {
-	.host = NULL,
-	.port = NULL
-};
-int artnet_fd = -1;
+static size_t artnet_fds = 0;
+static int* artnet_fd = NULL;
 
 static int artnet_listener(char* host, char* port){
-	int fd = -1, status, yes = 1;
+	int fd = -1, status, yes = 1, flags;
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = SOCK_DGRAM,
@@ -27,6 +24,11 @@ static int artnet_listener(char* host, char* port){
 	};
 	struct addrinfo* info;
 	struct addrinfo* addr_it;
+
+	if(artnet_fds >= MAX_FDS){
+		fprintf(stderr, "ArtNet backend descriptor limit reached\n");
+		return -1;
+	}
 
 	status = getaddrinfo(host, port, &hints, &info);
 	if(status){
@@ -70,7 +72,25 @@ static int artnet_listener(char* host, char* port){
 		fprintf(stderr, "Failed to create listening socket for %s port %s\n", host, port);
 		return -1;
 	}
-	return fd;
+
+	//set nonblocking
+	flags = fcntl(fd, F_GETFL, 0);
+	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
+		fprintf(stderr, "Failed to set ArtNet descriptor nonblocking\n");
+		return -1;
+	}
+
+	//store fd
+	artnet_fd = realloc(artnet_fd, (artnet_fds + 1) * sizeof(int));
+	if(!artnet_fd){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return -1;
+	}
+
+	fprintf(stderr, "ArtNet backend descriptor %zu bound to %s port %s\n", artnet_fds, host, port);
+	artnet_fd[artnet_fds] = fd;
+	artnet_fds++;
+	return 0;
 }
 
 static int artnet_parse_addr(char* host, char* port, struct sockaddr_storage* addr, socklen_t* len){
@@ -79,7 +99,7 @@ static int artnet_parse_addr(char* host, char* port, struct sockaddr_storage* ad
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = SOCK_DGRAM
 	};
-	
+
 	int error = getaddrinfo(host, port, &hints, &head);
 	if(error || !head){
 		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(error));
@@ -90,6 +110,30 @@ static int artnet_parse_addr(char* host, char* port, struct sockaddr_storage* ad
 	*len = head->ai_addrlen;
 
 	freeaddrinfo(head);
+	return 0;
+}
+
+static int artnet_separate_hostspec(char* in, char** host, char** port){
+	size_t u;
+
+	if(!in || !host || !port){
+		return 1;
+	}
+
+	for(u = 0; in[u] && !isspace(in[u]); u++){
+	}
+
+	//guess
+	*host = in;
+
+	if(in[u]){
+		in[u] = 0;
+		*port = in + u + 1;
+	}
+	else{
+		//no port given
+		*port = ARTNET_PORT;
+	}
 	return 0;
 }
 
@@ -115,25 +159,22 @@ int init(){
 }
 
 static int artnet_configure(char* option, char* value){
-	char* separator = value;
-	if(!strcmp(option, "bind")){
-		for(; *separator && *separator != ' '; separator++){
-		}
-
-		if(*separator){
-			*separator = 0;
-			separator++;
-			free(bind_info.port);
-			bind_info.port = strdup(separator);
-		}
-
-		free(bind_info.host);
-		bind_info.host = strdup(value);
+	char* host = NULL, *port = NULL;
+	if(!strcmp(option, "net")){
+		//configure default net
+		default_net = strtoul(value, NULL, 0);
 		return 0;
 	}
-	else if(!strcmp(option, "net")){
-		//configure default net
-		default_net = strtoul(value, NULL, 10);
+	else if(!strcmp(option, "bind")){
+		if(artnet_separate_hostspec(value, &host, &port)){
+			fprintf(stderr, "Not a valid ArtNet bind address: %s\n", value);
+			return 1;
+		}
+
+		if(artnet_listener(host, port)){
+			fprintf(stderr, "Failed to bind ArtNet descriptor: %s\n", value);
+			return 1;
+		}
 		return 0;
 	}
 	fprintf(stderr, "Unknown ArtNet backend option %s\n", option);
@@ -141,60 +182,56 @@ static int artnet_configure(char* option, char* value){
 }
 
 static instance* artnet_instance(){
+	artnet_instance_data* data = NULL;
 	instance* inst = mm_instance();
 	if(!inst){
 		return NULL;
 	}
 
-	inst->impl = calloc(1, sizeof(artnet_instance_data));
-	if(!inst->impl){
+	data = calloc(1, sizeof(artnet_instance_data));
+	if(!data){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return NULL;
 	}
 
-	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
+	data->fd_index = 0;
 	data->net = default_net;
 
+	inst->impl = data;
 	return inst;
 }
 
-static int artnet_configure_instance(instance* instance, char* option, char* value){
-	char* separator;
-	artnet_instance_data* data = (artnet_instance_data*) instance->impl;
+static int artnet_configure_instance(instance* inst, char* option, char* value){
+	char* host = NULL, *port = NULL;
+	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	if(!strcmp(option, "net")){
-		data->net = strtoul(value, NULL, 10);
+		data->net = strtoul(value, NULL, 0);
 		return 0;
 	}
 	else if(!strcmp(option, "uni")){
-		data->uni = strtoul(value, NULL, 10);
+		data->uni = strtoul(value, NULL, 0);
 		return 0;
 	}
-	else if(!strcmp(option, "output")){
-		if(!strcmp(value, "true")){
-			data->mode |= output;
-		}
-		else{
-			data->mode &= ~output;
+	else if(!strcmp(option, "iface")){
+		data->fd_index = strtoul(value, NULL, 0);
+
+		if(data->fd_index >= artnet_fds){
+			fprintf(stderr, "Invalid interface configured for ArtNet instance %s\n", inst->name);
+			return 1;
 		}
 		return 0;
 	}
 	else if(!strcmp(option, "dest")){
-		for(separator = value; *separator && *separator != ' '; separator++){
-		}
-
-		if(!*separator){
-			fprintf(stderr, "No port supplied in destination address\n");
+		if(artnet_separate_hostspec(value, &host, &port)){
+			fprintf(stderr, "Not a valid ArtNet destination for instance %s\n", inst->name);
 			return 1;
 		}
 
-		*separator = 0;
-		separator++;
-
-		return artnet_parse_addr(value, separator, &data->dest_addr, &data->dest_len); 
+		return artnet_parse_addr(host, port, &data->dest_addr, &data->dest_len); 
 	}
 
-	fprintf(stderr, "Unknown ArtNet instance option %s\n", option);
+	fprintf(stderr, "Unknown ArtNet option %s for instance %s\n", option, inst->name);
 	return 1;
 }
 
@@ -210,9 +247,9 @@ static channel* artnet_channel(instance* instance, char* spec){
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u, mark = 0;
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
-	
-	if(!(data->mode & output)){
-		fprintf(stderr, "ArtNet instance %s not enabled for output\n", inst->name);
+
+	if(!data->dest_len){
+		fprintf(stderr, "ArtNet instance %s not enabled for output (%zu channel events)\n", inst->name, num);
 		return 0;
 	}
 
@@ -240,7 +277,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 		};
 		memcpy(frame.data, data->data.out, 512);
 
-		if(sendto(artnet_fd, &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+		if(sendto(artnet_fd[data->fd_index], &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
 			fprintf(stderr, "Failed to output ArtNet frame for instance %s: %s\n", inst->name, strerror(errno));
 		}
 	}
@@ -271,6 +308,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 			if(bytes_read > sizeof(artnet_hdr)){
 				if(!memcmp(frame->magic, "Art-Net\0", 8) && be16toh(frame->opcode) == OpDmx){
 					//find matching instance
+					inst_id.fields.fd_index = ((uint64_t) fds[u].impl) & 0xFF;
 					inst_id.fields.net = frame->net;
 					inst_id.fields.uni = frame->universe;
 					inst = mm_instance_find(BACKEND_NAME, inst_id.label);
@@ -310,25 +348,12 @@ static int artnet_handle(size_t num, managed_fd* fds){
 
 static int artnet_start(){
 	size_t n, u, p;
-	int rv = 1, flags;
+	int rv = 1;
 	instance** inst = NULL;
-	artnet_instance_data* data_a, *data_b;
+	artnet_instance_data* data;
 	artnet_instance_id id = {
 		.label = 0
 	};
-
-	if(!bind_info.host){
-		bind_info.host = strdup("127.0.0.1");
-	}
-
-	if(!bind_info.port){
-		bind_info.port = strdup("6454");
-	}
-
-	if(!bind_info.host || !bind_info.port){
-		fprintf(stderr, "Failed to allocate memory\n");
-		return 1;
-	}
 
 	//fetch all defined instances
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
@@ -341,58 +366,35 @@ static int artnet_start(){
 		return 0;
 	}
 
+	if(!artnet_fds){
+		fprintf(stderr, "No ArtNet descriptors bound\n");
+		return 1;
+	}
+
 	for(u = 0; u < n; u++){
-		data_a = (artnet_instance_data*) inst[u]->impl;
+		data = (artnet_instance_data*) inst[u]->impl;
 		//set instance identifier
-		id.fields.net = data_a->net;
-		id.fields.uni = data_a->uni;
+		id.fields.fd_index = data->fd_index;
+		id.fields.net = data->net;
+		id.fields.uni = data->uni;
 		inst[u]->ident = id.label;
 
-		//set destination address if not provided
-		if(!data_a->dest_len){
-			struct sockaddr_in bcast4 = {
-				.sin_addr.s_addr = htobe32(-1),
-				.sin_port = htobe16(strtoul(ARTNET_PORT, NULL, 10)),
-				.sin_family = PF_INET
-			};
-
-			memcpy(&(data_a->dest_addr), &bcast4, sizeof(bcast4));
-			data_a->dest_len = sizeof(bcast4);
-		}
-
-		//check for duplicate instances
-		for(p = u + 1; p < n; p++){
-			data_b = (artnet_instance_data*) inst[p]->impl;
-			//FIXME might want to include destination in duplicate check
-			if(data_a->net == data_b->net
-					&& data_a->uni == data_b->uni){
+		//check for duplicates
+		for(p = 0; p < u; p++){
+			if(inst[u]->ident == inst[p]->ident){
 				fprintf(stderr, "Universe specified multiple times, use one instance: %s - %s\n", inst[u]->name, inst[p]->name);
 				goto bail;
 			}
 		}
 	}
 
-	//open socket
-	artnet_fd = artnet_listener(bind_info.host, bind_info.port);
-	if(artnet_fd < 0){
-		fprintf(stderr, "Failed to open ArtNet listener socket\n");
-		goto bail;
-	}
-	fprintf(stderr, "Listening for ArtNet data on %s port %s\n", bind_info.host, bind_info.port);
-	
-	//set nonblocking
-	flags = fcntl(artnet_fd, F_GETFL, 0);
-	if(fcntl(artnet_fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		fprintf(stderr, "Failed to set ArtNet input nonblocking\n");
-		goto bail;
+	fprintf(stderr, "ArtNet backend registering %zu descriptors to core\n", artnet_fds);
+	for(u = 0; u < artnet_fds; u++){
+		if(mm_manage_fd(artnet_fd[u], BACKEND_NAME, 1, (void*) u)){
+			goto bail;
+		}
 	}
 
-	fprintf(stderr, "ArtNet backend registering 1 descriptors to core\n");
-	if(mm_manage_fd(artnet_fd, BACKEND_NAME, 1, NULL)){
-		goto bail;
-	}
-
-	//TODO parse all universe destinations
 	rv = 0;
 bail:
 	free(inst);
@@ -411,9 +413,8 @@ static int artnet_shutdown(){
 		free(inst[p]->impl);
 	}
 	free(inst);
+	free(artnet_fd);
 
-	free(bind_info.host);
-	free(bind_info.port);
 	fprintf(stderr, "ArtNet backend shut down\n");
 	return 0;
 }

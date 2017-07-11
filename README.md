@@ -86,7 +86,7 @@ Example mapping:
 net1.231 < net2.123
 ```
 
-A 16-bit channel (spannin anyg two normal channels in the same universe) may be mapped with the syntax
+A 16-bit channel (spanning any two normal channels in the same universe) may be mapped with the syntax
 ```
 net1.1+2 > net2.5+123
 ```

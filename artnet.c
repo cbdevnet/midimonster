@@ -355,7 +355,7 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 	}
 
 	//generate events
-	for(p = 0; p < max_mark; p++){
+	for(p = 0; p <= max_mark; p++){
 		if(data->data.map[p] & MAP_MARK){
 			data->data.map[p] &= ~MAP_MARK;
 			if(IS_ACTIVE(data->data.map[p])){

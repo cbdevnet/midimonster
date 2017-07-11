@@ -86,6 +86,13 @@ Example mapping:
 net1.231 < net2.123
 ```
 
+A 16-bit channel (spannin anyg two normal channels in the same universe) may be mapped with the syntax
+```
+net1.1+2 > net2.5+123
+```
+
+A normal channel that is part of a wide channel can not be mapped individually.
+
 #### Known bugs / problems
 
 Currently, no keep-alive frames are sent and the minimum inter-frame-time is disregarded.

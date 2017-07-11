@@ -16,11 +16,21 @@ static int artnet_shutdown();
 #define ARTNET_RECV_BUF 4096
 #define ARTNET_KEEPALIVE_INTERVAL 15e5
 
+#define MAP_COARSE 0x0200
+#define MAP_FINE 0x0400
+#define MAP_SINGLE 0x0800
+#define MAP_MARK 0x1000
+#define MAPPED_CHANNEL(a) ((a) & 0x01FF)
+#define IS_ACTIVE(a) ((a) & 0xFE00)
+#define IS_WIDE(a) ((a) & 0x0600)
+#define IS_SINGLE(a) ((a) & MAP_SINGLE)
+
 typedef struct /*_artnet_universe_model*/ {
 	uint8_t last_frame;
 	uint8_t seq;
 	uint8_t in[512];
 	uint8_t out[512];
+	uint16_t map[512];
 } artnet_universe;
 
 typedef struct /*_artnet_instance_model*/ {

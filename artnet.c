@@ -228,20 +228,55 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 			return 1;
 		}
 
-		return artnet_parse_addr(host, port, &data->dest_addr, &data->dest_len); 
+		return artnet_parse_addr(host, port, &data->dest_addr, &data->dest_len);
 	}
 
 	fprintf(stderr, "Unknown ArtNet option %s for instance %s\n", option, inst->name);
 	return 1;
 }
 
-static channel* artnet_channel(instance* instance, char* spec){
-	unsigned channel = strtoul(spec, NULL, 10);
-	if(channel > 512 || channel < 1){
-		fprintf(stderr, "Invalid ArtNet channel %s\n", spec);
+static channel* artnet_channel(instance* inst, char* spec){
+	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
+	char* spec_next = spec;
+	unsigned chan_a = strtoul(spec, &spec_next, 10);
+	unsigned chan_b = 0;
+
+	//primary channel sanity check
+	if(!chan_a || chan_a > 512){
+		fprintf(stderr, "Invalid ArtNet channel specification %s\n", spec);
 		return NULL;
 	}
-	return mm_channel(instance, channel - 1, 1);
+	chan_a--;
+
+	//secondary channel setup
+	if(*spec_next == '+'){
+		chan_b = strtoul(spec_next + 1, NULL, 10);
+		if(!chan_b || chan_b > 512){
+			fprintf(stderr, "Invalid wide-channel spec %s\n", spec);
+			return NULL;
+		}
+		chan_b--;
+
+		//if mapped mode differs, bail
+		if(IS_ACTIVE(data->data.map[chan_b]) && data->data.map[chan_b] != (MAP_FINE | chan_a)){
+			fprintf(stderr, "Fine channel already mapped for ArtNet spec %s\n", spec);
+			return NULL;
+		}
+
+		data->data.map[chan_b] = MAP_FINE | chan_a;
+	}
+
+	//check current map mode
+	if(IS_ACTIVE(data->data.map[chan_a])){
+		if((*spec_next == '+' && data->data.map[chan_a] != (MAP_COARSE | chan_b))
+				|| (*spec_next != '+' && data->data.map[chan_a] != (MAP_SINGLE | chan_a))){
+			fprintf(stderr, "Primary ArtNet channel already mapped at differing mode: %s\n", spec);
+			return NULL;
+		}
+	}
+	data->data.map[chan_a] = (*spec_next == '+') ? (MAP_COARSE | chan_b) : (MAP_SINGLE | chan_a);
+
+	return mm_channel(inst, chan_a, 1);
 }
 
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
@@ -255,9 +290,21 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 
 	//FIXME maybe introduce minimum frame interval
 	for(u = 0; u < num; u++){
-		if(data->data.out[c[u]->ident] != (v[u].normalised * 255.0)){
-			mark = 1;
+		if(IS_WIDE(data->data.map[c[u]->ident])){
+			uint32_t val = (v[u].normalised * 0xFFFF);
+			//test coarse channel
+			if(data->data.out[c[u]->ident] != (val >> 8)){
+				mark = 1;
+				data->data.out[c[u]->ident] = val >> 8;
+			}
 
+			if(data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] != (val & 0xFF)){
+				mark = 1;
+				data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] = val & 0xFF;
+			}
+		}
+		else if(data->data.out[c[u]->ident] != (v[u].normalised * 255.0)){
+			mark = 1;
 			data->data.out[c[u]->ident] = v[u].normalised * 255.0;
 		}
 	}
@@ -285,17 +332,77 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	return 0;
 }
 
+static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
+	size_t p;
+	uint16_t max_mark = 0;
+	uint16_t wide_val = 0;
+	channel* chan = NULL;
+	channel_value val;
+	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
+
+	if(be16toh(frame->length) > 512){
+		fprintf(stderr, "Invalid frame channel count\n");
+		return 1;
+	}
+
+	//read data, mark update channels
+	for(p = 0; p < be16toh(frame->length); p++){
+		if(IS_ACTIVE(data->data.map[p]) && frame->data[p] != data->data.in[p]){
+			data->data.in[p] = frame->data[p];
+			data->data.map[p] |= MAP_MARK;
+			max_mark = p;
+		}
+	}
+
+	//generate events
+	for(p = 0; p < max_mark; p++){
+		if(data->data.map[p] & MAP_MARK){
+			data->data.map[p] &= ~MAP_MARK;
+			if(IS_ACTIVE(data->data.map[p])){
+				if(IS_WIDE(data->data.map[p]) && data->data.map[p] & MAP_FINE){
+					chan = mm_channel(inst, MAPPED_CHANNEL(data->data.map[p]), 0);
+				}
+				else{
+					chan = mm_channel(inst, p, 0);
+				}
+
+				if(!chan){
+					fprintf(stderr, "Active channel %zu not known to core\n", p);
+					return 1;
+				}
+
+				if(IS_WIDE(data->data.map[p])){
+					data->data.map[MAPPED_CHANNEL(data->data.map[p])] &= ~MAP_MARK;
+					wide_val = data->data.in[p] << ((data->data.map[p] & MAP_COARSE) ? 8 : 0);
+					wide_val |= data->data.in[MAPPED_CHANNEL(data->data.map[p])] << ((data->data.map[p] & MAP_COARSE) ? 0 : 8);
+
+					val.raw.u64 = wide_val;
+					val.normalised = (double) wide_val / (double) 0xFFFF;
+				}
+				else{
+					//single channel
+					val.raw.u64 = data->data.in[p];
+					val.normalised = (double) data->data.in[p] / 255.0;
+				}
+
+				if(mm_channel_event(chan, val)){
+					fprintf(stderr, "Failed to push ArtNet channel event to core\n");
+					return 1;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
 static int artnet_handle(size_t num, managed_fd* fds){
-	size_t u, p;
+	size_t u;
 	ssize_t bytes_read;
 	char recv_buf[ARTNET_RECV_BUF];
 	artnet_instance_id inst_id = {
 		.label = 0
 	};
 	instance* inst = NULL;
-	channel* chan = NULL;
-	channel_value val;
-	artnet_instance_data* data;
 	artnet_pkt* frame = (artnet_pkt*) recv_buf;
 	if(!num){
 		//early exit
@@ -305,29 +412,15 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	for(u = 0; u < num; u++){
 		do{
 			bytes_read = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
-			if(bytes_read > sizeof(artnet_hdr)){
+			if(bytes_read > 0 && bytes_read > sizeof(artnet_hdr)){
 				if(!memcmp(frame->magic, "Art-Net\0", 8) && be16toh(frame->opcode) == OpDmx){
 					//find matching instance
 					inst_id.fields.fd_index = ((uint64_t) fds[u].impl) & 0xFF;
 					inst_id.fields.net = frame->net;
 					inst_id.fields.uni = frame->universe;
 					inst = mm_instance_find(BACKEND_NAME, inst_id.label);
-					if(inst){
-						data = (artnet_instance_data*) inst->impl;
-
-						//read data, notify of changes
-						for(p = 0; p < be16toh(frame->length); p++){
-							if(frame->data[p] != data->data.in[p]){
-								data->data.in[p] = frame->data[p];
-								chan = mm_channel(inst, p, 0);
-								val.raw.u64 = frame->data[p];
-								val.normalised = (double)frame->data[p] / 255.0;
-								if(chan && mm_channel_event(chan, val)){
-									fprintf(stderr, "Failed to push ArtNet channel event to core\n");
-									return 1;
-								}
-							}
-						}
+					if(inst && artnet_process_frame(inst, frame)){
+						fprintf(stderr, "Failed to process ArtNet frame\n");
 					}
 				}
 			}

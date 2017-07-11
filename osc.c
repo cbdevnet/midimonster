@@ -567,7 +567,6 @@ static int backend_set(instance* inst, size_t num, channel** c, channel_value* v
 		return 0;
 	}
 
-	memset(xmit_buf, 0, sizeof(xmit_buf));
 	osc_instance* data = (osc_instance*) inst->impl;
 	if(!data->dest_len){
 		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%zu channels)\n", inst->name, num);
@@ -604,6 +603,8 @@ static int backend_set(instance* inst, size_t num, channel** c, channel_value* v
 
 	//find all marked channels
 	for(evt = 0; evt < data->channels; evt++){
+		//zero output buffer
+		memset(xmit_buf, 0, sizeof(xmit_buf));
 		if(data->channel[evt].mark){
 			//determine minimum packet size
 			if(osc_align((data->root ? strlen(data->root) : 0) + strlen(data->channel[evt].path) + 1) + osc_align(data->channel[evt].params + 2)  >= sizeof(xmit_buf)){

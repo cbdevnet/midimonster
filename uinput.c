@@ -3,6 +3,8 @@
 #include "minimonster.h"
 #include "uinput.h"
 
+#define BACKEND_NAME "uinput"
+
 int init() {
 
 	backend uinput = {
@@ -171,8 +173,50 @@ static int backend_handle(size_t num, managed_fd* fds) {
 	//TODO impl
 }
 
-static int backend_start() {
+static int uinput_open_input_device(uinput_instance* data) {
+	if (!data->device_path) {
+		return 0;
+	}
+
+	data->fd_input = open(data->device_path, O_RDONLY | O_NONBLOCK);
+
+	if (data->fd_input < 0) {
+		fprintf(stderr, "Failed to open device %s: %s\n", data->device_path, strerror(errno));
+		return 1;
+	}
+
+	return 0;
+}
+
+static int uinput_create_output_device(uinput_instance* data) {
 	//TODO impl
+}
+
+static int backend_start() {
+
+	size_t n;
+	instance** inst = NULL;
+	uinput_instance* data;
+	if (mm_backend_instances(BACKEND_NAME, &n, &inst)) {
+		fprintf(stderr, "Failed to fetch instance list\n");
+		return 1;
+	}
+
+	if (!n) {
+		free(inst);
+		return 0;
+	}
+
+	for (unsigned p = 0; p < n; p++) {
+		data = (uinput_instance*) inst[p]->impl;
+
+		if (data->name) {
+			uinput_create_output_device(data);
+		}
+	}
+
+	free(inst);
+	return 0;
 }
 
 static int backend_shutdown() {

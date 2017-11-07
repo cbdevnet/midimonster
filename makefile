@@ -1,5 +1,5 @@
 .PHONY: clean
-BACKENDS = artnet.so midi.so osc.so loopback.so
+BACKENDS = artnet.so midi.so osc.so loopback.so uinput.so
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./\""
 
@@ -10,6 +10,7 @@ CFLAGS ?= -g -Wall
 midimonster: LDLIBS = -ldl
 midimonster: CFLAGS += -rdynamic -DPLUGINS=$(PLUGINDIR)
 midi.so: LDLIBS = -lasound
+
 
 %.so :: %.c %.h
 	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@ $(LDFLAGS)

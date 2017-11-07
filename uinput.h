@@ -1,3 +1,5 @@
+#pragma once
+
 #include <sys/types.h>
 #include <linux/input.h>
 

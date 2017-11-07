@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "midimonster.h"
 #include "uinput.h"
@@ -233,6 +234,32 @@ static int backend_set(instance* inst, size_t num, channel** c, channel_value* v
 }
 
 static int backend_shutdown() {
-	//TODO impl
+	uinput_instance* data = NULL;
+	instance** instances = NULL;
+	size_t n = 0;
+
+	if (mm_backend_instances(BACKEND_NAME, &n, &instances)) {
+		fprintf(stderr, "Failed to fetch instance list\n");
+		return 1;
+	}
+
+	if (!n) {
+		free(instances);
+		return 0;
+	}
+
+	for (unsigned p = 0; p < n; p++) {
+		data = (uinput_instance*) instances[p]->impl;
+		if (data->fd_in < 0) {
+			close(data->fd_in);
+			data->fd_in = -1;
+		}
+
+		if (data->fd_out < 0) {
+			close(data->fd_out);
+			data->fd_out = -1;
+		}
+	}
+	free(instances);
 	return 0;
 }

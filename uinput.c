@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <linux/uinput.h>
+#include <sys/ioctl.h>
 
 #include "midimonster.h"
 #include "uinput.h"
@@ -34,7 +36,7 @@ int init() {
 
 static int backend_configure(char* option, char* value) {
 	fprintf(stderr, "Not implemented\n");
-	return 1;
+	return 0;
 }
 
 static int backend_configure_instance(instance* inst, char* option, char* value) {
@@ -50,6 +52,8 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 			fprintf(stderr, "Failed to allocate memory\n");
 			return 1;
 		}
+	} else if (!strcmp(option, "exclusive")) {
+		data->exclusive = strtoul(value, NULL, 10);
 	} else if (!strcmp(option, "name")) {
 		if (data->name) {
 			free(data->name);
@@ -124,10 +128,10 @@ static channel* backend_channel(instance* inst, char* spec) {
 	} else if (type == EV_SND && code >= SND_MAX) {
 		fprintf(stderr, "Code is out of range. Limit for SND is %d\n", SND_MAX);
 	}
-
+/*
 	if (next[0] != '.') {
 		fprintf(stderr, "Cannot parse value. Unknown character %c\n", next[0]);
-		return NULL;
+	return NULL;
 	}
 
 	spec = next + 1;
@@ -138,23 +142,22 @@ static channel* backend_channel(instance* inst, char* spec) {
 		fprintf(stderr, "Cannot parse value\n");
 		return NULL;
 	}
-
-	if (type == EV_KEY && (value != 0 || value != 1)) {
-		fprintf(stderr, "Value of KEY is out of range. Only values 0 and 1 are supported for KEY.");
+	if (type == EV_KEY && (value != 0 && value != 1)) {
+		fprintf(stderr, "Value of KEY %ld is out of range. Only values 0 and 1 are supported for KEY.\n", value);
 		return NULL;
 	}
-
+*/
 	// find event
-	unsigned u;
+	uint64_t u;
 	for (u = 0; u < data->size_events; u++) {
 		if (data->events[u].type == type
-				&& data->events[u].code == code
-				&& data->events[u].value == value) {
+				&& data->events[u].code == code) {
 			break;
 		}
 	}
 
 	if (u == data->size_events) {
+		fprintf(stderr, "Alloc dev %ld: %ld, %ld\n", u, type, code);
 		data->events = realloc(data->events, (u + 1) * sizeof(struct input_event));
 
 		if (!data->events) {
@@ -164,19 +167,82 @@ static channel* backend_channel(instance* inst, char* spec) {
 
 		data->events[u].type = (uint16_t) type;
 		data->events[u].code = (uint16_t) code;
-		data->events[u].value = (int32_t) value;
 		data->size_events++;
 	}
 	return mm_channel(inst, u, 1);
 }
 
 static instance* backend_instance() {
-	// TODO impl
-	return NULL;
+	instance* inst = mm_instance();
+	if (!inst) {
+		return NULL;
+	}
+
+	inst->impl = calloc(1, sizeof(uinput_instance));
+	if (!inst->impl) {
+		fprintf(stderr, "Failed to allocate memory\n");
+		return NULL;
+	}
+	return inst;
+}
+
+static channel_value uinput_normalize(uinput_instance* data, uint64_t ident, struct input_event* event) {
+	channel_value value = {};
+
+	switch (event->type) {
+		case EV_KEY:
+			value.normalised = event->value > 0;
+			break;
+		case EV_REL:
+			if (event->value > 0) {
+				value.normalised = 1.0;
+			} else {
+				value.normalised = 0.0;
+			}
+			break;
+	}
+
+	return value;
 }
 
 static int backend_handle(size_t num, managed_fd* fds) {
-	//TODO impl
+	struct input_event event;
+	ssize_t bytes = 0;
+	uint64_t ident;
+
+	uinput_instance* data;
+
+	channel* channel;
+	for (int i = 0; i < num; i++) {
+		bytes = read(fds[i].fd, &event, sizeof(struct input_event));
+
+		if (bytes < sizeof(struct input_event)) {
+			fprintf(stderr, "Failed to read an complete event\n");
+			return 1;
+		}
+		data = (uinput_instance*) fds[0].impl;
+		for (ident = 0; ident < data->size_events; ident++) {
+			if (data->events[ident].type == event.type
+					&& data->events[ident].code == event.code) {
+				break;
+			}
+		}
+		fprintf(stderr, "Found event: %d, %d, %d (%ld/%ld)\n", event.type, event.code, event.value, ident, data->size_events);
+
+		if (ident >= data->size_events) {
+			fprintf(stderr, "Event not registered.\n");
+			continue;
+		}
+		channel = mm_channel(mm_instance_find(BACKEND_NAME, data->ident), ident, 0);
+
+		if (channel) {
+			fprintf(stderr, "Channel found\n");
+			if (mm_channel_event(channel, uinput_normalize(data, ident, &event))) {
+				return 1;
+			}
+		}
+	}
+
 	return 0;
 }
 
@@ -189,6 +255,17 @@ static int uinput_open_input_device(uinput_instance* data) {
 
 	if (data->fd_in < 0) {
 		fprintf(stderr, "Failed to open device %s: %s\n", data->device_path, strerror(errno));
+		return 1;
+	}
+	int grab = data->exclusive;
+	if (ioctl(data->fd_in, EVIOCGRAB, &grab) > 0) {
+		fprintf(stderr, "Cannot set exclusive lock on device %s\n", data->device_path);
+		close(data->fd_in);
+		data->fd_in = -1;
+		return 1;
+	}
+
+	if (!mm_manage_fd(data->fd_in, BACKEND_NAME, 1, data)) {
 		return 1;
 	}
 
@@ -219,9 +296,14 @@ static int backend_start() {
 		data = (uinput_instance*) inst[p]->impl;
 
 		if (data->name) {
-			uinput_open_input_device(data);
 			uinput_create_output_device(data);
 		}
+
+		if (data->device_path) {
+			uinput_open_input_device(data);
+		}
+		data->ident = p;
+		inst[p]->ident = data->ident;
 	}
 
 	free(inst);

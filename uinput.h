@@ -17,10 +17,12 @@ static int backend_shutdown();
 
 /* uinput_instance */
 typedef struct {
+	int ident;
 	char* device_path;
 	char* name;
 	int fd_in;
 	int fd_out;
+	int exclusive;
 	size_t size_events;
 	struct input_event* events;
 } uinput_instance;

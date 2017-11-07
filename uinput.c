@@ -1,6 +1,10 @@
 #include <linux/input.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
 
-#include "minimonster.h"
+#include "midimonster.h"
 #include "uinput.h"
 
 #define BACKEND_NAME "uinput"
@@ -141,7 +145,7 @@ static channel* backend_channel(instance* inst, char* spec) {
 
 	// find event
 	unsigned u;
-	for (u = 0; u < data.size_events) {
+	for (u = 0; u < data->size_events; u++) {
 		if (data->events[u].type == type
 				&& data->events[u].code == code
 				&& data->events[u].value == value) {
@@ -150,7 +154,7 @@ static channel* backend_channel(instance* inst, char* spec) {
 	}
 
 	if (u == data->size_events) {
-		data->events = realloc(data->channel, (u + 1) * sizeof(struct input_event));
+		data->events = realloc(data->events, (u + 1) * sizeof(struct input_event));
 
 		if (!data->events) {
 			fprintf(stderr, "Failed to allocate memory\n");
@@ -167,10 +171,12 @@ static channel* backend_channel(instance* inst, char* spec) {
 
 static instance* backend_instance() {
 	// TODO impl
+	return NULL;
 }
 
 static int backend_handle(size_t num, managed_fd* fds) {
 	//TODO impl
+	return 0;
 }
 
 static int uinput_open_input_device(uinput_instance* data) {
@@ -178,9 +184,9 @@ static int uinput_open_input_device(uinput_instance* data) {
 		return 0;
 	}
 
-	data->fd_input = open(data->device_path, O_RDONLY | O_NONBLOCK);
+	data->fd_in = open(data->device_path, O_RDONLY | O_NONBLOCK);
 
-	if (data->fd_input < 0) {
+	if (data->fd_in < 0) {
 		fprintf(stderr, "Failed to open device %s: %s\n", data->device_path, strerror(errno));
 		return 1;
 	}
@@ -190,6 +196,7 @@ static int uinput_open_input_device(uinput_instance* data) {
 
 static int uinput_create_output_device(uinput_instance* data) {
 	//TODO impl
+	return 0;
 }
 
 static int backend_start() {
@@ -211,6 +218,7 @@ static int backend_start() {
 		data = (uinput_instance*) inst[p]->impl;
 
 		if (data->name) {
+			uinput_open_input_device(data);
 			uinput_create_output_device(data);
 		}
 	}
@@ -219,6 +227,12 @@ static int backend_start() {
 	return 0;
 }
 
+static int backend_set(instance* inst, size_t num, channel** c, channel_value* v) {
+	//TODO impl
+	return 0;
+}
+
 static int backend_shutdown() {
 	//TODO impl
+	return 0;
 }

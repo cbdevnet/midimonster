@@ -4,6 +4,13 @@
 #include <stdlib.h>
 #include <stdint.h>
 #define max(a,b) (((a) > (b)) ? (a) : (b))
+#ifdef DEBUG
+	#define DBGPF(format, ...) fprintf(stderr, (format), __VA_ARGS__)
+	#define DBG(message) fprintf(stderr, "%s", (message))
+#else
+	#define DBGPF(format, ...)
+	#define DBG(message)
+#endif
 
 #define DEFAULT_CFG "monster.cfg"
 
@@ -150,24 +157,30 @@ instance* mm_instance_find(char* backend, uint64_t ident);
 /*
  * Provides a pointer to a channel structure, pre-filled with
  * the provided instance reference and identifier.
- * Will return previous allocations if the provided fields
- * match.
- * This API is just a convenience function. The array
- * of channels is only used for mapping internally,
- * creating and managing your own channel store is
- * possible.
- * For each channel with a non-NULL impl field, the backend
- * will receive a call to its channel_free function.
+ * The `create` parameter is a boolean flag indicating whether
+ * a channel matching the `ident` parameter should be created if
+ * none exists. If the instance already registered a channel
+ * matching `ident`, a pointer to it is returned.
+ * This API is just a convenience function. The array of channels is
+ * only used for mapping internally, creating and managing your own
+ * channel store is possible.
+ * For each channel with a non-NULL `impl` field registered using
+ * this function, the backend will receive a call to its channel_free
+ * function.
  */
 channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
 //TODO channel* mm_channel_find()
 /*
  * Register a file descriptor to be selected on. The backend
  * will be notified via the mmbackend_process_fd call.
- * This function may only be called from within the
- * mmbackend_start procedure.
+ * This function may only be called from within the mmbackend_start
+ * procedure.
  */
 int mm_manage_fd(int fd, char* backend, int manage, void* impl);
+/*
+ * Notifies the core of a channel event. Used by backends to
+ * inject events gathered from their backing implementation.
+ */
 int mm_channel_event(channel* c, channel_value v);
 /*
  * Query all active instances for a given backend.

@@ -4,6 +4,7 @@ OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./\""
 
 CFLAGS ?= -g -Wall
+#CFLAGS += -DDEBUG
 %.so: CFLAGS += -fPIC
 %.so: LDFLAGS += -shared
 

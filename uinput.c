@@ -11,6 +11,7 @@
 #include "uinput.h"
 
 #define BACKEND_NAME "uinput"
+#define UINPUT_PATH "/dev/uinput"
 
 int init() {
 
@@ -49,7 +50,7 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 		data->device_path = strdup(value);
 
 		if (!data->device_path) {
-			fprintf(stderr, "Failed to allocate memory\n");
+			fprintf(stderr, "Failed to allocate memory for device path: %s\n", strerror(errno));
 			return 1;
 		}
 	} else if (!strcmp(option, "exclusive")) {
@@ -59,10 +60,10 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 			free(data->name);
 		}
 
-		data->name = strdup(option);
+		data->name = strdup(value);
 
-		if (data->name) {
-			fprintf(stderr, "Failed to allocate memory\n");
+		if (!data->name) {
+			fprintf(stderr, "Failed to allocate memory for name: %s\n", strerror(errno));
 			return 1;
 		}
 	} else {
@@ -128,34 +129,41 @@ static channel* backend_channel(instance* inst, char* spec) {
 	} else if (type == EV_SND && code >= SND_MAX) {
 		fprintf(stderr, "Code is out of range. Limit for SND is %d\n", SND_MAX);
 	}
-/*
-	if (next[0] != '.') {
-		fprintf(stderr, "Cannot parse value. Unknown character %c\n", next[0]);
-	return NULL;
-	}
 
-	spec = next + 1;
-
-	long value = strtol(spec, &next, 10);
-
-	if (spec == next) {
-		fprintf(stderr, "Cannot parse value\n");
-		return NULL;
-	}
-	if (type == EV_KEY && (value != 0 && value != 1)) {
-		fprintf(stderr, "Value of KEY %ld is out of range. Only values 0 and 1 are supported for KEY.\n", value);
-		return NULL;
-	}
-*/
-	// find event
 	uint64_t u;
-	for (u = 0; u < data->size_events; u++) {
-		if (data->events[u].type == type
-				&& data->events[u].code == code) {
-			break;
+	if (next[0] == '.') {
+		spec = next + 1;
+		long value = strtol(spec, &next, 10);
+		if (spec == next) {
+			fprintf(stderr, "Cannot parse value\n");
+			return NULL;
+		}
+		if (type == EV_KEY && (value != 0 && value != 1)) {
+			fprintf(stderr, "Value of KEY %ld is out of range. Only values 0 and 1 are supported for KEY.\n", value);
+			return NULL;
+		}
+		// find event with value
+		for (u = 0; u < data->size_events; u++) {
+			if (data->events[u].type == type
+					&& data->events[u].code == code
+					&& data->events[u].value == value) {
+				break;
+			}
+		}
+	} else if (next[0] != '\0') {
+		fprintf(stderr, "Unkown characters: %s\n", next);
+		return NULL;
+	} else {
+		// find event
+		for (u = 0; u < data->size_events; u++) {
+			if (data->events[u].type == type
+					&& data->events[u].code == code) {
+				break;
+			}
 		}
 	}
 
+	// check if no event was found
 	if (u == data->size_events) {
 		fprintf(stderr, "Alloc dev %ld: %ld, %ld\n", u, type, code);
 		data->events = realloc(data->events, (u + 1) * sizeof(struct input_event));
@@ -180,7 +188,7 @@ static instance* backend_instance() {
 
 	inst->impl = calloc(1, sizeof(uinput_instance));
 	if (!inst->impl) {
-		fprintf(stderr, "Failed to allocate memory\n");
+		fprintf(stderr, "Failed to allocate memory for instance\n");
 		return NULL;
 	}
 	return inst;
@@ -204,6 +212,18 @@ static channel_value uinput_normalize(uinput_instance* data, uint64_t ident, str
 
 	return value;
 }
+
+static uint32_t uinput_convert_normalised(struct input_event event, channel_value* value) {
+	switch (event.type) {
+		case EV_KEY:
+			return value->normalised < 0.5;
+		case EV_REL:
+			return (value->normalised < 0.5) - 1;
+		default:
+			return value->normalised < 0.5;
+	}
+}
+
 
 static int backend_handle(size_t num, managed_fd* fds) {
 	struct input_event event;
@@ -272,8 +292,88 @@ static int uinput_open_input_device(uinput_instance* data) {
 	return 0;
 }
 
+static int enable_device_keys(uinput_instance* data, int uinput_fd, struct uinput_user_dev* dev) {
+	unsigned int u;
+	int ret;
+	int action;
+	uint8_t first_bits[EV_CNT];
+	memset(first_bits, 0, EV_CNT * sizeof(uint8_t));
+	for (u = 0; u < data->size_events; u++) {
+		if (data->events[u].type < EV_MAX && !first_bits[data->events[u].type]) {
+			ret = ioctl(uinput_fd, UI_SET_EVBIT, data->events[u].type);
+
+			if (ret < 0) {
+				fprintf(stderr, "Cannot enable type: %d\n", data->events[u].type);
+				return 1;
+			}
+		}
+		switch (data->events[u].type) {
+			case EV_KEY:
+				action = UI_SET_KEYBIT;
+				break;
+			case EV_ABS:
+				action = UI_SET_ABSBIT;
+				break;
+			case EV_REL:
+				action = UI_SET_RELBIT;
+				break;
+			case EV_MSC:
+				action = UI_SET_MSCBIT;
+				break;
+			default:
+				fprintf(stderr, "Event code not supported: %d\n", data->events[u].type);
+				return 1;
+		}
+		ret = ioctl(uinput_fd,  action, data->events[u].code);
+
+		if (ret < 0) {
+			fprintf(stderr, "Cannot enable code: %d\n", data->events[u].code);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static int uinput_create_output_device(uinput_instance* data) {
-	//TODO impl
+
+	int uinput_fd = open(UINPUT_PATH, O_WRONLY | O_NONBLOCK);
+
+	if (uinput_fd < 0) {
+		fprintf(stderr, "Cannot open uinput device: %s\n", strerror(errno));
+		return 1;
+	}
+
+	struct uinput_user_dev dev = {};
+	memset(&dev, 0, sizeof(dev));
+	strncpy(dev.name, data->name, UINPUT_MAX_NAME_SIZE - 1);
+	dev.id.bustype = 0;
+	dev.id.vendor = 0;
+	dev.id.product = 0;
+	dev.id.version = 0;
+
+	if (enable_device_keys(data, uinput_fd, &dev)) {
+		close(uinput_fd);
+		return 1;
+	}
+	// write config to uinput
+	int ret = write(uinput_fd, &dev, sizeof(dev));
+
+	if (ret < 0) {
+		fprintf(stderr, "Cannot write to uinput device: %s\n", strerror(errno));
+		close(uinput_fd);
+		return 1;
+	}
+
+	ret = ioctl(uinput_fd, UI_DEV_CREATE);
+
+	if (ret < 0) {
+		fprintf(stderr, "Cannot create device: %s\n", strerror(errno));
+		close(uinput_fd);
+		return 1;
+	}
+
+	data->fd_out = uinput_fd;
+
 	return 0;
 }
 
@@ -311,7 +411,35 @@ static int backend_start() {
 }
 
 static int backend_set(instance* inst, size_t num, channel** c, channel_value* v) {
-	//TODO impl
+	size_t u;
+	uinput_instance* data;
+	uint64_t ident;
+	int ret;
+	struct input_event event = {};
+
+	for (u = 0; u < num; u++) {
+		data = (uinput_instance*) c[u]->instance->impl;
+		ident = c[u]->ident;
+
+		memcpy(&event, &data->events[ident], sizeof(struct input_event));
+		event.value = uinput_convert_normalised(event, v);
+
+		ret = write(data->fd_out, &event, sizeof(event));
+		if (ret < 0 ) {
+			fprintf(stderr, "Cannot write event: %s\n", strerror(errno));
+			return 1;
+		}
+		event.type = EV_SYN;
+		event.code = SYN_REPORT;
+		event.value = 0;
+
+		ret = write(data->fd_out, &event, sizeof(event));
+		if (ret < 0) {
+			fprintf(stderr, "Cannot send SYN_REPORT event: %s\n", strerror(errno));
+			return 1;
+		}
+	}
+
 	return 0;
 }
 
@@ -338,6 +466,12 @@ static int backend_shutdown() {
 		}
 
 		if (data->fd_out < 0) {
+			int ret = ioctl(data->fd_out, UI_DEV_DESTROY);
+
+			if (ret < 0) {
+				fprintf(stderr, "Could not destroy device: %s\n", strerror(errno));
+				return 1;
+			}
 			close(data->fd_out);
 			data->fd_out = -1;
 		}

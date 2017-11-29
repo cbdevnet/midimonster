@@ -42,12 +42,12 @@ static int plugin_attach(char* path, char* file){
 	else{
 		return 0;
 	}
+	free(lib);
 
 	plugin_handle = realloc(plugin_handle, (plugins + 1) * sizeof(void*));
 	if(!plugin_handle){
 		fprintf(stderr, "Failed to allocate memory\n");
 		dlclose(handle);
-		free(lib);
 		return 1;
 	}
 

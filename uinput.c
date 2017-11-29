@@ -475,6 +475,11 @@ static int backend_shutdown() {
 			close(data->fd_out);
 			data->fd_out = -1;
 		}
+
+		free(data->events);
+		free(data->name);
+		free(data->device_path);
+		free(data);
 	}
 	free(instances);
 	return 0;

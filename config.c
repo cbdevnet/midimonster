@@ -213,8 +213,7 @@ int config_read(char* cfg_file){
 		else{
 			//pass to parser
 			//find separator
-			for(separator = line; *separator && *separator != '='; separator++){
-			}
+			separator = strchr(line, '=');
 
 			if(!*separator){
 				fprintf(stderr, "Not an assignment: %s\n", line);

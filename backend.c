@@ -26,6 +26,7 @@ int backends_handle(size_t nfds, managed_fd* fds){
 			}
 		}
 
+		DBGPF("Notifying backend %s of %zu waiting FDs\n", backends[u].name, n);
 		rv |= backends[u].process(n, fds);
 	}
 	return rv;
@@ -55,6 +56,7 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 			}
 		}
 
+		DBGPF("Calling handler for instance %s with %zu events\n", instances[u]->name, n);
 		rv |= instances[u]->backend->handle(instances[u], n, c, v);
 	}
 
@@ -65,14 +67,17 @@ channel* mm_channel(instance* i, uint64_t ident, uint8_t create){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
 		if(channels[u]->instance == i && channels[u]->ident == ident){
+			DBGPF("Requested channel %zu on instance %s already exists, reusing\n", ident, i->name);
 			return channels[u];
 		}
 	}
 
 	if(!create){
+		DBGPF("Requested unknown channel %zu on instance %s\n", ident, i->name);
 		return NULL;
 	}
 
+	DBGPF("Creating previously unknown channel %zu on instance %s\n", ident, i->name);
 	channel** new_chan = realloc(channels, (nchannels + 1) * sizeof(channel*));
 	if(!new_chan){
 		fprintf(stderr, "Failed to allocate memory\n");
@@ -169,6 +174,7 @@ void instances_free(){
 void channels_free(){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
+		DBGPF("Destroying channel %zu on instance %s\n", channels[u]->ident, channels[u]->instance->name);
 		if(channels[u]->impl){
 			channels[u]->instance->backend->channel_free(channels[u]);
 		}

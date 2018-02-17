@@ -248,6 +248,7 @@ int main(int argc, char** argv){
 	}
 
 	//create initial fd set
+	DBGPF("Building selector set from %zu FDs registered to core\n", fds);
 	FD_ZERO(&all_fds);
 	for(u = 0; u < fds; u++){
 		if(fd[u].fd >= 0){
@@ -277,6 +278,7 @@ int main(int argc, char** argv){
 		}
 
 		//run backend processing, collect events
+		DBGPF("%zu backend FDs signaled\n", n);
 		if(backends_handle(n, signaled_fds)){
 			fprintf(stderr, "Backends failed to handle input\n");
 			goto bail;
@@ -284,6 +286,7 @@ int main(int argc, char** argv){
 
 		while(primary->n){
 			//swap primary and secondary event collectors
+			DBGPF("Swapping event collectors, %zu events in primary\n", primary->n);
 			for(u = 0; u < sizeof(event_pool)/sizeof(event_collection); u++){
 				if(primary != event_pool + u){
 					secondary = primary;

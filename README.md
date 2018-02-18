@@ -12,6 +12,7 @@ It allows the user to translate channels on one protocol into channels on anothe
 * Translate OSC messages into MIDI
 * Use an OSC app as a simple lighting controller via ArtNet
 * Visualize ArtNet data using OSC servers
+* Control lighting fixtures or DAWs using gamepad controllers
 
 ## Usage
 

@@ -52,7 +52,7 @@ output eachothers events.
 
 The last line is a shorter way to create a bi-directional mapping.
 
-An example configuration file can be found in [configs/unifest-17.cfg](configs/unifest-17.cfg).
+Example configuration files may be found in [configs/](configs/).
 
 ## Backend documentation
 This section documents the configuration options supported by the various backends.
@@ -165,8 +165,8 @@ This backend does not take any global configuration.
 | `id`		| `0x1 0x2 0x3`		| none		| Set output device bus identification (Vendor, Product and Version), optional |
 | `axis.AXISNAME`| `34300 0 65536 255 4095` | none	| Specify absolute axis details (see below) for output. This is required for any absolute axis to be output.
 
-The absolute axis details configuration is required for any absolute axis on output-enabled instances.
-The configuration value contains, space-separated, the following values:
+The absolute axis details configuration (e.g. `axis.ABS_X`) is required for any absolute axis on output-enabled
+instances. The configuration value contains, space-separated, the following values:
 
 * `value`: The value to assume for the axis until an event is received
 * `minimum`: The axis minimum value
@@ -180,7 +180,7 @@ For real devices, all of these parameters for every axis can be found by running
 #### Channel specification
 
 A channel is specified by its event type and event code, separated by `.`. For a complete list of event types and codes
-see the kernel sources. The most interesting event types are
+see the [kernel documentation](https://www.kernel.org/doc/html/v4.12/input/event-codes.html). The most interesting event types are
 
 * `EV_KEY` for keys and buttons
 * `EV_ABS` for absolute axes (such as Joysticks)

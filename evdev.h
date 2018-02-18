@@ -18,10 +18,7 @@ typedef struct /*_evdev_instance_model*/ {
 	struct libevdev* input_ev;
 	int exclusive;
 
-	int output_fd;
-	char* output_name;
+	int output_enabled;
+	struct libevdev* output_proto;
 	struct libevdev_uinput* output_ev;
-
-	size_t nenabled_events;
-	struct input_event* enabled_events;
 } evdev_instance_data;

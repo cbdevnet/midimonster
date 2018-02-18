@@ -146,7 +146,7 @@ void fds_free(){
 
 int mm_channel_event(channel* c, channel_value v){
 	size_t u, p;
-	
+
 	//find mapped channels
 	for(u = 0; u < mappings; u++){
 		if(map[u].from == c){
@@ -305,7 +305,7 @@ int main(int argc, char** argv){
 			secondary->n = 0;
 		}
 	}
-	
+
 	rv = EXIT_SUCCESS;
 bail:
 	//free all data

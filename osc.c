@@ -501,17 +501,20 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 }
 
 static instance* backend_instance(){
-	instance* i = mm_instance();
-	osc_instance* data = calloc(1, sizeof(osc_instance));
-	data->fd = -1;
+	instance* inst = mm_instance();
+	if(!inst){
+		return NULL;
+	}
 
-	if(!i || !data){
+	osc_instance* data = calloc(1, sizeof(osc_instance));
+	if(!data){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return NULL;
 	}
 
-	i->impl = data;
-	return i;
+	data->fd = -1;
+	inst->impl = data;
+	return inst;
 }
 
 static channel* backend_channel(instance* inst, char* spec){

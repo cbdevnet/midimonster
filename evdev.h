@@ -13,14 +13,15 @@ static int evdev_handle(size_t num, managed_fd* fds);
 static int evdev_start();
 static int evdev_shutdown();
 
-/* uinput_instance */
-typedef struct {
-	int ident;
-	char* device_path;
-	char* name;
-	int fd_in;
-	int fd_out;
+typedef struct /*_evdev_instance_model*/ {
+	int input_fd;
+	struct libevdev* input_ev;
 	int exclusive;
-	size_t size_events;
-	struct input_event* events;
+
+	int output_fd;
+	char* output_name;
+	struct libevdev_uinput* output_ev;
+
+	size_t nenabled_events;
+	struct input_event* enabled_events;
 } evdev_instance_data;

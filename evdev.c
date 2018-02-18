@@ -8,40 +8,39 @@
 #include <sys/ioctl.h>
 
 #include "midimonster.h"
-#include "uinput.h"
+#include "evdev.h"
 
-#define BACKEND_NAME "uinput"
+#define BACKEND_NAME "evdev"
 #define UINPUT_PATH "/dev/uinput"
 
-int init() {
-
-	backend uinput = {
+int init(){
+	backend evdev = {
 		.name = BACKEND_NAME,
-		.conf = backend_configure,
-		.create = backend_instance,
-		.conf_instance = backend_configure_instance,
-		.channel = backend_channel,
-		.handle = backend_set,
-		.process = backend_handle,
-		.start = backend_start,
-		.shutdown = backend_shutdown
+		.conf = evdev_configure,
+		.create = evdev_instance,
+		.conf_instance = evdev_configure_instance,
+		.channel = evdev_channel,
+		.handle = evdev_set,
+		.process = evdev_handle,
+		.start = evdev_start,
+		.shutdown = evdev_shutdown
 	};
 
-	if (mm_backend_register(uinput)) {
-		fprintf(stderr, "Failed to register uinput backend\n");
+	if(mm_backend_register(evdev)){
+		fprintf(stderr, "Failed to register evdev backend\n");
 		return 1;
 	}
 
 	return 0;
 }
 
-static int backend_configure(char* option, char* value) {
-	fprintf(stderr, "Not implemented\n");
+static int evdev_configure(char* option, char* value) {
+	//intentionally ignored
 	return 0;
 }
 
-static int backend_configure_instance(instance* inst, char* option, char* value) {
-	uinput_instance* data = (uinput_instance*) inst->impl;
+static int evdev_configure_instance(instance* inst, char* option, char* value) {
+	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 
 	if (!strcmp(option, "device")) {
 		if (data->device_path) {
@@ -67,14 +66,14 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 			return 1;
 		}
 	} else {
-		fprintf(stderr, "Unkown configuration parameter %s for uinput backend\n", option);
+		fprintf(stderr, "Unkown configuration parameter %s for evdev backend\n", option);
 		return 1;
 	}
 	return 0;
 }
 
-static channel* backend_channel(instance* inst, char* spec) {
-	uinput_instance* data = (uinput_instance*) inst->impl;
+static channel* evdev_channel(instance* inst, char* spec) {
+	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 	char* next = spec;
 	// type
 	unsigned long type = strtoul(spec, &next, 10);
@@ -180,13 +179,13 @@ static channel* backend_channel(instance* inst, char* spec) {
 	return mm_channel(inst, u, 1);
 }
 
-static instance* backend_instance() {
+static instance* evdev_instance() {
 	instance* inst = mm_instance();
 	if (!inst) {
 		return NULL;
 	}
 
-	inst->impl = calloc(1, sizeof(uinput_instance));
+	inst->impl = calloc(1, sizeof(evdev_instance_data));
 	if (!inst->impl) {
 		fprintf(stderr, "Failed to allocate memory for instance\n");
 		return NULL;
@@ -194,7 +193,7 @@ static instance* backend_instance() {
 	return inst;
 }
 
-static channel_value uinput_normalize(uinput_instance* data, uint64_t ident, struct input_event* event) {
+static channel_value evdev_normalize(evdev_instance_data* data, uint64_t ident, struct input_event* event) {
 	channel_value value = {};
 
 	switch (event->type) {
@@ -213,7 +212,7 @@ static channel_value uinput_normalize(uinput_instance* data, uint64_t ident, str
 	return value;
 }
 
-static uint32_t uinput_convert_normalised(struct input_event event, channel_value* value) {
+static uint32_t evdev_convert_normalised(struct input_event event, channel_value* value) {
 	switch (event.type) {
 		case EV_KEY:
 			return value->normalised < 0.5;
@@ -225,12 +224,12 @@ static uint32_t uinput_convert_normalised(struct input_event event, channel_valu
 }
 
 
-static int backend_handle(size_t num, managed_fd* fds) {
+static int evdev_handle(size_t num, managed_fd* fds) {
 	struct input_event event;
 	ssize_t bytes = 0;
 	uint64_t ident;
 
-	uinput_instance* data;
+	evdev_instance_data* data;
 
 	channel* channel;
 	for (int i = 0; i < num; i++) {
@@ -240,7 +239,7 @@ static int backend_handle(size_t num, managed_fd* fds) {
 			fprintf(stderr, "Failed to read an complete event\n");
 			return 1;
 		}
-		data = (uinput_instance*) fds[0].impl;
+		data = (evdev_instance_data*) fds[0].impl;
 		for (ident = 0; ident < data->size_events; ident++) {
 			if (data->events[ident].type == event.type
 					&& data->events[ident].code == event.code) {
@@ -257,7 +256,7 @@ static int backend_handle(size_t num, managed_fd* fds) {
 
 		if (channel) {
 			fprintf(stderr, "Channel found\n");
-			if (mm_channel_event(channel, uinput_normalize(data, ident, &event))) {
+			if (mm_channel_event(channel, evdev_normalize(data, ident, &event))) {
 				return 1;
 			}
 		}
@@ -266,7 +265,7 @@ static int backend_handle(size_t num, managed_fd* fds) {
 	return 0;
 }
 
-static int uinput_open_input_device(uinput_instance* data) {
+static int evdev_open_input_device(evdev_instance_data* data) {
 	if (!data->device_path) {
 		return 0;
 	}
@@ -292,7 +291,7 @@ static int uinput_open_input_device(uinput_instance* data) {
 	return 0;
 }
 
-static int enable_device_keys(uinput_instance* data, int uinput_fd, struct uinput_user_dev* dev) {
+static int enable_device_keys(evdev_instance_data* data, int uinput_fd, struct uinput_user_dev* dev) {
 	unsigned int u;
 	int ret;
 	int action;
@@ -334,7 +333,7 @@ static int enable_device_keys(uinput_instance* data, int uinput_fd, struct uinpu
 	return 0;
 }
 
-static int uinput_create_output_device(uinput_instance* data) {
+static int uinput_create_output_device(evdev_instance_data* data) {
 
 	int uinput_fd = open(UINPUT_PATH, O_WRONLY | O_NONBLOCK);
 
@@ -377,11 +376,10 @@ static int uinput_create_output_device(uinput_instance* data) {
 	return 0;
 }
 
-static int backend_start() {
-
+static int evdev_start() {
 	size_t n;
 	instance** inst = NULL;
-	uinput_instance* data;
+	evdev_instance_data* data;
 	if (mm_backend_instances(BACKEND_NAME, &n, &inst)) {
 		fprintf(stderr, "Failed to fetch instance list\n");
 		return 1;
@@ -393,14 +391,14 @@ static int backend_start() {
 	}
 
 	for (unsigned p = 0; p < n; p++) {
-		data = (uinput_instance*) inst[p]->impl;
+		data = (evdev_instance_data*) inst[p]->impl;
 
 		if (data->name) {
 			uinput_create_output_device(data);
 		}
 
 		if (data->device_path) {
-			uinput_open_input_device(data);
+			evdev_open_input_device(data);
 		}
 		data->ident = p;
 		inst[p]->ident = data->ident;
@@ -410,19 +408,19 @@ static int backend_start() {
 	return 0;
 }
 
-static int backend_set(instance* inst, size_t num, channel** c, channel_value* v) {
+static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) {
 	size_t u;
-	uinput_instance* data;
+	evdev_instance_data* data;
 	uint64_t ident;
 	int ret;
 	struct input_event event = {};
 
 	for (u = 0; u < num; u++) {
-		data = (uinput_instance*) c[u]->instance->impl;
+		data = (evdev_instance_data*) c[u]->instance->impl;
 		ident = c[u]->ident;
 
 		memcpy(&event, &data->events[ident], sizeof(struct input_event));
-		event.value = uinput_convert_normalised(event, v);
+		event.value = evdev_convert_normalised(event, v);
 
 		ret = write(data->fd_out, &event, sizeof(event));
 		if (ret < 0 ) {
@@ -443,8 +441,8 @@ static int backend_set(instance* inst, size_t num, channel** c, channel_value* v
 	return 0;
 }
 
-static int backend_shutdown() {
-	uinput_instance* data = NULL;
+static int evdev_shutdown() {
+	evdev_instance_data* data = NULL;
 	instance** instances = NULL;
 	size_t n = 0;
 
@@ -459,7 +457,7 @@ static int backend_shutdown() {
 	}
 
 	for (unsigned p = 0; p < n; p++) {
-		data = (uinput_instance*) instances[p]->impl;
+		data = (evdev_instance_data*) instances[p]->impl;
 		if (data->fd_in < 0) {
 			close(data->fd_in);
 			data->fd_in = -1;

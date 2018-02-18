@@ -1,5 +1,5 @@
 .PHONY: clean
-BACKENDS = artnet.so midi.so osc.so loopback.so uinput.so
+BACKENDS = artnet.so midi.so osc.so loopback.so evdev.so
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./\""
 

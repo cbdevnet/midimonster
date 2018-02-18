@@ -779,7 +779,7 @@ static int backend_start(){
 		}
 	}
 
-	fprintf(stderr, "OSC backend registering %zu descriptors to core\n", fds);
+	fprintf(stderr, "OSC backend registered %zu descriptors to core\n", fds);
 
 	free(inst);
 	return 0;

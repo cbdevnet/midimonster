@@ -1,12 +1,12 @@
 .PHONY: clean
-BACKENDS = artnet.so midi.so osc.so loopback.so evdev.so
+BACKENDS = artnet.so osc.so loopback.so
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./\""
 
 CFLAGS ?= -g -Wall
 #CFLAGS += -DDEBUG
 %.so: CFLAGS += -fPIC
-%.so: LDFLAGS += -shared
+%.so: LDFLAGS += -shared -undefined dynamic_lookup
 
 midimonster: LDLIBS = -ldl
 midimonster: CFLAGS += -rdynamic -DPLUGINS=$(PLUGINDIR)
@@ -20,7 +20,7 @@ evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
 
 all: midimonster $(BACKENDS)
 
-midimonster: midimonster.h $(OBJS)
+midimonster: midimonster.c $(OBJS)
 
 clean:
 	$(RM) midimonster

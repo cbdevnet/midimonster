@@ -9,7 +9,8 @@ CFLAGS ?= -g -Wall
 %.so: LDFLAGS += -shared
 
 midimonster: LDLIBS = -ldl
-midimonster: CFLAGS += -rdynamic -DPLUGINS=$(PLUGINDIR)
+midimonster: CFLAGS += -DPLUGINS=$(PLUGINDIR)
+midimonster: LDFLAGS += -Wl,-export-dynamic
 midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)
 evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
@@ -20,7 +21,7 @@ evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
 
 all: midimonster $(BACKENDS)
 
-midimonster: midimonster.h $(OBJS)
+midimonster: midimonster.c $(OBJS)
 
 clean:
 	$(RM) midimonster

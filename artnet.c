@@ -320,7 +320,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 			.universe = data->uni,
 			.net = data->net,
 			.length = htobe16(512),
-			.data = {}
+			.data = {0}
 		};
 		memcpy(frame.data, data->data.out, 512);
 

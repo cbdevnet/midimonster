@@ -30,7 +30,7 @@ static int plugin_attach(char* path, char* file){
 		return 0;
 	}
 
-	init = dlsym(handle, "init");
+	init = (plugin_init) dlsym(handle, "init");
 	if(init){
 		if(init()){
 			fprintf(stderr, "Plugin %s failed to initialize\n", lib);

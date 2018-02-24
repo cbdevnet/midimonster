@@ -1,4 +1,4 @@
-.PHONY: clean
+.PHONY: all clean run sanitize
 BACKENDS = artnet.so midi.so osc.so loopback.so evdev.so
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./\""
@@ -30,3 +30,7 @@ clean:
 
 run:
 	valgrind --leak-check=full --show-leak-kinds=all ./midimonster
+
+sanitize: CC = clang
+sanitize: CFLAGS = -g -Wall -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
+sanitize: midimonster $(BACKENDS)

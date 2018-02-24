@@ -358,3 +358,8 @@ at start time, which provide a protocol mapping to instances / channels.
 
 The API and structures are more-or-less documented in [midimonster.h](midimonster.h),
 more detailed documentation may follow.
+
+To build with `clang` sanitizers and even more warnings enabled, run `make sanitize`.
+This is useful to check for common errors and oversights.
+
+For runtime leak analysis with `valgrind`, you can use `make run`.

@@ -5,7 +5,9 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <libevdev/libevdev.h>
+#ifndef EVDEV_NO_UINPUT
 #include <libevdev/libevdev-uinput.h>
+#endif
 
 #include "midimonster.h"
 #include "evdev.h"
@@ -60,12 +62,14 @@ static instance* evdev_instance(){
 	}
 
 	data->input_fd = -1;
+#ifndef EVDEV_NO_UINPUT
 	data->output_proto = libevdev_new();
 	if(!data->output_proto){
 		fprintf(stderr, "Failed to initialize libevdev output prototype device\n");
 		free(data);
 		return NULL;
 	}
+#endif
 
 	inst->impl = data;
 	return inst;
@@ -73,10 +77,12 @@ static instance* evdev_instance(){
 
 static int evdev_configure_instance(instance* inst, char* option, char* value) {
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
+#ifndef EVDEV_NO_UINPUT
 	char* next_token = NULL;
 	struct input_absinfo abs_info = {
 		0
 	};
+#endif
 
 	if(!strcmp(option, "input")){
 		if(data->input_fd >= 0){
@@ -107,6 +113,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 		}
 		data->exclusive = 1;
 	}
+#ifndef EVDEV_NO_UINPUT
 	else if(!strcmp(option, "name")){
 		data->output_enabled = 1;
 		libevdev_set_name(data->output_proto, value);
@@ -131,6 +138,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			return 1;
 		}
 	}
+#endif
 	else{
 		fprintf(stderr, "Unknown configuration parameter %s for evdev backend\n", option);
 		return 1;
@@ -139,7 +147,9 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 }
 
 static channel* evdev_channel(instance* inst, char* spec){
+#ifndef EVDEV_NO_UINPUT
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
+#endif
 	char* separator = strchr(spec, '.');
 	evdev_channel_ident ident = {
 		.label = 0
@@ -166,6 +176,7 @@ static channel* evdev_channel(instance* inst, char* spec){
 		ident.fields.code = strtoul(separator, NULL, 10);
 	}
 
+#ifndef EVDEV_NO_UINPUT
 	if(data->output_enabled){
 		if(!libevdev_has_event_code(data->output_proto, ident.fields.type, ident.fields.code)){
 			//enable the event on the device
@@ -179,6 +190,7 @@ static channel* evdev_channel(instance* inst, char* spec){
 			}
 		}
 	}
+#endif
 
 	return mm_channel(inst, ident.label, 1);
 }
@@ -273,6 +285,7 @@ static int evdev_start(){
 	for(u = 0; u < n; u++){
 		data = (evdev_instance_data*) inst[u]->impl;
 
+#ifndef EVDEV_NO_UINPUT
 		if(data->output_enabled){
 			if(libevdev_uinput_create_from_device(data->output_proto, LIBEVDEV_UINPUT_OPEN_MANAGED, &data->output_ev)){
 				fprintf(stderr, "Failed to create evdev output device: %s\n", strerror(errno));
@@ -280,6 +293,7 @@ static int evdev_start(){
 			}
 			fprintf(stderr, "Created device node %s for instance %s\n", libevdev_uinput_get_devnode(data->output_ev), inst[u]->name);
 		}
+#endif
 
 		inst[u]->ident = data->input_fd;
 		if(data->input_fd >= 0){
@@ -299,6 +313,7 @@ static int evdev_start(){
 }
 
 static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) {
+#ifndef EVDEV_NO_UINPUT
 	size_t evt = 0;
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 	evdev_channel_ident ident = {
@@ -347,6 +362,10 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 	}
 
 	return 0;
+#else
+	fprintf(stderr, "The evdev backend does not support output on this platform\n");
+	return 1;
+#endif
 }
 
 static int evdev_shutdown(){
@@ -367,11 +386,13 @@ static int evdev_shutdown(){
 			close(data->input_fd);
 		}
 
+#ifndef EVDEV_NO_UINPUT
 		if(data->output_enabled){
 			libevdev_uinput_destroy(data->output_ev);
 		}
 
 		libevdev_free(data->output_proto);
+#endif
 	}
 
 	free(instances);

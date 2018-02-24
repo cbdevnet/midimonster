@@ -393,6 +393,7 @@ static int evdev_shutdown(){
 
 		libevdev_free(data->output_proto);
 #endif
+		free(data);
 	}
 
 	free(instances);

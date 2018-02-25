@@ -22,11 +22,10 @@ static int artnet_shutdown();
 #define MAP_MARK 0x1000
 #define MAPPED_CHANNEL(a) ((a) & 0x01FF)
 #define IS_ACTIVE(a) ((a) & 0xFE00)
-#define IS_WIDE(a) ((a) & 0x0600)
+#define IS_WIDE(a) ((a) & (MAP_FINE | MAP_COARSE))
 #define IS_SINGLE(a) ((a) & MAP_SINGLE)
 
 typedef struct /*_artnet_universe_model*/ {
-	uint8_t last_frame;
 	uint8_t seq;
 	uint8_t in[512];
 	uint8_t out[512];
@@ -51,6 +50,7 @@ typedef union /*_artnet_instance_id*/ {
 	uint64_t label;
 } artnet_instance_id;
 
+#pragma pack(push, 1)
 typedef struct /*_artnet_hdr*/ {
 	uint8_t magic[8];
 	uint16_t opcode;
@@ -68,8 +68,8 @@ typedef struct /*_artnet_pkt*/ {
 	uint16_t length;
 	uint8_t data[512];
 } artnet_pkt;
+#pragma pack(pop)
 
 enum artnet_pkt_opcode {
 	OpDmx = 0x0050
 };
-

@@ -1,5 +1,4 @@
 #include <string.h>
-#include "artnet.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -8,6 +7,7 @@
 #include <ctype.h>
 #include <errno.h>
 
+#include "artnet.h"
 #define MAX_FDS 255
 #define BACKEND_NAME "artnet"
 
@@ -87,7 +87,7 @@ static int artnet_listener(char* host, char* port){
 		return -1;
 	}
 
-	fprintf(stderr, "ArtNet backend descriptor %zu bound to %s port %s\n", artnet_fds, host, port);
+	fprintf(stderr, "ArtNet backend interface %zu bound to %s port %s\n", artnet_fds, host, port);
 	artnet_fd[artnet_fds] = fd;
 	artnet_fds++;
 	return 0;
@@ -177,6 +177,7 @@ static int artnet_configure(char* option, char* value){
 		}
 		return 0;
 	}
+
 	fprintf(stderr, "Unknown ArtNet backend option %s\n", option);
 	return 1;
 }
@@ -194,7 +195,6 @@ static instance* artnet_instance(){
 		return NULL;
 	}
 
-	data->fd_index = 0;
 	data->net = default_net;
 
 	inst->impl = data;
@@ -333,15 +333,14 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 }
 
 static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
-	size_t p;
-	uint16_t max_mark = 0;
+	size_t p, max_mark = 0;
 	uint16_t wide_val = 0;
 	channel* chan = NULL;
 	channel_value val;
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	if(be16toh(frame->length) > 512){
-		fprintf(stderr, "Invalid frame channel count\n");
+		fprintf(stderr, "Invalid ArtNet frame channel count\n");
 		return 1;
 	}
 
@@ -358,37 +357,35 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 	for(p = 0; p <= max_mark; p++){
 		if(data->data.map[p] & MAP_MARK){
 			data->data.map[p] &= ~MAP_MARK;
-			if(IS_ACTIVE(data->data.map[p])){
-				if(IS_WIDE(data->data.map[p]) && data->data.map[p] & MAP_FINE){
-					chan = mm_channel(inst, MAPPED_CHANNEL(data->data.map[p]), 0);
-				}
-				else{
-					chan = mm_channel(inst, p, 0);
-				}
+			if(data->data.map[p] & MAP_FINE){
+				chan = mm_channel(inst, MAPPED_CHANNEL(data->data.map[p]), 0);
+			}
+			else{
+				chan = mm_channel(inst, p, 0);
+			}
 
-				if(!chan){
-					fprintf(stderr, "Active channel %zu not known to core\n", p);
-					return 1;
-				}
+			if(!chan){
+				fprintf(stderr, "Active channel %zu on %s not known to core\n", p, inst->name);
+				return 1;
+			}
 
-				if(IS_WIDE(data->data.map[p])){
-					data->data.map[MAPPED_CHANNEL(data->data.map[p])] &= ~MAP_MARK;
-					wide_val = data->data.in[p] << ((data->data.map[p] & MAP_COARSE) ? 8 : 0);
-					wide_val |= data->data.in[MAPPED_CHANNEL(data->data.map[p])] << ((data->data.map[p] & MAP_COARSE) ? 0 : 8);
+			if(IS_WIDE(data->data.map[p])){
+				data->data.map[MAPPED_CHANNEL(data->data.map[p])] &= ~MAP_MARK;
+				wide_val = data->data.in[p] << ((data->data.map[p] & MAP_COARSE) ? 8 : 0);
+				wide_val |= data->data.in[MAPPED_CHANNEL(data->data.map[p])] << ((data->data.map[p] & MAP_COARSE) ? 0 : 8);
 
-					val.raw.u64 = wide_val;
-					val.normalised = (double) wide_val / (double) 0xFFFF;
-				}
-				else{
-					//single channel
-					val.raw.u64 = data->data.in[p];
-					val.normalised = (double) data->data.in[p] / 255.0;
-				}
+				val.raw.u64 = wide_val;
+				val.normalised = (double) wide_val / (double) 0xFFFF;
+			}
+			else{
+				//single channel
+				val.raw.u64 = data->data.in[p];
+				val.normalised = (double) data->data.in[p] / 255.0;
+			}
 
-				if(mm_channel_event(chan, val)){
-					fprintf(stderr, "Failed to push ArtNet channel event to core\n");
-					return 1;
-				}
+			if(mm_channel_event(chan, val)){
+				fprintf(stderr, "Failed to push ArtNet channel event to core\n");
+				return 1;
 			}
 		}
 	}
@@ -443,7 +440,7 @@ static int artnet_start(){
 	size_t n, u, p;
 	int rv = 1;
 	instance** inst = NULL;
-	artnet_instance_data* data;
+	artnet_instance_data* data = NULL;
 	artnet_instance_id id = {
 		.label = 0
 	};
@@ -460,7 +457,7 @@ static int artnet_start(){
 	}
 
 	if(!artnet_fds){
-		fprintf(stderr, "No ArtNet descriptors bound\n");
+		fprintf(stderr, "Failed to start ArtNet backend: no descriptors bound\n");
 		return 1;
 	}
 
@@ -506,6 +503,10 @@ static int artnet_shutdown(){
 		free(inst[p]->impl);
 	}
 	free(inst);
+
+	for(p = 0; p < artnet_fds; p++){
+		close(artnet_fd[p]);
+	}
 	free(artnet_fd);
 
 	fprintf(stderr, "ArtNet backend shut down\n");

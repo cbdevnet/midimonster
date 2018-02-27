@@ -1,6 +1,6 @@
 # The MIDIMonster
 
-Named for it's scary math, the MIDIMonster is a universal translation
+Named for its scary math, the MIDIMonster is a universal translation
 tool between multi-channel absolute-value-based control and/or bus protocols,
 such as MIDI, DMX/ArtNet and OSC.
 

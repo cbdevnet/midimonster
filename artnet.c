@@ -291,11 +291,11 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	//FIXME maybe introduce minimum frame interval
 	for(u = 0; u < num; u++){
 		if(IS_WIDE(data->data.map[c[u]->ident])){
-			uint32_t val = (v[u].normalised * 0xFFFF);
-			//test coarse channel
-			if(data->data.out[c[u]->ident] != (val >> 8)){
+			uint32_t val = v[u].normalised * ((double) 0xFFFF);
+			//the primary (coarse) channel is the one registered to the core, so we don't have to check for that
+			if(data->data.out[c[u]->ident] != ((val >> 8) & 0xFF)){
 				mark = 1;
-				data->data.out[c[u]->ident] = val >> 8;
+				data->data.out[c[u]->ident] = (val >> 8) & 0xFF;
 			}
 
 			if(data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] != (val & 0xFF)){

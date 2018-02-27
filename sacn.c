@@ -18,11 +18,13 @@ static struct /*_sacn_global_config*/ {
 	uint8_t cid[16];
 	size_t fds;
 	sacn_fd* fd;
+	uint64_t last_announce;
 } global_cfg = {
 	.source_name = "MIDIMonster",
 	.cid = {'M', 'I', 'D', 'I', 'M', 'o', 'n', 's', 't', 'e', 'r'},
 	.fds = 0,
-	.fd = NULL
+	.fd = NULL,
+	.last_announce = 0
 };
 
 int init(){
@@ -122,6 +124,8 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 	fprintf(stderr, "sACN backend interface %zu bound to %s port %s\n", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].flags = fd_flags;
+	global_cfg.fd[global_cfg.fds].universes = 0;
+	global_cfg.fd[global_cfg.fds].universe = NULL;
 	global_cfg.fds++;
 	return 0;
 }
@@ -253,6 +257,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 
+	fprintf(stderr, "Unknown configuration option %s for sACN backend\n", option);
 	return 1;
 }
 
@@ -316,12 +321,79 @@ static channel* sacn_channel(instance* inst, char* spec){
 }
 
 static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
+	size_t u, mark = 0;
+	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
+
 	if(!num){
 		return 0;
 	}
 
-	//TODO
-	return 1;
+	if(!data->xmit_prio){
+		fprintf(stderr, "sACN instance %s not enabled for output (%zu channel events)\n", inst->name, num);
+		return 0;
+	}
+
+	for(u = 0; u < num; u++){
+		if(IS_WIDE(data->data.map[c[u]->ident])){
+			uint32_t val = v[u].normalised * ((double) 0xFFFF);
+
+			if(data->data.out[c[u]->ident] != ((val >> 8) & 0xFF)){
+				mark = 1;
+				data->data.out[c[u]->ident] = (val >> 8) & 0xFF;
+			}
+
+			if(data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] != (val & 0xFF)){
+				mark = 1;
+				data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] = val & 0xFF;
+			}
+		}
+		else if(data->data.out[c[u]->ident] != (v[u].normalised * 255.0)){
+			mark = 1;
+			data->data.out[c[u]->ident] = v[u].normalised * 255.0;
+		}
+	}
+
+	//send packet if required
+	if(mark){
+		sacn_data_pdu pdu = {
+			.root = {
+				.preamble_size = htobe16(0x10),
+				.postamble_size = 0,
+				.magic = { 0 }, //memcpy'd
+				.flags = htobe16(0x7000 | 0x026e),
+				.vector = htobe32(ROOT_E131_DATA),
+				.sender_cid = { 0 }, //memcpy'd
+				.frame_flags = htobe16(0x7000 | 0x0258),
+				.frame_vector = htobe32(FRAME_E131_DATA)
+			},
+			.data = {
+				.source_name = "", //memcpy'd
+				.priority = data->xmit_prio,
+				.sync_addr = 0,
+				.sequence = data->data.last_seq++,
+				.options = 0,
+				.universe = htobe16(data->uni),
+				.flags = htobe16(0x7000 | 0x0205),
+				.vector = DMP_SET_PROPERTY,
+				.format = 0xA1,
+				.startcode_offset = 0,
+				.address_increment = htobe16(1),
+				.channels = htobe16(513),
+				.data = { 0 } //memcpy'd
+			}
+		};
+
+		memcpy(pdu.root.magic, SACN_PDU_MAGIC, sizeof(pdu.root.magic));
+		memcpy(pdu.root.sender_cid, global_cfg.cid, sizeof(pdu.root.sender_cid));
+		memcpy(pdu.data.source_name, global_cfg.source_name, sizeof(pdu.data.source_name));
+		memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
+
+		if(sendto(global_cfg.fd[data->fd_index].fd, &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+			fprintf(stderr, "Failed to output sACN frame for instance %s: %s\n", inst->name, strerror(errno));
+		}
+	}
+
+	return 0;
 }
 
 static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame_data* data){
@@ -413,6 +485,11 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	sacn_frame_root* frame = (sacn_frame_root*) recv_buf;
 	sacn_frame_data* data = (sacn_frame_data*) (recv_buf + sizeof(sacn_frame_root));
 
+	if(global_cfg.last_announce > SACN_DISCOVERY_TIMEOUT){
+		//TODO send universe discovery pdu
+		//TODO this requires the core to provide time deltas
+	}
+
 	//early exit
 	if(!num){
 		return 0;
@@ -422,7 +499,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 		do{
 			bytes_read = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
 			if(bytes_read > 0 && bytes_read > sizeof(sacn_frame_root)){
-				if(!memcmp(frame->magic, "ASC-E1.17\0\0\0", 12)
+				if(!memcmp(frame->magic, SACN_PDU_MAGIC, 12)
 						&& be16toh(frame->preamble_size) == 0x10
 						&& frame->postamble_size == 0
 						&& be32toh(frame->vector) == ROOT_E131_DATA
@@ -460,8 +537,9 @@ static int sacn_start(){
 		.label = 0
 	};
 	struct ip_mreq mcast_req = {
-		.imr_interface = INADDR_ANY
+		.imr_interface = { INADDR_ANY }
 	};
+	struct sockaddr_in* dest_v4 = NULL;
 
 	//fetch all instances
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
@@ -503,9 +581,28 @@ static int sacn_start(){
 		if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mcast_req, sizeof(mcast_req))){
 			fprintf(stderr, "Failed to join Multicast group for sACN universe %u on instance %s: %s\n", data->uni, inst[u]->name, strerror(errno));
 		}
-	}
 
-	//TODO Create list of advertised universes for descriptors
+		if(data->xmit_prio){
+			//add to list of advertised universes for this fd
+			global_cfg.fd[data->fd_index].universe = realloc(global_cfg.fd[data->fd_index].universe, (global_cfg.fd[data->fd_index].universes + 1) * sizeof(uint16_t));
+			if(!global_cfg.fd[data->fd_index].universe){
+				fprintf(stderr, "Failed to allocate memory\n");
+				goto bail;
+			}
+
+			global_cfg.fd[data->fd_index].universe[global_cfg.fd[data->fd_index].universes] = data->uni;
+			global_cfg.fd[data->fd_index].universes++;
+
+			//generate multicast destination address if none set
+			if(!data->dest_len){
+				data->dest_len = sizeof(struct sockaddr_in);
+				dest_v4 = (struct sockaddr_in*) (&data->dest_addr);
+				dest_v4->sin_family = AF_INET;
+				dest_v4->sin_port = htobe16(strtoul(SACN_PORT, NULL, 10));
+				dest_v4->sin_addr = mcast_req.imr_multiaddr;
+			}
+		}
+	}
 
 	fprintf(stderr, "sACN backend registering %zu descriptors to core\n", global_cfg.fds);
 	for(u = 0; u < global_cfg.fds; u++){
@@ -536,6 +633,7 @@ static int sacn_shutdown(){
 
 	for(p = 0; p < global_cfg.fds; p++){
 		close(global_cfg.fd[p].fd);
+		free(global_cfg.fd[p].universe);
 	}
 	free(global_cfg.fd);
 	fprintf(stderr, "sACN backend shut down\n");

@@ -187,5 +187,15 @@ int mm_channel_event(channel* c, channel_value v);
  * *i will need to be freed by the caller.
  */
 int mm_backend_instances(char* backend, size_t* n, instance*** i);
+/*
+ * Query an internal timestamp, which is updated every core iteration.
+ * This timestamp should not be used as a performance counter, but can be
+ * used for timeouting. Resolution is milliseconds.
+ */
+uint64_t mm_timestamp();
+/*
+ * Create a channel-to-channel mapping. This API should not
+ * be used by backends. It is only exported for core modules.
+ */
 int mm_map_channel(channel* from, channel* to);
 #endif

@@ -3,6 +3,7 @@
 #include <sys/select.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
@@ -19,6 +20,7 @@ static size_t mappings = 0;
 static channel_mapping* map = NULL;
 static size_t fds = 0;
 static managed_fd* fd = NULL;
+static uint64_t global_timestamp = 0;
 
 static event_collection event_pool[2] = {
 	{0},
@@ -28,8 +30,22 @@ static event_collection* primary = event_pool;
 
 volatile static sig_atomic_t shutdown_requested = 0;
 
-void signal_handler(int signum){
+static void signal_handler(int signum){
 	shutdown_requested = 1;
+}
+
+uint64_t mm_timestamp(){
+	return global_timestamp;
+}
+
+static void update_timestamp(){
+	struct timespec current;
+	if(clock_gettime(CLOCK_MONOTONIC_COARSE, &current)){
+		fprintf(stderr, "Failed to update global timestamp, time-based processing for some backends may be impaired: %s\n", strerror(errno));
+		return;
+	}
+
+	global_timestamp = current.tv_sec * 1000 + current.tv_nsec / 1000000;
 }
 
 int mm_map_channel(channel* from, channel* to){
@@ -276,6 +292,9 @@ int main(int argc, char** argv){
 				n++;
 			}
 		}
+
+		//update this iteration's timestamp
+		update_timestamp();
 
 		//run backend processing, collect events
 		DBGPF("%zu backend FDs signaled\n", n);

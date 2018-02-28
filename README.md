@@ -74,10 +74,10 @@ fixture control.
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `net`		| `0`			| `0`			| ArtNet net to use	|
-| `uni`		| `0`			| `0`			| ArtNet universe to use|
-| `dest`	| `10.2.2.2`		| none			| Destination address for sent ArtNet frames. Setting this enables the universe for output |
-| `iface`	| `1`			| `0`			| The bound address to use for data input/output |
+| `net`		| `0`			| `0`			| ArtNet `net` to use	|
+| `universe`	| `0`			| `0`			| Universe identifier	|
+| `destination`	| `10.2.2.2`		| none			| Destination address for sent ArtNet frames. Setting this enables the universe for output |
+| `interface`	| `1`			| `0`			| The bound address to use for data input/output |
 
 #### Channel specification
 

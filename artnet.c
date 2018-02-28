@@ -209,11 +209,11 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 		data->net = strtoul(value, NULL, 0);
 		return 0;
 	}
-	else if(!strcmp(option, "uni")){
+	else if(!strcmp(option, "uni") || !strcmp(option, "universe")){
 		data->uni = strtoul(value, NULL, 0);
 		return 0;
 	}
-	else if(!strcmp(option, "iface")){
+	else if(!strcmp(option, "iface") || !strcmp(option, "interface")){
 		data->fd_index = strtoul(value, NULL, 0);
 
 		if(data->fd_index >= artnet_fds){
@@ -222,7 +222,7 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 		}
 		return 0;
 	}
-	else if(!strcmp(option, "dest")){
+	else if(!strcmp(option, "dest") || !strcmp(option, "destination")){
 		if(artnet_separate_hostspec(value, &host, &port)){
 			fprintf(stderr, "Not a valid ArtNet destination for instance %s\n", inst->name);
 			return 1;

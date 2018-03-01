@@ -226,7 +226,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		data->uni = strtoul(value, NULL, 10);
 		return 0;
 	}
-	else if(!strcmp(option, "iface")){
+	else if(!strcmp(option, "interface")){
 		data->fd_index = strtoul(value, NULL, 10);
 
 		if(data->fd_index >= global_cfg.fds){
@@ -239,7 +239,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		data->xmit_prio = strtoul(value, NULL, 10);
 		return 0;
 	}
-	else if(!strcmp(option, "dest")){
+	else if(!strcmp(option, "destination")){
 		if(sacn_parse_hostspec(value, &host, &port, NULL)){
 			fprintf(stderr, "Not a valid sACN destination for instance %s: %s\n", inst->name, value);
 			return 1;
@@ -474,6 +474,54 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 	return 0;
 }
 
+static void sacn_discovery(size_t fd){
+	size_t page = 0, pages = (global_cfg.fd[fd].universes / 512) + 1, universes;
+	struct sockaddr_in discovery_dest = {
+		.sin_family = AF_INET,
+		.sin_port = htobe16(SACN_PORT),
+		.sin_addr.s_addr = htobe32(((uint32_t) 0xefff0000) | 64214)
+	};
+
+	sacn_discovery_pdu pdu = {
+		.root = {
+			.preamble_size = htobe16(0x10),
+			.postamble_size = 0,
+			.magic = { 0 }, //memcpy'd
+			.flags = 0, //filled later
+			.vector = htobe32(ROOT_E131_EXTENDED),
+			.sender_cid = { 0 }, //memcpy'd
+			.frame_flags = 0, //filled later
+			.frame_vector = htobe32(FRAME_E131_DISCOVERY)
+		},
+		.data = {
+			.source_name = "", //memcpy'd
+			.flags = 0, //filled later
+			.vector = htobe32(DISCOVERY_UNIVERSE_LIST),
+			.page = 0, //filled later
+			.max_page = pages - 1,
+			.data = { 0 } //memcpy'd
+		}
+	};
+
+	memcpy(pdu.root.magic, SACN_PDU_MAGIC, sizeof(pdu.root.magic));
+	memcpy(pdu.root.sender_cid, global_cfg.cid, sizeof(pdu.root.sender_cid));
+	memcpy(pdu.data.source_name, global_cfg.source_name, sizeof(pdu.data.source_name));
+
+	for(; page < pages; page++){
+		universes = (global_cfg.fd[fd].universes - page * 512 >= 512) ? 512 : (global_cfg.fd[fd].universes % 512);
+		pdu.root.flags = htobe16(0x7000 | (104 + universes * sizeof(uint16_t)));
+		pdu.root.frame_flags = htobe16(0x7000 | (82 + universes * sizeof(uint16_t)));
+		pdu.data.flags = htobe16(0x7000 | (8 + universes * sizeof(uint16_t)));
+
+		pdu.data.page = page;
+		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes);
+
+		if(sendto(global_cfg.fd[fd].fd, &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
+			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %zu: %s\n", fd, strerror(errno));
+		}
+	}
+}
+
 static int sacn_handle(size_t num, managed_fd* fds){
 	size_t u;
 	ssize_t bytes_read;
@@ -485,9 +533,14 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	sacn_frame_root* frame = (sacn_frame_root*) recv_buf;
 	sacn_frame_data* data = (sacn_frame_data*) (recv_buf + sizeof(sacn_frame_root));
 
-	if(global_cfg.last_announce > SACN_DISCOVERY_TIMEOUT){
-		//TODO send universe discovery pdu
-		//TODO this requires the core to provide time deltas
+	if(mm_timestamp() - global_cfg.last_announce > SACN_DISCOVERY_TIMEOUT){
+		//send universe discovery pdu
+		for(u = 0; u < global_cfg.fds; u++){
+			if(global_cfg.fd[u].universes){
+				sacn_discovery(u);
+			}
+		}
+		global_cfg.last_announce = mm_timestamp();
 	}
 
 	//early exit

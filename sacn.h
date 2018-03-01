@@ -13,7 +13,7 @@ static int sacn_shutdown();
 
 #define SACN_PORT "5568"
 #define SACN_RECV_BUF 8192
-#define SACN_DISCOVERY_TIMEOUT 100000
+#define SACN_DISCOVERY_TIMEOUT 9000
 #define SACN_PDU_MAGIC "ASC-E1.17\0\0\0"
 
 #define MAP_COARSE 0x0200
@@ -100,13 +100,18 @@ typedef struct /*_sacn_frame_discovery*/ {
 	uint32_t vector;
 	uint8_t page;
 	uint8_t max_page;
-	uint16_t universes[512];
+	uint16_t data[512];
 } sacn_frame_discovery;
 
 typedef struct /*_sacn_xmit_data*/ {
 	sacn_frame_root root;
 	sacn_frame_data data;
 } sacn_data_pdu;
+
+typedef struct /*_sacn_xmit_discovery*/ {
+	sacn_frame_root root;
+	sacn_frame_discovery data;
+} sacn_discovery_pdu;
 #pragma pack(pop)
 
 #define ROOT_E131_DATA 0x4

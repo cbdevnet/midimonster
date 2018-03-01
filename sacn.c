@@ -517,7 +517,7 @@ static void sacn_discovery(size_t fd){
 		pdu.data.flags = htobe16(0x7000 | (8 + universes * sizeof(uint16_t)));
 
 		pdu.data.page = page;
-		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes);
+		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
 		if(sendto(global_cfg.fd[fd].fd, &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
 			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %zu: %s\n", fd, strerror(errno));

@@ -256,6 +256,9 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		fprintf(stderr, "Enabled source CID filter for instance %s\n", inst->name);
 		return 0;
 	}
+	else if(!strcmp(option, "unicast")){
+		data->unicast_input = strtoul(value, NULL, 10);
+	}
 
 	fprintf(stderr, "Unknown configuration option %s for sACN backend\n", option);
 	return 1;
@@ -630,9 +633,11 @@ static int sacn_start(){
 			}
 		}
 
-		mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
-		if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mcast_req, sizeof(mcast_req))){
-			fprintf(stderr, "Failed to join Multicast group for sACN universe %u on instance %s: %s\n", data->uni, inst[u]->name, strerror(errno));
+		if(!data->unicast_input){
+			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
+			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mcast_req, sizeof(mcast_req))){
+				fprintf(stderr, "Failed to join Multicast group for sACN universe %u on instance %s: %s\n", data->uni, inst[u]->name, strerror(errno));
+			}
 		}
 
 		if(data->xmit_prio){

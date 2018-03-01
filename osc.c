@@ -401,7 +401,7 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 		}
 		return 0;
 	}
-	else if(!strcmp(option, "dest")){
+	else if(!strcmp(option, "dest") || !strcmp(option, "destination")){
 		if(!strncmp(value, "learn", 5)){
 			data->learn = 1;
 

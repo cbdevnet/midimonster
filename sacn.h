@@ -38,6 +38,7 @@ typedef struct /*_sacn_instance_model*/ {
 	uint8_t xmit_prio;
 	uint8_t cid_filter[16];
 	uint8_t filter_enabled;
+	uint8_t unicast_input;
 	struct sockaddr_storage dest_addr;
 	socklen_t dest_len;
 	sacn_universe data;

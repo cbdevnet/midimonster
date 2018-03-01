@@ -8,12 +8,53 @@ It allows the user to translate channels on one protocol into channels on anothe
 (or the same) protocol, eg
 
 * Translate MIDI Control Changes into Notes
-* Translate MIDI Notes into ArtNet
+* Translate MIDI Notes into ArtNet or sACN
 * Translate OSC messages into MIDI
-* Use an OSC app as a simple lighting controller via ArtNet
-* Visualize ArtNet data using OSC servers
+* Use an OSC app as a simple lighting controller via ArtNet or sACN
+* Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers
 * Play games or type using MIDI controllers
+
+# Table of Contents
+
+  * [Usage](#usage)
+  * [Configuration](#configuration)
+  * [Backend documentation](#backend-documentation)
+    + [The `artnet` backend](#the--artnet--backend)
+      - [Global configuration](#global-configuration)
+      - [Instance configuration](#instance-configuration)
+      - [Channel specification](#channel-specification)
+      - [Known bugs / problems](#known-bugs---problems)
+    + [The `sacn` backend](#the--sacn--backend)
+      - [Global configuration](#global-configuration-1)
+      - [Instance configuration](#instance-configuration-1)
+      - [Channel specification](#channel-specification-1)
+      - [Known bugs / problems](#known-bugs---problems-1)
+    + [The `midi` backend](#the--midi--backend)
+      - [Global configuration](#global-configuration-2)
+      - [Instance configuration](#instance-configuration-2)
+      - [Channel specification](#channel-specification-2)
+      - [Known bugs / problems](#known-bugs---problems-2)
+    + [The `evdev` backend](#the--evdev--backend)
+      - [Global configuration](#global-configuration-3)
+      - [Instance configuration](#instance-configuration-3)
+      - [Channel specification](#channel-specification-3)
+      - [Known bugs/problems](#known-bugs-problems)
+    + [The `loopback` backend](#the--loopback--backend)
+      - [Global configuration](#global-configuration-4)
+      - [Instance configuration](#instance-configuration-4)
+      - [Channel specification](#channel-specification-4)
+      - [Known bugs / problems](#known-bugs---problems-3)
+    + [The `osc` backend](#the--osc--backend)
+      - [Global configuration](#global-configuration-5)
+      - [Instance configuration](#instance-configuration-5)
+      - [Channel specification](#channel-specification-5)
+      - [Supported types & value ranges](#supported-types---value-ranges)
+      - [Known bugs / problems](#known-bugs---problems-4)
+  * [Building](#building)
+    + [Prerequisites](#prerequisites)
+    + [Build](#build)
+  * [Development](#development)
 
 ## Usage
 

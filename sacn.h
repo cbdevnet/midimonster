@@ -13,6 +13,7 @@ static int sacn_shutdown();
 
 #define SACN_PORT "5568"
 #define SACN_RECV_BUF 8192
+#define SACN_KEEPALIVE_INTERVAL 2000
 #define SACN_DISCOVERY_TIMEOUT 9000
 #define SACN_PDU_MAGIC "ASC-E1.17\0\0\0"
 
@@ -59,6 +60,7 @@ typedef struct /*_sacn_socket*/ {
 	uint8_t flags;
 	size_t universes;
 	uint16_t* universe;
+	uint64_t* last_frame;
 } sacn_fd;
 
 #pragma pack(push, 1)

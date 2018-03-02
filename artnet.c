@@ -13,7 +13,7 @@
 
 static uint8_t default_net = 0;
 static size_t artnet_fds = 0;
-static int* artnet_fd = NULL;
+static artnet_descriptor* artnet_fd = NULL;
 
 static int artnet_listener(char* host, char* port){
 	int fd = -1, status, yes = 1, flags;
@@ -81,14 +81,17 @@ static int artnet_listener(char* host, char* port){
 	}
 
 	//store fd
-	artnet_fd = realloc(artnet_fd, (artnet_fds + 1) * sizeof(int));
+	artnet_fd = realloc(artnet_fd, (artnet_fds + 1) * sizeof(artnet_descriptor));
 	if(!artnet_fd){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return -1;
 	}
 
 	fprintf(stderr, "ArtNet backend interface %zu bound to %s port %s\n", artnet_fds, host, port);
-	artnet_fd[artnet_fds] = fd;
+	artnet_fd[artnet_fds].fd = fd;
+	artnet_fd[artnet_fds].output_instances = 0;
+	artnet_fd[artnet_fds].output_instance = NULL;
+	artnet_fd[artnet_fds].last_frame = NULL;
 	artnet_fds++;
 	return 0;
 }
@@ -279,6 +282,36 @@ static channel* artnet_channel(instance* inst, char* spec){
 	return mm_channel(inst, chan_a, 1);
 }
 
+static int artnet_transmit(instance* inst){
+	size_t u;
+	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
+	//output frame
+	artnet_pkt frame = {
+		.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
+		.opcode = htobe16(OpDmx),
+		.version = htobe16(ARTNET_VERSION),
+		.sequence = data->data.seq++,
+		.port = 0,
+		.universe = data->uni,
+		.net = data->net,
+		.length = htobe16(512),
+		.data = {0}
+	};
+	memcpy(frame.data, data->data.out, 512);
+
+	if(sendto(artnet_fd[data->fd_index].fd, &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+		fprintf(stderr, "Failed to output ArtNet frame for instance %s: %s\n", inst->name, strerror(errno));
+	}
+
+	//update last frame timestamp
+	for(u = 0; u < artnet_fd[data->fd_index].output_instances; u++){
+		if(artnet_fd[data->fd_index].output_instance[u].label == inst->ident){
+			artnet_fd[data->fd_index].last_frame[u] = mm_timestamp();
+		}
+	}
+	return 0;
+}
+
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u, mark = 0;
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
@@ -310,23 +343,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	}
 
 	if(mark){
-		//output frame
-		artnet_pkt frame = {
-			.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
-			.opcode = htobe16(OpDmx),
-			.version = htobe16(ARTNET_VERSION),
-			.sequence = data->data.seq++,
-			.port = 0,
-			.universe = data->uni,
-			.net = data->net,
-			.length = htobe16(512),
-			.data = {0}
-		};
-		memcpy(frame.data, data->data.out, 512);
-
-		if(sendto(artnet_fd[data->fd_index], &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-			fprintf(stderr, "Failed to output ArtNet frame for instance %s: %s\n", inst->name, strerror(errno));
-		}
+		return artnet_transmit(inst);
 	}
 
 	return 0;
@@ -393,7 +410,8 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 }
 
 static int artnet_handle(size_t num, managed_fd* fds){
-	size_t u;
+	size_t u, c;
+	uint64_t timestamp = mm_timestamp();
 	ssize_t bytes_read;
 	char recv_buf[ARTNET_RECV_BUF];
 	artnet_instance_id inst_id = {
@@ -401,6 +419,19 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	};
 	instance* inst = NULL;
 	artnet_pkt* frame = (artnet_pkt*) recv_buf;
+
+	//transmit keepalive frames
+	for(u = 0; u < artnet_fds; u++){
+		for(c = 0; c < artnet_fd[u].output_instances; c++){
+			if(timestamp - artnet_fd[u].last_frame[c] >= ARTNET_KEEPALIVE_INTERVAL){
+				inst = mm_instance_find(BACKEND_NAME, artnet_fd[u].output_instance[c].label);
+				if(inst){
+					artnet_transmit(inst);
+				}
+			}
+		}
+	}
+
 	if(!num){
 		//early exit
 		return 0;
@@ -476,11 +507,26 @@ static int artnet_start(){
 				goto bail;
 			}
 		}
+
+		//if enabled for output, add to keepalive tracking
+		if(data->dest_len){
+			artnet_fd[data->fd_index].output_instance = realloc(artnet_fd[data->fd_index].output_instance, (artnet_fd[data->fd_index].output_instances + 1) * sizeof(artnet_instance_id));
+			artnet_fd[data->fd_index].last_frame = realloc(artnet_fd[data->fd_index].last_frame, (artnet_fd[data->fd_index].output_instances + 1) * sizeof(uint64_t));
+
+			if(!artnet_fd[data->fd_index].output_instance || !artnet_fd[data->fd_index].last_frame){
+				fprintf(stderr, "Failed to allocate memory\n");
+				goto bail;
+			}
+			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances] = id;
+			artnet_fd[data->fd_index].last_frame[artnet_fd[data->fd_index].output_instances] = 0;
+
+			artnet_fd[data->fd_index].output_instances++;
+		}
 	}
 
 	fprintf(stderr, "ArtNet backend registering %zu descriptors to core\n", artnet_fds);
 	for(u = 0; u < artnet_fds; u++){
-		if(mm_manage_fd(artnet_fd[u], BACKEND_NAME, 1, (void*) u)){
+		if(mm_manage_fd(artnet_fd[u].fd, BACKEND_NAME, 1, (void*) u)){
 			goto bail;
 		}
 	}
@@ -505,7 +551,9 @@ static int artnet_shutdown(){
 	free(inst);
 
 	for(p = 0; p < artnet_fds; p++){
-		close(artnet_fd[p]);
+		close(artnet_fd[p].fd);
+		free(artnet_fd[p].output_instance);
+		free(artnet_fd[p].last_frame);
 	}
 	free(artnet_fd);
 

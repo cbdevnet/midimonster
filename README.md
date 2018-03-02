@@ -138,7 +138,8 @@ A normal channel that is part of a wide channel can not be mapped individually.
 
 #### Known bugs / problems
 
-Currently, no keep-alive frames are sent and the minimum inter-frame-time is disregarded.
+The minimum inter-frame-time is disregarded, as the packet rate is determined by the rate of incoming
+channel events.
 
 ### The `sacn` backend
 
@@ -186,11 +187,10 @@ A normal channel that is part of a wide channel can not be mapped individually.
 
 #### Known bugs / problems
 
-No keepalive frames are sent at this time. This will be implemented in the near future.
-
 The DMX start code of transmitted and received universes is fixed as `0`.
 
-The limit on packet transmission rate mandated by section 6.6.1 of the sACN specification is disregarded.
+The (upper) limit on packet transmission rate mandated by section 6.6.1 of the sACN specification is disregarded.
+The rate of packet transmission is influenced by the rate of incoming mapped events on the instance.
 
 Universe synchronization is currently not supported, though this feature may be implemented in the future.
 

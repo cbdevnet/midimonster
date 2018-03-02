@@ -14,7 +14,7 @@ static int artnet_shutdown();
 #define ARTNET_PORT "6454"
 #define ARTNET_VERSION 14
 #define ARTNET_RECV_BUF 4096
-#define ARTNET_KEEPALIVE_INTERVAL 15e5
+#define ARTNET_KEEPALIVE_INTERVAL 2000
 
 #define MAP_COARSE 0x0200
 #define MAP_FINE 0x0400
@@ -49,6 +49,13 @@ typedef union /*_artnet_instance_id*/ {
 	} fields;
 	uint64_t label;
 } artnet_instance_id;
+
+typedef struct /*_artnet_fd*/ {
+	int fd;
+	size_t output_instances;
+	artnet_instance_id* output_instance;
+	uint64_t* last_frame;
+} artnet_descriptor;
 
 #pragma pack(push, 1)
 typedef struct /*_artnet_hdr*/ {

@@ -126,6 +126,7 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 	global_cfg.fd[global_cfg.fds].flags = fd_flags;
 	global_cfg.fd[global_cfg.fds].universes = 0;
 	global_cfg.fd[global_cfg.fds].universe = NULL;
+	global_cfg.fd[global_cfg.fds].last_frame = NULL;
 	global_cfg.fds++;
 	return 0;
 }
@@ -323,6 +324,55 @@ static channel* sacn_channel(instance* inst, char* spec){
 	return mm_channel(inst, chan_a, 1);
 }
 
+static int sacn_transmit(instance* inst){
+	size_t u;
+	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
+	sacn_data_pdu pdu = {
+		.root = {
+			.preamble_size = htobe16(0x10),
+			.postamble_size = 0,
+			.magic = { 0 }, //memcpy'd
+			.flags = htobe16(0x7000 | 0x026e),
+			.vector = htobe32(ROOT_E131_DATA),
+			.sender_cid = { 0 }, //memcpy'd
+			.frame_flags = htobe16(0x7000 | 0x0258),
+			.frame_vector = htobe32(FRAME_E131_DATA)
+		},
+		.data = {
+			.source_name = "", //memcpy'd
+			.priority = data->xmit_prio,
+			.sync_addr = 0,
+			.sequence = data->data.last_seq++,
+			.options = 0,
+			.universe = htobe16(data->uni),
+			.flags = htobe16(0x7000 | 0x0205),
+			.vector = DMP_SET_PROPERTY,
+			.format = 0xA1,
+			.startcode_offset = 0,
+			.address_increment = htobe16(1),
+			.channels = htobe16(513),
+			.data = { 0 } //memcpy'd
+		}
+	};
+
+	memcpy(pdu.root.magic, SACN_PDU_MAGIC, sizeof(pdu.root.magic));
+	memcpy(pdu.root.sender_cid, global_cfg.cid, sizeof(pdu.root.sender_cid));
+	memcpy(pdu.data.source_name, global_cfg.source_name, sizeof(pdu.data.source_name));
+	memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
+
+	if(sendto(global_cfg.fd[data->fd_index].fd, &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+		fprintf(stderr, "Failed to output sACN frame for instance %s: %s\n", inst->name, strerror(errno));
+	}
+
+	//update last transmit timestamp
+	for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
+		if(global_cfg.fd[data->fd_index].universe[u] == data->uni){
+			global_cfg.fd[data->fd_index].last_frame[u] = mm_timestamp();
+		}
+	}
+	return 0;
+}
+
 static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u, mark = 0;
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
@@ -358,42 +408,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	//send packet if required
 	if(mark){
-		sacn_data_pdu pdu = {
-			.root = {
-				.preamble_size = htobe16(0x10),
-				.postamble_size = 0,
-				.magic = { 0 }, //memcpy'd
-				.flags = htobe16(0x7000 | 0x026e),
-				.vector = htobe32(ROOT_E131_DATA),
-				.sender_cid = { 0 }, //memcpy'd
-				.frame_flags = htobe16(0x7000 | 0x0258),
-				.frame_vector = htobe32(FRAME_E131_DATA)
-			},
-			.data = {
-				.source_name = "", //memcpy'd
-				.priority = data->xmit_prio,
-				.sync_addr = 0,
-				.sequence = data->data.last_seq++,
-				.options = 0,
-				.universe = htobe16(data->uni),
-				.flags = htobe16(0x7000 | 0x0205),
-				.vector = DMP_SET_PROPERTY,
-				.format = 0xA1,
-				.startcode_offset = 0,
-				.address_increment = htobe16(1),
-				.channels = htobe16(513),
-				.data = { 0 } //memcpy'd
-			}
-		};
-
-		memcpy(pdu.root.magic, SACN_PDU_MAGIC, sizeof(pdu.root.magic));
-		memcpy(pdu.root.sender_cid, global_cfg.cid, sizeof(pdu.root.sender_cid));
-		memcpy(pdu.data.source_name, global_cfg.source_name, sizeof(pdu.data.source_name));
-		memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
-
-		if(sendto(global_cfg.fd[data->fd_index].fd, &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-			fprintf(stderr, "Failed to output sACN frame for instance %s: %s\n", inst->name, strerror(errno));
-		}
+		sacn_transmit(inst);
 	}
 
 	return 0;
@@ -526,7 +541,8 @@ static void sacn_discovery(size_t fd){
 }
 
 static int sacn_handle(size_t num, managed_fd* fds){
-	size_t u;
+	size_t u, c;
+	uint64_t timestamp = mm_timestamp();
 	ssize_t bytes_read;
 	char recv_buf[SACN_RECV_BUF];
 	instance* inst = NULL;
@@ -543,7 +559,21 @@ static int sacn_handle(size_t num, managed_fd* fds){
 				sacn_discovery(u);
 			}
 		}
-		global_cfg.last_announce = mm_timestamp();
+		global_cfg.last_announce = timestamp;
+	}
+
+	//check for keepalive frames
+	for(u = 0; u < global_cfg.fds; u++){
+		for(c = 0; c < global_cfg.fd[u].universes; c++){
+			if(timestamp - global_cfg.fd[u].last_frame[c] >= SACN_KEEPALIVE_INTERVAL){
+				instance_id.fields.fd_index = u;
+				instance_id.fields.uni = global_cfg.fd[u].universe[c];
+				inst = mm_instance_find(BACKEND_NAME, instance_id.label);
+				if(inst){
+					sacn_transmit(inst);
+				}
+			}
+		}
 	}
 
 	//early exit
@@ -664,6 +694,12 @@ static int sacn_start(){
 
 	fprintf(stderr, "sACN backend registering %zu descriptors to core\n", global_cfg.fds);
 	for(u = 0; u < global_cfg.fds; u++){
+		//allocate memory for storing last frame transmission timestamp
+		global_cfg.fd[u].last_frame = calloc(global_cfg.fd[u].universes, sizeof(uint64_t));
+		if(!global_cfg.fd[u].last_frame){
+			fprintf(stderr, "Failed to allocate memory\n");
+			goto bail;
+		}
 		if(mm_manage_fd(global_cfg.fd[u].fd, BACKEND_NAME, 1, (void*) u)){
 			goto bail;
 		}
@@ -692,6 +728,7 @@ static int sacn_shutdown(){
 	for(p = 0; p < global_cfg.fds; p++){
 		close(global_cfg.fd[p].fd);
 		free(global_cfg.fd[p].universe);
+		free(global_cfg.fd[p].last_frame);
 	}
 	free(global_cfg.fd);
 	fprintf(stderr, "sACN backend shut down\n");

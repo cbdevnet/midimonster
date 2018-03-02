@@ -1,36 +1,28 @@
-.PHONY: all clean run sanitize
-BACKENDS = artnet.so midi.so osc.so loopback.so evdev.so sacn.so
+.PHONY: all clean run sanitize backends
 OBJS = config.o backend.o plugin.o
-PLUGINDIR = "\"./\""
+PLUGINDIR = "\"./backends/\""
 
 CFLAGS ?= -g -Wall
+LDLIBS = -ldl
+CFLAGS += -DPLUGINS=$(PLUGINDIR)
 #CFLAGS += -DDEBUG
-%.so: CFLAGS += -fPIC
-%.so: LDFLAGS += -shared
+LDFLAGS += -Wl,-export-dynamic
 
-midimonster: LDLIBS = -ldl
-midimonster: CFLAGS += -DPLUGINS=$(PLUGINDIR)
-midimonster: LDFLAGS += -Wl,-export-dynamic
-midi.so: LDLIBS = -lasound
-evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)
-evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
+all: midimonster backends
 
-
-%.so :: %.c %.h
-	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@ $(LDFLAGS)
-
-all: midimonster $(BACKENDS)
+backends:
+	$(MAKE) -C backends
 
 midimonster: midimonster.c $(OBJS)
 
 clean:
 	$(RM) midimonster
 	$(RM) $(OBJS)
-	$(RM) $(BACKENDS)
+	$(MAKE) -C backends clean
 
 run:
 	valgrind --leak-check=full --show-leak-kinds=all ./midimonster
 
-sanitize: CC = clang
-sanitize: CFLAGS = -g -Wall -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
-sanitize: midimonster $(BACKENDS)
+sanitize: export CC = clang
+sanitize: export CFLAGS = -g -Wall -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
+sanitize: midimonster backends

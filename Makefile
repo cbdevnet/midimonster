@@ -3,10 +3,10 @@ OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./backends/\""
 
 CFLAGS ?= -g -Wall
-LDLIBS = -ldl
-CFLAGS += -DPLUGINS=$(PLUGINDIR)
 #CFLAGS += -DDEBUG
-LDFLAGS += -Wl,-export-dynamic
+midimonster: LDLIBS = -ldl
+midimonster: CFLAGS += -DPLUGINS=$(PLUGINDIR)
+midimonster: LDFLAGS += -Wl,-export-dynamic
 
 all: midimonster backends
 

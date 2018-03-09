@@ -5,6 +5,10 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <libevdev/libevdev.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <linux/input.h>
 #ifndef EVDEV_NO_UINPUT
 #include <libevdev/libevdev-uinput.h>
 #endif
@@ -75,37 +79,103 @@ static instance* evdev_instance(){
 	return inst;
 }
 
+static int evdev_attach(instance* inst, evdev_instance_data* data, char* node){
+	if(data->input_fd >= 0){
+		fprintf(stderr, "Instance %s already was assigned an input device\n", inst->name);
+		return 1;
+	}
+
+	data->input_fd = open(node, O_RDONLY | O_NONBLOCK);
+	if(data->input_fd < 0){
+		fprintf(stderr, "Failed to open evdev input device node %s: %s\n", node, strerror(errno));
+		return 1;
+	}
+
+	if(libevdev_new_from_fd(data->input_fd, &data->input_ev)){
+		fprintf(stderr, "Failed to initialize libevdev for %s\n", node);
+		close(data->input_fd);
+		data->input_fd = -1;
+		return 1;
+	}
+
+	if(data->exclusive && libevdev_grab(data->input_ev, LIBEVDEV_GRAB)){
+		fprintf(stderr, "Failed to obtain exclusive device access on %s\n", node);
+	}
+
+	return 0;
+}
+
+static char* evdev_find(char* name){
+	int fd = -1;
+	struct dirent* file = NULL;
+	char file_path[PATH_MAX * 2];
+	DIR* nodes = opendir(INPUT_NODES);
+	char device_name[UINPUT_MAX_NAME_SIZE], *result = NULL;
+
+	if(!nodes){
+		fprintf(stderr, "Failed to query input device nodes in %s: %s", INPUT_NODES, strerror(errno));
+		return NULL;
+	}
+
+	for(file = readdir(nodes); file; file = readdir(nodes)){
+		if(!strncmp(file->d_name, INPUT_PREFIX, strlen(INPUT_PREFIX)) && file->d_type == DT_CHR){
+			snprintf(file_path, sizeof(file_path), "%s/%s", INPUT_NODES, file->d_name);
+
+			fd = open(file_path, O_RDONLY);
+			if(fd < 0){
+				fprintf(stderr, "Failed to access %s: %s\n", file_path, strerror(errno));
+				continue;
+			}
+
+			if(ioctl(fd, EVIOCGNAME(sizeof(device_name)), device_name) < 0){
+				fprintf(stderr, "Failed to read name for %s: %s\n", file_path, strerror(errno));
+				close(fd);
+				continue;
+			}
+
+			close(fd);
+
+			if(!strncmp(device_name, name, strlen(name))){
+				fprintf(stderr, "Matched name %s for %s: %s\n", device_name, name, file_path);
+				break;
+			}
+		}
+	}
+
+	if(file){
+		result = calloc(strlen(file_path) + 1, sizeof(char));
+		if(result){
+			strncpy(result, file_path, strlen(file_path));
+		}
+	}
+
+	closedir(nodes);
+	return result;
+}
+
 static int evdev_configure_instance(instance* inst, char* option, char* value) {
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
-#ifndef EVDEV_NO_UINPUT
 	char* next_token = NULL;
+#ifndef EVDEV_NO_UINPUT
 	struct input_absinfo abs_info = {
 		0
 	};
 #endif
 
-	if(!strcmp(option, "input")){
-		if(data->input_fd >= 0){
-			fprintf(stderr, "Instance %s already was assigned an input device\n", inst->name);
+	if(!strcmp(option, "device")){
+		return evdev_attach(inst, data, value);
+	}
+	else if(!strcmp(option, "input")){
+		next_token = evdev_find(value);
+		if(!next_token){
+			fprintf(stderr, "Failed to find evdev input device with name %s for instance %s\n", value, inst->name);
 			return 1;
 		}
-
-		data->input_fd = open(value, O_RDONLY | O_NONBLOCK);
-		if(data->input_fd < 0){
-			fprintf(stderr, "Failed to open evdev input device node %s: %s\n", value, strerror(errno));
+		if(evdev_attach(inst, data, next_token)){
+			free(next_token);
 			return 1;
 		}
-
-		if(libevdev_new_from_fd(data->input_fd, &data->input_ev)){
-			fprintf(stderr, "Failed to initialize libevdev for %s\n", value);
-			close(data->input_fd);
-			data->input_fd = -1;
-			return 1;
-		}
-
-		if(data->exclusive && libevdev_grab(data->input_ev, LIBEVDEV_GRAB)){
-			fprintf(stderr, "Failed to obtain exclusive device access on %s\n", value);
-		}
+		free(next_token);
 	}
 	else if(!strcmp(option, "exclusive")){
 		if(data->input_fd >= 0 && libevdev_grab(data->input_ev, LIBEVDEV_GRAB)){
@@ -114,7 +184,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 		data->exclusive = 1;
 	}
 #ifndef EVDEV_NO_UINPUT
-	else if(!strcmp(option, "name")){
+	else if(!strcmp(option, "output")){
 		data->output_enabled = 1;
 		libevdev_set_name(data->output_proto, value);
 	}

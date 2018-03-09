@@ -18,6 +18,12 @@ static int evdev_handle(size_t num, managed_fd* fds);
 static int evdev_start();
 static int evdev_shutdown();
 
+#define INPUT_NODES "/dev/input"
+#define INPUT_PREFIX "event"
+#ifndef UINPUT_MAX_NAME_SIZE
+	#define UINPUT_MAX_NAME_SIZE 512
+#endif
+
 typedef struct /*_evdev_instance_model*/ {
 	int input_fd;
 	struct libevdev* input_ev;

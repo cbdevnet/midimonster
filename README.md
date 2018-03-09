@@ -259,11 +259,12 @@ This backend does not take any global configuration.
 
 #### Instance configuration
 
-| Option	| Example value		| Default value | Description					|
-|---------------|-----------------------|---------------|-----------------------------------------------|
-| `input`	| `/dev/input/event1`	| none		| `evdev` device to use as input device		|
-| `exclusive`	| `1`			| `0`		| Prevent other processes from using the device	|
-| `name`	| `My Input Device`	| none		| Output device presentation name. Setting this option enables the instance for output	|
+| Option	| Example value		| Default value | Description						|
+|---------------|-----------------------|---------------|-------------------------------------------------------|
+| `device`	| `/dev/input/event1`	| none		| `evdev` device to use as input device			|
+| `input`	| `Xbox Wireless`	| none		| Presentation name of evdev device to use as input (prefix-matched) |
+| `output`	| `My Input Device`	| none		| Output device presentation name. Setting this option enables the instance for output	|
+| `exclusive`	| `1`			| `0`		| Prevent other processes from using the device		|
 | `id`		| `0x1 0x2 0x3`		| none		| Set output device bus identification (Vendor, Product and Version), optional |
 | `axis.AXISNAME`| `34300 0 65536 255 4095` | none	| Specify absolute axis details (see below) for output. This is required for any absolute axis to be output.
 
@@ -288,7 +289,7 @@ see the [kernel documentation](https://www.kernel.org/doc/html/v4.12/input/event
 * `EV_ABS` for absolute axes (such as Joysticks)
 * `EV_REL` for relative axes (such as Mouses)
 
-The `evtest` tool is useful to gather information on devices active on the local system, including types, codes
+The `evtest` tool is useful to gather information on devices active on the local system, including names, types, codes
 and configuration supported by these devices.
 
 Example mapping:
@@ -317,9 +318,6 @@ than `0`, respectively. As for output, only the values `-1`, `0` and `1` are gen
 
 Extended event type values such as `EV_LED`, `EV_SND`, etc are recognized in the MIDIMonster configuration file
 but may or may not work with the internal channel mapping and normalization code.
-
-Input devices can currently only be specified by device node directly. There may be a facility to open input
-devices by presentation name in the future.
 
 ### The `loopback` backend
 

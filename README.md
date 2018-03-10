@@ -1,11 +1,18 @@
 # The MIDIMonster
 
 Named for its scary math, the MIDIMonster is a universal translation
-tool between multi-channel absolute-value-based control and/or bus protocols,
-such as MIDI, DMX/ArtNet and OSC.
+tool between multi-channel absolute-value-based control and/or bus protocols.
 
-It allows the user to translate channels on one protocol into channels on another
-(or the same) protocol, eg
+Currently, the MIDIMonster supports the following protocols:
+
+* MIDI (Linux, via ALSA)
+* ArtNet
+* sACN / E1.31
+* OSC
+* evdev input devices (Linux)
+
+The MIDIMonster allows the user to translate any channel on one protocol into channel(s)
+on any other (or the same) supported protocol, for example to:
 
 * Translate MIDI Control Changes into Notes
 * Translate MIDI Notes into ArtNet or sACN

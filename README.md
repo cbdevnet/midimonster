@@ -14,12 +14,12 @@ Currently, the MIDIMonster supports the following protocols:
 The MIDIMonster allows the user to translate any channel on one protocol into channel(s)
 on any other (or the same) supported protocol, for example to:
 
-* Translate MIDI Control Changes into Notes
-* Translate MIDI Notes into ArtNet or sACN
+* Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))
+* Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))
 * Translate OSC messages into MIDI
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
-* Control lighting fixtures or DAWs using gamepad controllers
+* Control lighting fixtures or DAWs using gamepad controllers ([Example configuration](configs/evdev.conf))
 * Play games or type using MIDI controllers
 
 # Table of Contents

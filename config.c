@@ -43,6 +43,8 @@ static int config_map(char* to_raw, char* from_raw){
 	int rv = 1;
 
 	if(!from || !to){
+		free(from);
+		free(to);
 		fprintf(stderr, "Failed to allocate memory\n");
 		return 1;
 	}

@@ -117,6 +117,7 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 	//store fd
 	global_cfg.fd = realloc(global_cfg.fd, (global_cfg.fds + 1) * sizeof(sacn_fd));
 	if(!global_cfg.fd){
+		close(fd);
 		fprintf(stderr, "Failed to allocate memory\n");
 		return -1;
 	}

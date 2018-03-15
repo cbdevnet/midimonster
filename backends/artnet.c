@@ -83,6 +83,7 @@ static int artnet_listener(char* host, char* port){
 	//store fd
 	artnet_fd = realloc(artnet_fd, (artnet_fds + 1) * sizeof(artnet_descriptor));
 	if(!artnet_fd){
+		close(fd);
 		fprintf(stderr, "Failed to allocate memory\n");
 		return -1;
 	}

@@ -334,6 +334,7 @@ static int osc_listener(char* host, char* port){
 	//set nonblocking
 	flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
+		close(fd);
 		fprintf(stderr, "Failed to set OSC descriptor nonblocking\n");
 		return -1;
 	}
@@ -697,7 +698,7 @@ static int backend_handle(size_t num, managed_fd* fds){
 			else{
 				bytes_read = recv(fds[fd].fd, recv_buf, sizeof(recv_buf), 0);
 			}
-			if(data->root && strncmp(recv_buf, data->root, strlen(data->root))){
+			if(data->root && strncmp(recv_buf, data->root, min(bytes_read, strlen(data->root)))){
 				//ignore packet for different root
 				continue;
 			}
@@ -802,7 +803,9 @@ static int backend_shutdown(){
 		}
 		free(data->channel);
 		free(data->root);
-		close(data->fd);
+		if(data->fd >= 0){
+			close(data->fd);
+		}
 		data->fd = -1;
 		data->channels = 0;
 		free(inst[u]->impl);

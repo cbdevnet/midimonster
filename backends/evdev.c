@@ -359,6 +359,7 @@ static int evdev_start(){
 		if(data->output_enabled){
 			if(libevdev_uinput_create_from_device(data->output_proto, LIBEVDEV_UINPUT_OPEN_MANAGED, &data->output_ev)){
 				fprintf(stderr, "Failed to create evdev output device: %s\n", strerror(errno));
+				free(inst);
 				return 1;
 			}
 			fprintf(stderr, "Created device node %s for instance %s\n", libevdev_uinput_get_devnode(data->output_ev), inst[u]->name);

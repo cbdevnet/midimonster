@@ -489,6 +489,7 @@ static int artnet_start(){
 	}
 
 	if(!artnet_fds){
+		free(inst);
 		fprintf(stderr, "Failed to start ArtNet backend: no descriptors bound\n");
 		return 1;
 	}

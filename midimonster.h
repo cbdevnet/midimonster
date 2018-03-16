@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #define max(a,b) (((a) > (b)) ? (a) : (b))
+#define min(a,b) (((a) < (b)) ? (a) : (b))
 #ifdef DEBUG
 	#define DBGPF(format, ...) fprintf(stderr, (format), __VA_ARGS__)
 	#define DBG(message) fprintf(stderr, "%s", (message))

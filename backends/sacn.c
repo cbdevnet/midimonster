@@ -476,8 +476,8 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 			//generate value
 			if(IS_WIDE(inst_data->data.map[u])){
 				inst_data->data.map[MAPPED_CHANNEL(inst_data->data.map[u])] &= ~MAP_MARK;
-				val.raw.u64 = inst_data->data.in[u] << ((inst_data->data.map[u] & MAP_COARSE) ? 8 : 0);
-				val.raw.u64 |= inst_data->data.in[MAPPED_CHANNEL(inst_data->data.map[u])] << ((inst_data->data.map[u] & MAP_COARSE) ? 0 : 8);
+				val.raw.u64 = (uint16_t) (inst_data->data.in[u] << ((inst_data->data.map[u] & MAP_COARSE) ? 8 : 0));
+				val.raw.u64 |= (uint16_t) (inst_data->data.in[MAPPED_CHANNEL(inst_data->data.map[u])] << ((inst_data->data.map[u] & MAP_COARSE) ? 0 : 8));
 				val.normalised = (double) val.raw.u64 / (double) 0xFFFF;
 			}
 			else{

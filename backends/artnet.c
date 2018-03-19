@@ -77,6 +77,7 @@ static int artnet_listener(char* host, char* port){
 	flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
 		fprintf(stderr, "Failed to set ArtNet descriptor nonblocking\n");
+		close(fd);
 		return -1;
 	}
 

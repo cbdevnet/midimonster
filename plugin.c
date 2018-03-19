@@ -40,6 +40,7 @@ static int plugin_attach(char* path, char* file){
 		}
 	}
 	else{
+		dlclose(handle);
 		free(lib);
 		return 0;
 	}

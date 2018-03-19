@@ -111,6 +111,7 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 	flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
 		fprintf(stderr, "Failed to set sACN descriptor nonblocking\n");
+		close(fd);
 		return -1;
 	}
 
@@ -641,6 +642,7 @@ static int sacn_start(){
 
 	if(!global_cfg.fds){
 		fprintf(stderr, "Failed to start sACN backend: no descriptors bound\n");
+		free(inst);
 		return 1;
 	}
 

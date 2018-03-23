@@ -13,7 +13,7 @@ all: midimonster backends
 backends:
 	$(MAKE) -C backends
 
-midimonster: midimonster.c $(OBJS)
+midimonster: midimonster.c portability.h $(OBJS)
 
 clean:
 	$(RM) midimonster

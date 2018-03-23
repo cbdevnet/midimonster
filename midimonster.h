@@ -13,6 +13,8 @@
 	#define DBG(message)
 #endif
 
+#include "portability.h"
+
 #define DEFAULT_CFG "monster.cfg"
 
 struct _channel_value;

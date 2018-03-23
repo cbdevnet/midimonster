@@ -1,5 +1,5 @@
 #ifdef __APPLE__
-	#define CLOCK_MONOTONIC_RAW CLOCK_MONOTONIC_COARSE
+	#define CLOCK_MONOTONIC_RAW _CLOCK_MONOTONIC_RAW
 
 	#include <libkern/OSByteOrder.h>
 	#define htobe16(x) OSSwapHostToBigInt16(x)

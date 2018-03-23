@@ -498,7 +498,7 @@ static void sacn_discovery(size_t fd){
 	size_t page = 0, pages = (global_cfg.fd[fd].universes / 512) + 1, universes;
 	struct sockaddr_in discovery_dest = {
 		.sin_family = AF_INET,
-		.sin_port = htobe16(SACN_PORT),
+		.sin_port = htobe16(strtoul(SACN_PORT, NULL, 10)),
 		.sin_addr.s_addr = htobe32(((uint32_t) 0xefff0000) | 64214)
 	};
 

@@ -13,7 +13,9 @@ all: midimonster backends
 backends:
 	$(MAKE) -C backends
 
+# This rule can not be the default rule because OSX the target prereqs are not exactly the build prereqs
 midimonster: midimonster.c portability.h $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
 
 clean:
 	$(RM) midimonster

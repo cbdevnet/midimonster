@@ -2,11 +2,20 @@
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./backends/\""
 
+SYSTEM := $(shell uname -s)
+
 CFLAGS ?= -g -Wall
 #CFLAGS += -DDEBUG
 midimonster: LDLIBS = -ldl
 midimonster: CFLAGS += -DPLUGINS=$(PLUGINDIR)
+
+# Work around strange linker passing convention differences in Linux and OSX
+ifeq ($(SYSTEM),Linux)
 midimonster: LDFLAGS += -Wl,-export-dynamic
+endif
+ifeq ($(SYSTEM),Darwin)
+midimonster: LDFLAGS += -Wl,-export_dynamic
+endif
 
 all: midimonster backends
 

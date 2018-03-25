@@ -212,9 +212,11 @@ struct timeval backend_timeout(){
 	for(u = 0; u < nbackends; u++){
 		if(backends[u].interval){
 			res = backends[u].interval();
-			if((res / 1000) <= secs){
+			if((res / 1000) < secs){
 				secs = res / 1000;
-				if((res % 1000) < msecs){
+				msecs = res % 1000;
+			}
+			else if(res / 1000 == secs && (res % 1000) < msecs){
 					msecs = res % 1000;
 				}
 			}

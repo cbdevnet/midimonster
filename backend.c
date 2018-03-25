@@ -217,8 +217,7 @@ struct timeval backend_timeout(){
 				msecs = res % 1000;
 			}
 			else if(res / 1000 == secs && (res % 1000) < msecs){
-					msecs = res % 1000;
-				}
+				msecs = res % 1000;
 			}
 		}
 	}

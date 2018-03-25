@@ -1,6 +1,6 @@
 .PHONY: all clean
 LINUX_BACKENDS = midi.so evdev.so
-BACKENDS = artnet.so osc.so loopback.so sacn.so
+BACKENDS = artnet.so osc.so loopback.so sacn.so rtpmidi.so
 
 SYSTEM := $(shell uname -s)
 

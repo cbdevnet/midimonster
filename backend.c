@@ -247,10 +247,14 @@ int mm_backend_register(backend b){
 }
 
 int backends_start(){
-	int rv = 0;
+	int rv = 0, current;
 	size_t u;
 	for(u = 0; u < nbackends; u++){
-		rv |= backends[u].start();
+		current = backends[u].start();
+		if(current){
+			fprintf(stderr, "Failed to start backend %s\n", backends[u].name);
+		}
+		rv |= current;
 	}
 	return rv;
 }

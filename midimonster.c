@@ -250,7 +250,6 @@ int main(int argc, char** argv){
 
 	//start backends
 	if(backends_start()){
-		fprintf(stderr, "Failed to start backends\n");
 		goto bail;
 	}
 

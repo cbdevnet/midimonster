@@ -298,7 +298,6 @@ int main(int argc, char** argv){
 		//run backend processing, collect events
 		DBGPF("%zu backend FDs signaled\n", n);
 		if(backends_handle(n, signaled_fds)){
-			fprintf(stderr, "Backends failed to handle input\n");
 			goto bail;
 		}
 

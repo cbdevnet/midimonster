@@ -28,6 +28,9 @@ int backends_handle(size_t nfds, managed_fd* fds){
 
 		DBGPF("Notifying backend %s of %zu waiting FDs\n", backends[u].name, n);
 		rv |= backends[u].process(n, fds);
+		if(rv){
+			fprintf(stderr, "Backend %s failed to handle input\n", backends[u].name);
+		}
 	}
 	return rv;
 }

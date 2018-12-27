@@ -451,6 +451,7 @@ support for the protocols to translate.
 
 * libasound2-dev (for the MIDI backend)
 * libevdev-dev (for the evdev backend)
+* pkg-config (as some projects and systems like to spread their files around)
 * A C compiler
 * GNUmake
 

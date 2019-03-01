@@ -9,7 +9,7 @@ COVERITY_SCAN_BUILD_URL="https://scan.coverity.com/scripts/travisci_build_coveri
 
 SPELLINGBLACKLIST=$(cat <<-BLACKLIST
       -wholename "./.codespellignore" -or \
-      -wholename "./.git/*" -or
+      -wholename "./.git/*"
 BLACKLIST
 )
 

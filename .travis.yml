@@ -1,4 +1,4 @@
-language: cpp
+language: c
 # Use the latest Travis images since they are more up to date than the stable release.
 group: edge
 
@@ -21,7 +21,7 @@ addons:
      - libevdev-dev
     packages: &core_build_gpp_latest
      - *core_build
-     - g++-8
+     - gcc-8
     packages: &core_build_clang_latest
      - *core_build
      - clang-6.0
@@ -85,7 +85,7 @@ matrix:
           packages:
            # Coverity doesn't work with g++-5 or g++-6 yet
            - *core_build
-           - g++-4.9
+           - gcc-4.9
           sources:
            - ubuntu-toolchain-r-test
     - os: linux
@@ -117,9 +117,6 @@ matrix:
       dist: xenial
       compiler: gcc
       env: TASK='coverity'
-    - os: linux
-      dist: xenial
-      env: TASK='spellintian'
     - os: linux
       dist: xenial
       env: TASK='spellintian-duplicates'
@@ -162,11 +159,11 @@ before_install:
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install ccache; fi
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then PATH=/usr/local/opt/ccache/libexec:$PATH; fi # Use ccache on Mac too
 #Coverity doesn't work with g++ 5 or 6, so only upgrade to g++ 4.9 for that
- - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "coverage" -o "$TASK" = "doxygen" \) -a "$CXX" = "g++" ]; then export CXX="ccache g++-8" CC="ccache gcc-8"; fi
+ - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) -a "$CC" = "gcc" ]; then export CC="ccache gcc-8"; fi
 #Use the latest clang if we're compiling with clang
- - if [ "$TRAVIS_OS_NAME" == "linux" -a "$CXX" = "clang++" ]; then export CXX="clang++-6.0" CC="clang-6.0"; fi
+ - if [ "$TRAVIS_OS_NAME" == "linux" -a "$CC" = "clang" ]; then export CC="clang-6.0"; fi
 #Report the compiler version
- - $CXX --version
+ - $CC --version
  - if [ "$TASK" == "spellintian" -o "$TASK" == "spellintian-duplicates" ]; then wget "http://archive.ubuntu.com/ubuntu/pool/main/l/lintian/lintian_2.5.104_all.deb"; sudo dpkg -i lintian_*.deb; sudo apt-get install -f -y; fi # Install a later lintian
 
 after_script:

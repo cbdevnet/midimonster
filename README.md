@@ -22,7 +22,7 @@ on any other (or the same) supported protocol, for example to:
 * Control lighting fixtures or DAWs using gamepad controllers ([Example configuration](configs/evdev.conf))
 * Play games or type using MIDI controllers
 
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
+[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
 
 # Table of Contents
 

@@ -29,7 +29,7 @@ struct _managed_fd;
  * 	* int init()
  * 		The only function that should be exported by the shared object.
  * 		Called when the shared object is attached. Should register
- * 		a backend structure with the core.
+ * 		a backend structure containing callable entry points with the core.
  * 		Returning anything other than zero causes midimonster to fail the
  * 		startup checks.
  * 	* mmbackend_configure
@@ -46,7 +46,8 @@ struct _managed_fd;
  * 		out-of-memory condition and terminates the program.
  * 	* mmbackend_start
  * 		Called after all instances have been created and all mappings
- * 		have been set up. May be used to connect to backing hardware
+ * 		have been set up. Only backends for which instances have been configured
+ * 		receive the start call. May be used to connect to backing hardware
  * 		or to update runtime-specific data in the various data structures.
  * 		Returning a non-zero value signals an error starting the backend
  * 		and stops further progress.
@@ -68,7 +69,9 @@ struct _managed_fd;
  *			Return the maximum sleep interval for this backend in milliseconds.
  *			If not implemented, a maximum interval of one second is used.
  *	* mmbackend_shutdown
- *		Clean up all allocations, finalize all hardware connections.
+ *		Clean up all allocations, finalize all hardware connections. All registered
+ *		backends receive the shutdown call, regardless of whether they have been
+ *		started previously.
  *		Return value is currently ignored.
  */
 typedef int (*mmbackend_handle_event)(struct _backend_instance* inst, size_t channels, struct _backend_channel** c, struct _channel_value* v);

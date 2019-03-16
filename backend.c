@@ -251,8 +251,16 @@ int mm_backend_register(backend b){
 
 int backends_start(){
 	int rv = 0, current;
-	size_t u;
+	size_t u, p;
 	for(u = 0; u < nbackends; u++){
+		//only start backends that have instances
+		for(p = 0; p < ninstances && instances[p]->backend != backends + u; p++){
+		}
+		if(p == ninstances){
+			fprintf(stderr, "Skipping start of backend %s\n", backends[u].name);
+			continue;
+		}
+
 		current = backends[u].start();
 		if(current){
 			fprintf(stderr, "Failed to start backend %s\n", backends[u].name);

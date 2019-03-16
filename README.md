@@ -138,7 +138,7 @@ Example mapping:
 net1.231 < net2.123
 ```
 
-A 16-bit channel (spanning any two normal channels in the same universe) may be mapped with the syntax
+A 16-bit channel (spanning any two normal 8-bit channels in the same universe, also called a wide channel) may be mapped with the syntax
 ```
 net1.1+2 > net2.5+123
 ```
@@ -187,7 +187,7 @@ Example mapping:
 sacn1.231 < sacn2.123
 ```
 
-A 16-bit channel (spanning any two normal channels in the same universe) may be mapped with the syntax
+A 16-bit channel (spanning any two normal 8-bit channels in the same universe, also called a wide channel) may be mapped with the syntax
 ```
 sacn.1+2 > sacn2.5+123
 ```

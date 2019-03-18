@@ -177,12 +177,13 @@ instance* mm_instance_find(char* backend, uint64_t ident);
 channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
 //TODO channel* mm_channel_find()
 /*
- * Register a file descriptor to be selected on. The backend
- * will be notified via the mmbackend_process_fd call.
+ * Register (manage = 1) or unregister (manage = 0) a file descriptor
+ * to be selected on. The backend will be notified when the descriptor
+ * becomes ready to read via its registered mmbackend_process_fd call.
  */
 int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 /*
- * Notifies the core of a channel event. Used by backends to
+ * Notifies the core of a channel event. Called by backends to
  * inject events gathered from their backing implementation.
  */
 int mm_channel_event(channel* c, channel_value v);

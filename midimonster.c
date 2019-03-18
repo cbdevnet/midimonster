@@ -20,6 +20,7 @@ static size_t mappings = 0;
 static channel_mapping* map = NULL;
 static size_t fds = 0;
 static managed_fd* fd = NULL;
+static volatile sig_atomic_t fd_set_dirty = 1;
 static uint64_t global_timestamp = 0;
 
 static event_collection event_pool[2] = {
@@ -114,6 +115,7 @@ int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 				fd[u].fd = -1;
 				fd[u].backend = NULL;
 				fd[u].impl = NULL;
+				fd_set_dirty = 1;
 			}
 			return 0;
 		}
@@ -143,6 +145,7 @@ int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	fd[u].fd = new_fd;
 	fd[u].backend = b;
 	fd[u].impl = impl;
+	fd_set_dirty = 1;
 	return 0;
 }
 
@@ -218,6 +221,28 @@ int usage(char* fn){
 	return EXIT_FAILURE;
 }
 
+static fd_set fds_collect(int* max_fd){
+	size_t u = 0;
+	fd_set rv_fds;
+
+	if(max_fd){
+		*max_fd = -1;
+	}
+
+	DBGPF("Building selector set from %zu FDs registered to core\n", fds);
+	FD_ZERO(&rv_fds);
+	for(u = 0; u < fds; u++){
+		if(fd[u].fd >= 0){
+			FD_SET(fd[u].fd, &rv_fds);
+			if(max_fd){
+				*max_fd = max(*max_fd, fd[u].fd);
+			}
+		}
+	}
+
+	return rv_fds;
+}
+
 int main(int argc, char** argv){
 	fd_set all_fds, read_fds;
 	event_collection* secondary = NULL;
@@ -262,18 +287,13 @@ int main(int argc, char** argv){
 		goto bail;
 	}
 
-	//create initial fd set
-	DBGPF("Building selector set from %zu FDs registered to core\n", fds);
-	FD_ZERO(&all_fds);
-	for(u = 0; u < fds; u++){
-		if(fd[u].fd >= 0){
-			FD_SET(fd[u].fd, &all_fds);
-			maxfd = max(maxfd, fd[u].fd);
-		}
-	}
-
 	//process events
 	while(!shutdown_requested){
+		//build fd set if necessary
+		if(fd_set_dirty){
+			all_fds = fds_collect(&maxfd);
+			fd_set_dirty = 0;
+		}
 		//wait for & translate events
 		read_fds = all_fds;
 		tv = backend_timeout();

@@ -179,8 +179,6 @@ channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
 /*
  * Register a file descriptor to be selected on. The backend
  * will be notified via the mmbackend_process_fd call.
- * This function may only be called from within the mmbackend_start
- * procedure.
  */
 int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 /*

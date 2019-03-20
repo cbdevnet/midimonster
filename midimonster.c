@@ -280,20 +280,19 @@ int main(int argc, char** argv){
 
 	signal(SIGINT, signal_handler);
 
-	//allocate data buffers
-	signaled_fds = calloc(fds, sizeof(managed_fd));
-	if(!signaled_fds){
-		fprintf(stderr, "Failed to allocate memory\n");
-		goto bail;
-	}
-
 	//process events
 	while(!shutdown_requested){
-		//build fd set if necessary
+		//rebuild fd set if necessary
 		if(fd_set_dirty){
 			all_fds = fds_collect(&maxfd);
+			signaled_fds = realloc(signaled_fds, fds * sizeof(managed_fd));
+			if(!signaled_fds){
+				fprintf(stderr, "Failed to allocate memory\n");
+				goto bail;
+			}
 			fd_set_dirty = 0;
 		}
+
 		//wait for & translate events
 		read_fds = all_fds;
 		tv = backend_timeout();

@@ -10,6 +10,7 @@ Currently, the MIDIMonster supports the following protocols:
 * sACN / E1.31
 * OSC
 * evdev input devices (Linux)
+* Open Lighting Architecture (OLA)
 
 The MIDIMonster allows the user to translate any channel on one protocol into channel(s)
 on any other (or the same) supported protocol, for example to:
@@ -48,18 +49,23 @@ on any other (or the same) supported protocol, for example to:
       - [Global configuration](#global-configuration-3)
       - [Instance configuration](#instance-configuration-3)
       - [Channel specification](#channel-specification-3)
-      - [Known bugs/problems](#known-bugs-problems)
+      - [Known bugs/problems](#known-bugs--problems-3)
     + [The `loopback` backend](#the-loopback-backend)
       - [Global configuration](#global-configuration-4)
       - [Instance configuration](#instance-configuration-4)
       - [Channel specification](#channel-specification-4)
-      - [Known bugs / problems](#known-bugs--problems-3)
+      - [Known bugs / problems](#known-bugs--problems-4)
     + [The `osc` backend](#the-osc-backend)
       - [Global configuration](#global-configuration-5)
       - [Instance configuration](#instance-configuration-5)
       - [Channel specification](#channel-specification-5)
       - [Supported types & value ranges](#supported-types--value-ranges)
-      - [Known bugs / problems](#known-bugs--problems-4)
+      - [Known bugs / problems](#known-bugs--problems-5)
+    + [The `ola` backend](#the-ola-backend)
+      - [Global configuration](#global-configuration-6)
+      - [Instance configuration](#instance-configuration-6)
+      - [Channel specification](#channel-specification-6)
+      - [Known bugs / problems](#known-bugs--problems-6)
   * [Building](#building)
     + [Prerequisites](#prerequisites)
     + [Build](#build)
@@ -310,7 +316,7 @@ Note that to map an absolute axis on an output-enabled instance, additional info
 and maximum are required. These must be specified in the instance configuration. When only mapping the instance
 as a channel input, this is not required.
 
-#### Known bugs/problems
+#### Known bugs / problems
 
 Creating an `evdev` output device requires elevated privileges, namely, write access to the system's
 `/dev/uinput`. Usually, this is granted for users in the `input` group and the `root` user.
@@ -439,6 +445,48 @@ The default ranges are:
 
 Ping requests are not yet answered. There may be some problems using broadcast output and input.
 
+### The `ola` backend
+
+This backend connects the MIDIMonster to the Open Lighting Architecture daemon. This can be useful
+to take advantage of additional protocols implemented in OLA. This backend is currently marked as
+optional and is only built with `make full` in the `backends/` directory, as the OLA is a large
+dependency to require for all users.
+
+#### Global configuration
+
+This backend does not take any global configuration.
+
+#### Instance configuration
+
+| Option	| Example value		| Default value | Description						|
+|---------------|-----------------------|---------------|-------------------------------------------------------|
+| `universe`	| `7`			| `0`		| OLA universe to send/receive data on			|
+
+#### Channel specification
+
+A channel is specified by it's universe index. Channel indices start at 1 and end at 512.
+
+Example mapping:
+```
+ola1.231 < in2.123
+```
+
+A 16-bit channel (spanning any two normal 8-bit channels in the same universe, also called a wide channel) may be mapped with the syntax
+```
+ola1.1+2 > net2.5+123
+```
+
+A normal channel that is part of a wide channel can not be mapped individually.
+
+#### Known bugs / problems
+
+The backend currently assumes that the OLA daemon is running on the same host as the MIDIMonster.
+This may be made configurable in the future.
+
+This backend requires `libola-dev` to be installed, which pulls in a rather large and aggressive (in terms of probing
+and taking over connected hardware) daemon. It is thus marked as optional and only built when executing the `full` target
+within the `backends` directory.
+
 ## Building
 
 This section will explain how to build the provided sources to be able to run
@@ -451,6 +499,7 @@ support for the protocols to translate.
 
 * libasound2-dev (for the MIDI backend)
 * libevdev-dev (for the evdev backend)
+* libola-dev (for the optional OLA backend)
 * pkg-config (as some projects and systems like to spread their files around)
 * A C compiler
 * GNUmake
@@ -458,6 +507,9 @@ support for the protocols to translate.
 ### Build
 
 Just running `make` in the source directory should do the trick.
+
+Some backends have been marked as optional as they require rather large additional software to be installed,
+for example the `ola` backend. To build these, run `make full` in the backends directory.
 
 ## Development
 

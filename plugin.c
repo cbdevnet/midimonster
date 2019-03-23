@@ -8,8 +8,8 @@
 #include <dirent.h>
 #include "plugin.h"
 
-size_t plugins = 0;
-void** plugin_handle = NULL;
+static size_t plugins = 0;
+static void** plugin_handle = NULL;
 
 static int plugin_attach(char* path, char* file){
 	plugin_init init = NULL;

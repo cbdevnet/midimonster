@@ -153,7 +153,7 @@ static int ola_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-void ola_data_receive(unsigned int universe, const ola::DmxBuffer& ola_dmx, const std::string& error) {
+static void ola_data_receive(unsigned int universe, const ola::DmxBuffer& ola_dmx, const std::string& error) {
 	size_t p, max_mark = 0;
 	//this should really be size_t but ola is weird...
 	unsigned int dmx_length = 512;
@@ -214,7 +214,7 @@ void ola_data_receive(unsigned int universe, const ola::DmxBuffer& ola_dmx, cons
 	}
 }
 
-void ola_register_callback(const std::string &error) {
+static void ola_register_callback(const std::string &error) {
 	if(!error.empty()){
 		fprintf(stderr, "OLA backend failed to register for universe: %s\n", error.c_str());
 	}

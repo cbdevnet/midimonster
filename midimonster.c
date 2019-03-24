@@ -244,7 +244,7 @@ static fd_set fds_collect(int* max_fd){
 }
 
 int main(int argc, char** argv){
-	fd_set all_fds = {}, read_fds;
+	fd_set all_fds, read_fds;
 	event_collection* secondary = NULL;
 	struct timeval tv;
 	size_t u, n;
@@ -255,6 +255,7 @@ int main(int argc, char** argv){
 		cfg_file = argv[1];
 	}
 
+	FD_ZERO(&all_fds);
 	//initialize backends
 	if(plugins_load(PLUGINS)){
 		fprintf(stderr, "Failed to initialize a backend\n");

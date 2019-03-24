@@ -242,7 +242,7 @@ static int ola_start(){
 
 	ola_select->AddReadDescriptor(ola_socket);
 
-	fprintf(stderr, "OLA backend registering %zu descriptors to core\n", 1);
+	fprintf(stderr, "OLA backend registering connection descriptor to core\n");
 	if(mm_manage_fd(ola_socket->ReadDescriptor(), BACKEND_NAME, 1, NULL)){
 		goto bail;
 	}

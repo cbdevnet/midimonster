@@ -1,4 +1,4 @@
-.PHONY: all clean run sanitize backends
+.PHONY: all clean run sanitize backends full backends-full
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./backends/\""
 
@@ -19,8 +19,13 @@ endif
 
 all: midimonster backends
 
+full: midimonster backends-full
+
 backends:
 	$(MAKE) -C backends
+
+backends-full:
+	$(MAKE) -C backends full
 
 # This rule can not be the default rule because OSX the target prereqs are not exactly the build prereqs
 midimonster: midimonster.c portability.h $(OBJS)

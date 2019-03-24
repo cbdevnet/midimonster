@@ -28,7 +28,7 @@ evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
 ola.so: LDLIBS = -lola
 ola.so: CPPFLAGS += -Wno-write-strings
 
-%.so :: %.c %.h
+%.so :: %.c %.h $(BACKEND_LIB)
 	$(CC) $(CFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
 
 %.so :: %.cpp %.h

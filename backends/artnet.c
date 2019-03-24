@@ -1,11 +1,8 @@
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <ctype.h>
 #include <errno.h>
+
+#include "libmmbackend.h"
 
 #include "artnet.h"
 #define MAX_FDS 255
@@ -16,68 +13,14 @@ static size_t artnet_fds = 0;
 static artnet_descriptor* artnet_fd = NULL;
 
 static int artnet_listener(char* host, char* port){
-	int fd = -1, status, yes = 1, flags;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM,
-		.ai_flags = AI_PASSIVE
-	};
-	struct addrinfo* info;
-	struct addrinfo* addr_it;
-
+	int fd;
 	if(artnet_fds >= MAX_FDS){
 		fprintf(stderr, "ArtNet backend descriptor limit reached\n");
 		return -1;
 	}
 
-	status = getaddrinfo(host, port, &hints, &info);
-	if(status){
-		fprintf(stderr, "Failed to get socket info for %s port %s: %s\n", host, port, gai_strerror(status));
-		return -1;
-	}
-
-	for(addr_it = info; addr_it != NULL; addr_it = addr_it->ai_next){
-		fd = socket(addr_it->ai_family, addr_it->ai_socktype, addr_it->ai_protocol);
-		if(fd < 0){
-			continue;
-		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_REUSEADDR on socket\n");
-		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_BROADCAST on socket\n");
-		}
-
-		yes = 0;
-		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to unset IP_MULTICAST_LOOP option: %s\n", strerror(errno));
-		}
-
-		status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
-		if(status < 0){
-			close(fd);
-			continue;
-		}
-
-		break;
-	}
-
-	freeaddrinfo(info);
-
-	if(!addr_it){
-		fprintf(stderr, "Failed to create listening socket for %s port %s\n", host, port);
-		return -1;
-	}
-
-	//set nonblocking
-	flags = fcntl(fd, F_GETFL, 0);
-	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		fprintf(stderr, "Failed to set ArtNet descriptor nonblocking\n");
-		close(fd);
+	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1);
+	if(fd < 0){
 		return -1;
 	}
 
@@ -95,50 +38,6 @@ static int artnet_listener(char* host, char* port){
 	artnet_fd[artnet_fds].output_instance = NULL;
 	artnet_fd[artnet_fds].last_frame = NULL;
 	artnet_fds++;
-	return 0;
-}
-
-static int artnet_parse_addr(char* host, char* port, struct sockaddr_storage* addr, socklen_t* len){
-	struct addrinfo* head;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM
-	};
-
-	int error = getaddrinfo(host, port, &hints, &head);
-	if(error || !head){
-		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(error));
-		return 1;
-	}
-
-	memcpy(addr, head->ai_addr, head->ai_addrlen);
-	*len = head->ai_addrlen;
-
-	freeaddrinfo(head);
-	return 0;
-}
-
-static int artnet_separate_hostspec(char* in, char** host, char** port){
-	size_t u;
-
-	if(!in || !host || !port){
-		return 1;
-	}
-
-	for(u = 0; in[u] && !isspace(in[u]); u++){
-	}
-
-	//guess
-	*host = in;
-
-	if(in[u]){
-		in[u] = 0;
-		*port = in + u + 1;
-	}
-	else{
-		//no port given
-		*port = ARTNET_PORT;
-	}
 	return 0;
 }
 
@@ -171,8 +70,14 @@ static int artnet_configure(char* option, char* value){
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
-		if(artnet_separate_hostspec(value, &host, &port)){
-			fprintf(stderr, "Not a valid ArtNet bind address: %s\n", value);
+		mmbackend_parse_hostspec(value, &host, &port);
+
+		if(!port){
+			port = ARTNET_PORT;
+		}
+
+		if(!host){
+			fprintf(stderr, "Not valid ArtNet bind address given\n");
 			return 1;
 		}
 
@@ -228,12 +133,18 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 	else if(!strcmp(option, "dest") || !strcmp(option, "destination")){
-		if(artnet_separate_hostspec(value, &host, &port)){
+		mmbackend_parse_hostspec(value, &host, &port);
+
+		if(!port){
+			port = ARTNET_PORT;
+		}
+
+		if(!host){
 			fprintf(stderr, "Not a valid ArtNet destination for instance %s\n", inst->name);
 			return 1;
 		}
 
-		return artnet_parse_addr(host, port, &data->dest_addr, &data->dest_len);
+		return mmbackend_parse_sockaddr(host, port, &data->dest_addr, &data->dest_len);
 	}
 
 	fprintf(stderr, "Unknown ArtNet option %s for instance %s\n", option, inst->name);

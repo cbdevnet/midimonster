@@ -8,6 +8,8 @@
 #include <ctype.h>
 #include <netinet/in.h>
 
+#include "libmmbackend.h"
+
 #include "sacn.h"
 //upper limit imposed by using the fd index as 16-bit part of the instance id
 #define MAX_FDS 4096
@@ -50,68 +52,14 @@ int init(){
 }
 
 static int sacn_listener(char* host, char* port, uint8_t fd_flags){
-	int fd = -1, status, yes = 1, flags;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM,
-		.ai_flags = AI_PASSIVE
-	};
-	struct addrinfo* info;
-	struct addrinfo* addr_it;
-
+	int fd = -1;
 	if(global_cfg.fds >= MAX_FDS){
 		fprintf(stderr, "sACN backend descriptor limit reached\n");
 		return -1;
 	}
 
-	status = getaddrinfo(host, port, &hints, &info);
-	if(status){
-		fprintf(stderr, "Failed to get socket info for %s port %s: %s\n", host, port, gai_strerror(status));
-		return -1;
-	}
-
-	for(addr_it = info; addr_it != NULL; addr_it = addr_it->ai_next){
-		fd = socket(addr_it->ai_family, addr_it->ai_socktype, addr_it->ai_protocol);
-		if(fd < 0){
-			continue;
-		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_REUSEADDR on socket\n");
-		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_BROADCAST on socket\n");
-		}
-
-		yes = 0;
-		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to unset IP_MULTICAST_LOOP option: %s\n", strerror(errno));
-		}
-
-		status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
-		if(status < 0){
-			close(fd);
-			continue;
-		}
-
-		break;
-	}
-
-	freeaddrinfo(info);
-
-	if(!addr_it){
-		fprintf(stderr, "Failed to create listening socket for %s port %s\n", host, port);
-		return -1;
-	}
-
-	//set nonblocking
-	flags = fcntl(fd, F_GETFL, 0);
-	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		fprintf(stderr, "Failed to set sACN descriptor nonblocking\n");
-		close(fd);
+	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1);
+	if(fd < 0){
 		return -1;
 	}
 
@@ -130,55 +78,6 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 	global_cfg.fd[global_cfg.fds].universe = NULL;
 	global_cfg.fd[global_cfg.fds].last_frame = NULL;
 	global_cfg.fds++;
-	return 0;
-}
-
-static int sacn_parse_addr(char* host, char* port, struct sockaddr_storage* addr, socklen_t* len){
-	struct addrinfo* head;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM
-	};
-
-	int error = getaddrinfo(host, port, &hints, &head);
-	if(error || !head){
-		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(error));
-		return 1;
-	}
-
-	memcpy(addr, head->ai_addr, head->ai_addrlen);
-	*len = head->ai_addrlen;
-
-	freeaddrinfo(head);
-	return 0;
-}
-
-static int sacn_parse_hostspec(char* in, char** host, char** port, uint8_t* flags){
-	size_t u;
-
-	if(!in || !host || !port){
-		return 1;
-	}
-
-	for(u = 0; in[u] && !isspace(in[u]); u++){
-	}
-
-	//guess
-	*host = in;
-
-	if(in[u]){
-		in[u] = 0;
-		*port = in + u + 1;
-	}
-	else{
-		//no port given
-		*port = SACN_PORT;
-	}
-
-	if(flags){
-		//TODO parse hostspec trailing data for options
-		*flags = 0;
-	}
 	return 0;
 }
 
@@ -204,8 +103,13 @@ static int sacn_configure(char* option, char* value){
 		}
 	}
 	else if(!strcmp(option, "bind")){
-		if(sacn_parse_hostspec(value, &host, &port, &flags)){
-			fprintf(stderr, "Not a valid sACN bind address: %s\n", value);
+		mmbackend_parse_hostspec(value, &host, &port);
+		if(!port){
+			port = SACN_PORT;
+		}
+
+		if(!host){
+			fprintf(stderr, "No valid sACN bind address provided\n");
 			return 1;
 		}
 
@@ -243,12 +147,17 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 	else if(!strcmp(option, "destination")){
-		if(sacn_parse_hostspec(value, &host, &port, NULL)){
-			fprintf(stderr, "Not a valid sACN destination for instance %s: %s\n", inst->name, value);
+		mmbackend_parse_hostspec(value, &host, &port);
+		if(!port){
+			port = SACN_PORT;
+		}
+
+		if(!host){
+			fprintf(stderr, "No valid sACN destination for instance %s\n", inst->name);
 			return 1;
 		}
 
-		return sacn_parse_addr(host, port, &data->dest_addr, &data->dest_len);
+		return mmbackend_parse_sockaddr(host, port, &data->dest_addr, &data->dest_len);
 	}
 	else if(!strcmp(option, "from")){
 		next = value;

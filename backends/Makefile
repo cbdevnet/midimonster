@@ -2,6 +2,7 @@
 OPTIONAL_BACKENDS = ola.so
 LINUX_BACKENDS = midi.so evdev.so
 BACKENDS = artnet.so osc.so loopback.so sacn.so
+BACKEND_LIB = libmmbackend.o
 
 SYSTEM := $(shell uname -s)
 
@@ -18,6 +19,9 @@ ifeq ($(SYSTEM),Darwin)
 LDFLAGS += -undefined dynamic_lookup
 endif
 
+artnet.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+osc.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+sacn.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
 midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)
 evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
@@ -25,14 +29,14 @@ ola.so: LDLIBS = -lola
 ola.so: CPPFLAGS += -Wno-write-strings
 
 %.so :: %.c %.h
-	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
 
 %.so :: %.cpp %.h
-	$(CXX) $(CPPFLAGS) $(LDLIBS) $< -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
 
-all: $(BACKENDS)
+all: $(BACKEND_LIB) $(BACKENDS)
 
-full: $(BACKENDS) $(OPTIONAL_BACKENDS)
+full: $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS)
 
 clean:
-	$(RM) $(BACKENDS) $(OPTIONAL_BACKENDS)
+	$(RM) $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS)

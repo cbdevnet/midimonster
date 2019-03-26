@@ -23,6 +23,7 @@ addons:
     packages: &core_build_gpp_latest
      - *core_build
      - gcc-8
+     - g++-8
     packages: &core_build_clang_latest
      - *core_build
      - clang-6.0
@@ -165,7 +166,8 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" == "linux" -a "$CC" = "clang" ]; then export CC="clang-6.0"; export CXX="clang-6.0"; fi
 #Report the compiler versions
  - $CC --version
- - $CXX --version
+#OS X uses something other than $CXX variable
+ - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then $CXX --version; fi
  - if [ "$TASK" == "spellintian" -o "$TASK" == "spellintian-duplicates" ]; then wget "http://archive.ubuntu.com/ubuntu/pool/main/l/lintian/lintian_2.5.104_all.deb"; sudo dpkg -i lintian_*.deb; sudo apt-get install -f -y; fi # Install a later lintian
 
 after_script:

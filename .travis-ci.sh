@@ -74,6 +74,6 @@ elif [[ $TASK = 'sanitize' ]]; then
 else
   # Otherwise compile as normal
   travis_fold start "make"
-  make;
+  make full;
   travis_fold end "make"
 fi

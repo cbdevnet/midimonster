@@ -167,7 +167,7 @@ before_install:
 #Report the compiler versions
  - $CC --version
 #OS X uses something other than $CXX variable
- - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then $CXX --version; fi
+ - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) ]; then $CXX --version; fi
  - if [ "$TASK" == "spellintian" -o "$TASK" == "spellintian-duplicates" ]; then wget "http://archive.ubuntu.com/ubuntu/pool/main/l/lintian/lintian_2.5.104_all.deb"; sudo dpkg -i lintian_*.deb; sudo apt-get install -f -y; fi # Install a later lintian
 
 after_script:

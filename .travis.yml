@@ -19,6 +19,7 @@ addons:
      - *base_build
      - libasound2-dev
      - libevdev-dev
+     - libola-dev
     packages: &core_build_gpp_latest
      - *core_build
      - gcc-8

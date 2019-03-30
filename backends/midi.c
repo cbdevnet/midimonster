@@ -118,19 +118,30 @@ static channel* midi_channel(instance* instance, char* spec){
 		.label = 0
 	};
 
+	//support deprecated syntax for a transition period...
+	uint8_t old_syntax = 0;
 	char* channel;
 
-	if(!strncmp(spec, "cc", 2)){
+	if(!strncmp(spec, "ch", 2)){
+		channel = spec + 2;
+		if(!strncmp(spec, "channel", 7)){
+			channel = spec + 7;
+		}
+	}
+	else if(!strncmp(spec, "cc", 2)){
 		ident.fields.type = cc;
 		channel = spec + 2;
+		old_syntax = 1;
 	}
 	else if(!strncmp(spec, "note", 4)){
 		ident.fields.type = note;
 		channel = spec + 4;
+		old_syntax = 1;
 	}
 	else if(!strncmp(spec, "nrpn", 4)){
 		ident.fields.type = nrpn;
 		channel = spec + 4;
+		old_syntax = 1;
 	}
 	else{
 		fprintf(stderr, "Unknown MIDI channel specification %s\n", spec);
@@ -138,18 +149,32 @@ static channel* midi_channel(instance* instance, char* spec){
 	}
 
 	ident.fields.channel = strtoul(channel, &channel, 10);
-
-	//FIXME test this
-	if(ident.fields.channel > 16){
+	if(ident.fields.channel > 15){
 		fprintf(stderr, "MIDI channel out of range in channel spec %s\n", spec);
 		return NULL;
 	}
 
 	if(*channel != '.'){
-		fprintf(stderr, "Need MIDI channel specification of form channel.control, had %s\n", spec);
+		fprintf(stderr, "Need MIDI channel specification of form channel<X>.<control><Y>, had %s\n", spec);
 		return NULL;
 	}
+	//skip the period
 	channel++;
+
+	if(!old_syntax){
+		if(!strncmp(channel, "cc", 2)){
+			ident.fields.type = cc;
+			channel += 2;
+		}
+		else if(!strncmp(channel, "note", 4)){
+			ident.fields.type = note;
+			channel += 4;
+		}
+		else if(!strncmp(channel, "nrpn", 4)){
+			ident.fields.type = nrpn;
+			channel += 4;
+		}
+	}
 
 	ident.fields.control = strtoul(channel, NULL, 10);
 

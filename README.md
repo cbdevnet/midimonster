@@ -245,11 +245,19 @@ The MIDI backend supports multiple channel types
 * `note` - Note On/Off messages
 * `nrpn` - NRPNs (not yet implemented)
 
-A channel is specified using `<type><channel>.<index>`.
+A channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be used instead
+of `channel`.
+The earlier syntax of `<type><channel>.<index>` is officially deprecated but still supported for compatability
+reasons. This support may be removed at some future time.
 
-Example mapping:
+Channels range from `0` to `15`. Each channel consists of 128 notes (numbered `0` through `127`) and 128 CC's
+(numbered likewise), a channel pressure control (also called 'channel aftertouch') and a pitch control.
+Each Note also has an additional pressure value associated with it.
+
+Example mappings:
 ```
-midi1.cc0.9 > midi2.note1.4
+midi1.ch0.note9 > midi2.channel1.cc4
+midi1.channel15.cc1 > midi1.channel0.note0
 ```
 #### Known bugs / problems
 
@@ -259,7 +267,8 @@ a configuration option at a later time.
 
 NRPNs are not yet fully implemented, though rudimentary support is in the codebase.
 
-The channel specification syntax is currently a bit clunky.
+To see which events your MIDI devices output, ALSA provides the `aseqdump` utility. You can
+list all incoming events using `aseqdump -p <portname>`.
 
 ### The `evdev` backend
 

@@ -46,8 +46,8 @@ Example mappings:
 ```
 midi1.ch0.note9 > midi2.channel1.cc4
 midi1.channel15.pressure1 > midi1.channel0.note0
-midi1.aftertouch > midi2.cc0
-midi1.pitch > midi2.pitch
+midi1.ch1.aftertouch > midi2.ch2.cc0
+midi1.ch0.pitch > midi2.ch1.pitch
 ```
 #### Known bugs / problems
 

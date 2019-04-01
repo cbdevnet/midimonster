@@ -22,25 +22,32 @@ Each instance also provides a virtual port, so MIDI devices can also be connecte
 
 #### Channel specification
 
-The MIDI backend supports multiple channel types
+The MIDI backend supports mapping different MIDI events to MIDIMonster channels. The currently supported event types are
 
 * `cc` - Control Changes
 * `note` - Note On/Off messages
+* `pressure` - Note pressure/aftertouch messages
+* `aftertouch` - Channel-wide aftertouch messages
+* `pitch` - Channel pitchbend messages
 * `nrpn` - NRPNs (not yet implemented)
 
-A channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be used instead
-of `channel`.
+A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
+used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
 The earlier syntax of `<type><channel>.<index>` is officially deprecated but still supported for compatability
 reasons. This support may be removed at some future time.
 
-Channels range from `0` to `15`. Each channel consists of 128 notes (numbered `0` through `127`) and 128 CC's
-(numbered likewise), a channel pressure control (also called 'channel aftertouch') and a pitch control.
-Each Note also has an additional pressure value associated with it.
+The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
+
+MIDI channels range from `0` to `15`. Each MIDI channel consists of 128 notes (numbered `0` through `127`), which
+additionally each have a pressure control, 128 CC's (numbered likewise), a channel pressure control (also called
+'channel aftertouch') and a pitch control which may all be mapped to individual MIDIMonster channels.
 
 Example mappings:
 ```
 midi1.ch0.note9 > midi2.channel1.cc4
-midi1.channel15.cc1 > midi1.channel0.note0
+midi1.channel15.pressure1 > midi1.channel0.note0
+midi1.aftertouch > midi2.cc0
+midi1.pitch > midi2.pitch
 ```
 #### Known bugs / problems
 

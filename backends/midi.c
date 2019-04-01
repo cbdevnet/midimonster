@@ -24,6 +24,9 @@ enum /*_midi_channel_type*/ {
 	none = 0,
 	note,
 	cc,
+	pressure,
+	aftertouch,
+	pitchbend,
 	nrpn,
 	sysmsg
 };
@@ -174,6 +177,16 @@ static channel* midi_channel(instance* instance, char* spec){
 			ident.fields.type = nrpn;
 			channel += 4;
 		}
+		else if(!strncmp(channel, "pressure", 8)){
+			ident.fields.type = pressure;
+			channel += 8;
+		}
+		else if(!strncmp(channel, "pitch", 8)){
+			ident.fields.type = pitchbend;
+		}
+		else if(!strncmp(channel, "aftertouch", 10)){
+			ident.fields.type = aftertouch;
+		}
 	}
 
 	ident.fields.control = strtoul(channel, NULL, 10);
@@ -209,6 +222,16 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 			case cc:
 				snd_seq_ev_set_controller(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
 				break;
+			case pressure:
+				snd_seq_ev_set_keypress(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
+
+				break;
+			case pitchbend:
+				snd_seq_ev_set_pitchbend(&ev, ident.fields.channel, (v[u].normalised * 16383.0) - 8192);
+				break;
+			case aftertouch:
+				snd_seq_ev_set_chanpress(&ev, ident.fields.channel, v[u].normalised * 127.0);
+				break;
 			case nrpn:
 				//FIXME set to nrpn output
 				break;
@@ -239,12 +262,27 @@ static int midi_handle(size_t num, managed_fd* fds){
 		switch(ev->type){
 			case SND_SEQ_EVENT_NOTEON:
 			case SND_SEQ_EVENT_NOTEOFF:
-			case SND_SEQ_EVENT_KEYPRESS:
 			case SND_SEQ_EVENT_NOTE:
 				ident.fields.type = note;
 				ident.fields.channel = ev->data.note.channel;
 				ident.fields.control = ev->data.note.note;
 				val.normalised = (double)ev->data.note.velocity / 127.0;
+				break;
+			case SND_SEQ_EVENT_KEYPRESS:
+				ident.fields.type = pressure;
+				ident.fields.channel = ev->data.note.channel;
+				ident.fields.control = ev->data.note.note;
+				val.normalised = (double)ev->data.note.velocity / 127.0;
+				break;
+			case SND_SEQ_EVENT_CHANPRESS:
+				ident.fields.type = aftertouch;
+				ident.fields.channel = ev->data.control.channel;
+				val.normalised = (double)ev->data.control.value / 127.0;
+				break;
+			case SND_SEQ_EVENT_PITCHBEND:
+				ident.fields.type = pitchbend;
+				ident.fields.channel = ev->data.control.channel;
+				val.normalised = ((double)ev->data.control.value + 8192) / 16383.0;
 				break;
 			case SND_SEQ_EVENT_CONTROLLER:
 				ident.fields.type = cc;

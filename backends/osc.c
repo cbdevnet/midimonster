@@ -705,5 +705,6 @@ static int backend_shutdown(){
 	}
 
 	free(inst);
+	fprintf(stderr, "OSC backend shut down\n");
 	return 0;
 }

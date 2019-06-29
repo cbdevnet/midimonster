@@ -468,5 +468,6 @@ static int evdev_shutdown(){
 	}
 
 	free(instances);
+	fprintf(stderr, "evdev backend shut down\n");
 	return 0;
 }

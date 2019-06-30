@@ -6,14 +6,14 @@
 #define OSC_XMIT_BUF 8192
 
 int init();
-static int backend_configure(char* option, char* value);
-static int backend_configure_instance(instance* instance, char* option, char* value);
-static instance* backend_instance();
-static channel* backend_channel(instance* instance, char* spec);
-static int backend_set(instance* inst, size_t num, channel** c, channel_value* v);
-static int backend_handle(size_t num, managed_fd* fds);
-static int backend_start();
-static int backend_shutdown();
+static int osc_configure(char* option, char* value);
+static int osc_configure_instance(instance* inst, char* option, char* value);
+static instance* osc_instance();
+static channel* osc_map_channel(instance* inst, char* spec);
+static int osc_set(instance* inst, size_t num, channel** c, channel_value* v);
+static int osc_handle(size_t num, managed_fd* fds);
+static int osc_start();
+static int osc_shutdown();
 
 typedef enum {
 	not_set = 0,
@@ -52,4 +52,4 @@ typedef struct /*_osc_instance_data*/ {
 	int fd;
 	uint8_t learn;
 	uint16_t forced_rport;
-} osc_instance;
+} osc_instance_data;

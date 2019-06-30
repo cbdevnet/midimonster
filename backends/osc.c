@@ -16,14 +16,14 @@
 int init(){
 	backend osc = {
 		.name = BACKEND_NAME,
-		.conf = backend_configure,
-		.create = backend_instance,
-		.conf_instance = backend_configure_instance,
-		.channel = backend_channel,
-		.handle = backend_set,
-		.process = backend_handle,
-		.start = backend_start,
-		.shutdown = backend_shutdown
+		.conf = osc_configure,
+		.create = osc_instance,
+		.conf_instance = osc_configure_instance,
+		.channel = osc_map_channel,
+		.handle = osc_set,
+		.process = osc_handle,
+		.start = osc_start,
+		.shutdown = osc_shutdown
 	};
 
 	//register backend
@@ -253,13 +253,13 @@ static int osc_validate_path(char* path){
 	return 0;
 }
 
-static int backend_configure(char* option, char* value){
+static int osc_configure(char* option, char* value){
 	fprintf(stderr, "The OSC backend does not take any global configuration\n");
 	return 1;
 }
 
-static int backend_configure_instance(instance* inst, char* option, char* value){
-	osc_instance* data = (osc_instance*) inst->impl;
+static int osc_configure_instance(instance* inst, char* option, char* value){
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	char* host = NULL, *port = NULL, *token = NULL, *format = NULL;
 	size_t u, p;
 
@@ -394,13 +394,13 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 	return 1;
 }
 
-static instance* backend_instance(){
+static instance* osc_instance(){
 	instance* inst = mm_instance();
 	if(!inst){
 		return NULL;
 	}
 
-	osc_instance* data = calloc(1, sizeof(osc_instance));
+	osc_instance_data* data = calloc(1, sizeof(osc_instance_data));
 	if(!data){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return NULL;
@@ -411,9 +411,9 @@ static instance* backend_instance(){
 	return inst;
 }
 
-static channel* backend_channel(instance* inst, char* spec){
+static channel* osc_map_channel(instance* inst, char* spec){
 	size_t u;
-	osc_instance* data = (osc_instance*) inst->impl;
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	size_t param_index = 0;
 
 	//check spec for correctness
@@ -457,14 +457,14 @@ static channel* backend_channel(instance* inst, char* spec){
 	return mm_channel(inst, u, 1);
 }
 
-static int backend_set(instance* inst, size_t num, channel** c, channel_value* v){
+static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 	uint8_t xmit_buf[OSC_XMIT_BUF], *format = NULL;
 	size_t evt = 0, off, members, p;
 	if(!num){
 		return 0;
 	}
 
-	osc_instance* data = (osc_instance*) inst->impl;
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	if(!data->dest_len){
 		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%zu channels)\n", inst->name, num);
 		return 0;
@@ -563,11 +563,11 @@ static int backend_set(instance* inst, size_t num, channel** c, channel_value* v
 	return 0;
 }
 
-static int backend_handle(size_t num, managed_fd* fds){
+static int osc_handle(size_t num, managed_fd* fds){
 	size_t fd;
 	char recv_buf[OSC_RECV_BUF];
 	instance* inst = NULL;
-	osc_instance* data = NULL;
+	osc_instance_data* data = NULL;
 	ssize_t bytes_read = 0;
 	size_t c;
 	char* osc_fmt = NULL;
@@ -581,7 +581,7 @@ static int backend_handle(size_t num, managed_fd* fds){
 			continue;
 		}
 
-		data = (osc_instance*) inst->impl;
+		data = (osc_instance_data*) inst->impl;
 
 		do{
 			if(data->learn){
@@ -639,10 +639,10 @@ static int backend_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int backend_start(){
+static int osc_start(){
 	size_t n, u, fds = 0;
 	instance** inst = NULL;
-	osc_instance* data = NULL;
+	osc_instance_data* data = NULL;
 
 	//fetch all instances
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
@@ -657,7 +657,7 @@ static int backend_start(){
 
 	//update instance identifiers
 	for(u = 0; u < n; u++){
-		data = (osc_instance*) inst[u]->impl;
+		data = (osc_instance_data*) inst[u]->impl;
 
 		if(data->fd >= 0){
 			inst[u]->ident = data->fd;
@@ -679,10 +679,10 @@ static int backend_start(){
 	return 0;
 }
 
-static int backend_shutdown(){
+static int osc_shutdown(){
 	size_t n, u, c;
 	instance** inst = NULL;
-	osc_instance* data = NULL;
+	osc_instance_data* data = NULL;
 
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
 		fprintf(stderr, "Failed to fetch instance list\n");
@@ -690,7 +690,7 @@ static int backend_shutdown(){
 	}
 
 	for(u = 0; u < n; u++){
-		data = (osc_instance*) inst[u]->impl;
+		data = (osc_instance_data*) inst[u]->impl;
 		for(c = 0; c < data->channels; c++){
 			free(data->channel[c].path);
 		}

@@ -176,23 +176,27 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			return 1;
 		}
 		free(next_token);
+		return 0;
 	}
 	else if(!strcmp(option, "exclusive")){
 		if(data->input_fd >= 0 && libevdev_grab(data->input_ev, LIBEVDEV_GRAB)){
 			fprintf(stderr, "Failed to obtain exclusive device access on %s\n", inst->name);
 		}
 		data->exclusive = 1;
+		return 0;
 	}
 #ifndef EVDEV_NO_UINPUT
 	else if(!strcmp(option, "output")){
 		data->output_enabled = 1;
 		libevdev_set_name(data->output_proto, value);
+		return 0;
 	}
 	else if(!strcmp(option, "id")){
 		next_token = value;
 		libevdev_set_id_vendor(data->output_proto, strtol(next_token, &next_token, 0));
 		libevdev_set_id_product(data->output_proto, strtol(next_token, &next_token, 0));
 		libevdev_set_id_version(data->output_proto, strtol(next_token, &next_token, 0));
+		return 0;
 	}
 	else if(!strncmp(option, "axis.", 5)){
 		//value minimum maximum fuzz flat resolution
@@ -207,13 +211,11 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			fprintf(stderr, "Failed to enable absolute axis %s for output\n", option + 5);
 			return 1;
 		}
+		return 0;
 	}
 #endif
-	else{
-		fprintf(stderr, "Unknown configuration parameter %s for evdev backend\n", option);
-		return 1;
-	}
-	return 0;
+	fprintf(stderr, "Unknown configuration parameter %s for evdev backend\n", option);
+	return 1;
 }
 
 static channel* evdev_channel(instance* inst, char* spec){

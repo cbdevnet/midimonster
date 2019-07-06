@@ -1,5 +1,8 @@
 MIDI NRPN
 Note source in channel value struct
 Optimize core channel search (store backend offset)
-Function generator
 Printing backend
+
+document example configs
+lua timer
+evdev relaxes size

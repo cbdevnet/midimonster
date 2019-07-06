@@ -1,7 +1,7 @@
 .PHONY: all clean full
 OPTIONAL_BACKENDS = ola.so
 LINUX_BACKENDS = midi.so evdev.so
-BACKENDS = artnet.so osc.so loopback.so sacn.so
+BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so
 BACKEND_LIB = libmmbackend.o
 
 SYSTEM := $(shell uname -s)
@@ -27,6 +27,8 @@ evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)
 evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
 ola.so: LDLIBS = -lola
 ola.so: CPPFLAGS += -Wno-write-strings
+lua.so: CFLAGS += $(shell pkg-config --cflags lua5.3)
+lua.so: LDLIBS += $(shell pkg-config --libs lua5.3)
 
 %.so :: %.c %.h $(BACKEND_LIB)
 	$(CC) $(CFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)

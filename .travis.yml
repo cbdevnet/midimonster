@@ -20,6 +20,7 @@ addons:
      - libasound2-dev
      - libevdev-dev
      - libola-dev
+     - liblua5.3-dev
     packages: &core_build_gpp_latest
      - *core_build
      - gcc-8

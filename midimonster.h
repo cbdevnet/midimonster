@@ -5,6 +5,7 @@
 #include <stdint.h>
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #define min(a,b) (((a) < (b)) ? (a) : (b))
+#define clamp(val,max,min) (((val) > (max)) ? (max) : (((val) < (min)) ? (min) : (val)))
 #ifdef DEBUG
 	#define DBGPF(format, ...) fprintf(stderr, (format), __VA_ARGS__)
 	#define DBG(message) fprintf(stderr, "%s", (message))

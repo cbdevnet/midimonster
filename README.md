@@ -12,12 +12,15 @@ Currently, the MIDIMonster supports the following protocols:
 * evdev input devices (Linux)
 * Open Lighting Architecture (OLA)
 
+with additional flexibility provided by a Lua scripting environment.
+
 The MIDIMonster allows the user to translate any channel on one protocol into channel(s)
 on any other (or the same) supported protocol, for example to:
 
 * Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))
 * Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))
 * Translate OSC messages into MIDI ([Example configuration](configs/midi-osc.cfg))
+* Dynamically route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua)) to create your own lighting controller
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers ([Example configuration](configs/evdev.conf))
@@ -88,6 +91,7 @@ special information. These documentation files are located in the `backends/` di
 * [`loopback` backend documentation](backends/loopback.md)
 * [`ola` backend documentation](backends/ola.md)
 * [`osc` backend documentation](backends/osc.md)
+* [`lua` backend documentation](backends/lua.md)
 
 ## Building
 
@@ -99,10 +103,11 @@ This section will explain how to build the provided sources to be able to run
 In order to build the MIDIMonster, you'll need some libraries that provide
 support for the protocols to translate.
 
-* libasound2-dev (for the MIDI backend)
-* libevdev-dev (for the evdev backend)
-* libola-dev (for the optional OLA backend)
-* pkg-config (as some projects and systems like to spread their files around)
+* `libasound2-dev` (for the MIDI backend)
+* `libevdev-dev` (for the evdev backend)
+* `liblua5.3-dev` (for the lua backend)
+* `libola-dev` (for the optional OLA backend)
+* `pkg-config` (as some projects and systems like to spread their files around)
 * A C compiler
 * GNUmake
 

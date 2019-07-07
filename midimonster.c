@@ -324,7 +324,7 @@ int main(int argc, char** argv){
 		while(primary->n){
 			//swap primary and secondary event collectors
 			DBGPF("Swapping event collectors, %zu events in primary\n", primary->n);
-			for(u = 0; u < sizeof(event_pool)/sizeof(event_collection); u++){
+			for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
 				if(primary != event_pool + u){
 					secondary = primary;
 					primary = event_pool + u;

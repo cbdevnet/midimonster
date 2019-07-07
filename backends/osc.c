@@ -167,14 +167,8 @@ static inline channel_value osc_parameter_normalise(osc_parameter_type t, osc_pa
 			fprintf(stderr, "Invalid OSC type passed to interpolation routine\n");
 	}
 
-	//fix overshoot
-	if(v.normalised > 1.0){
-		v.normalised = 1.0;
-	}
-	else if(v.normalised < 0.0){
-		v.normalised = 0.0;
-	}
-
+	//clamp to range
+	v.normalised = clamp(v.normalised, 1.0, 0.0);
 	return v;
 }
 

@@ -378,6 +378,10 @@ static int evdev_start(){
 			fds++;
 		}
 
+		if(data->input_fd <= 0 && !data->output_ev){
+			fprintf(stderr, "Instance %s has neither input nor output device set up\n", inst[u]->name);
+		}
+
 	}
 
 	fprintf(stderr, "evdev backend registered %zu descriptors to core\n", fds);

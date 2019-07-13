@@ -5,4 +5,4 @@ Printing backend
 
 document example configs
 lua timer
-evdev relaxes size
+evdev relative axis size

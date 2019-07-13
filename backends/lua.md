@@ -5,15 +5,32 @@ events using the Lua programming language.
 
 Every instance has it's own interpreter state which can be loaded with custom handler scripts.
 
-To process incoming channel events, the MIDIMonster calls corresponding Lua functions with
-the value (as a Lua `number` type) as parameter. To send output on a channel, the Lua environment
-provides the function `output(channel-name, value)`.
+To process incoming channel events, the MIDIMonster calls corresponding Lua functions (if they exist)
+with the value (as a Lua `number` type) as parameter.
+
+The following functions are provided within the Lua interpreter for interaction with the MIDIMonster
+
+| Function			| Usage example			| Description				|
+|-------------------------------|-------------------------------|---------------------------------------|
+| `output(string, number)`	| `output("foo", 0.75)`		| Output a value event to a channel	|
+| `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms) |
+| `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel	|
+| `output_value(string)`	| `output_value("bar")		| Get the last output value on a channel |
+
 
 Example script:
 ```
 function bar(value)
 	output("foo", value / 2)
 end
+
+step = 0
+function toggle()
+	output("bar", step * 1.0)
+	step = (step + 1) % 2;
+end
+
+interval(toggle, 1000)
 ```
 
 Input values range between 0.0 and 1.0, output values are clamped to the same range.
@@ -41,9 +58,12 @@ lua1.foo > lua2.bar
 
 #### Known bugs / problems
 
-Using `output` as an input channel name to a Lua instance does not work, as the interpreter has
-`output` globally assigned to the event output function. Using `output` as an output channel name
-via `output("output", value)` works as intended.
+Using any of the interface functions (`output`, `interval`, `input\_value`, `output\_value`) as an
+input channel name to a Lua instance will not call any handler functions.
+Using these names as arguments to the output and value interface functions works as intended.
+
+Output values will not trigger corresponding input event handlers unless the channel is mapped
+back in the MIDIMonster configuration.
 
 The path to the Lua source files is relative to the current working directory. This may lead
 to problems when copying configuration between installations.

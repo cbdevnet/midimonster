@@ -17,5 +17,15 @@ static int lua_shutdown();
 typedef struct /*_lua_instance_data*/ {
 	size_t channels;
 	char** channel_name;
+	int* reference;
+	double* input;
+	double* output;
 	lua_State* interpreter;
 } lua_instance_data;
+
+typedef struct /*_lua_interval_callback*/ {
+	uint64_t interval;
+	uint64_t delta;
+	lua_State* interpreter;
+	int reference;
+} lua_timer;

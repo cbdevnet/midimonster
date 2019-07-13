@@ -1,21 +1,42 @@
--- This example MIDIMonstaer Lua script spreads one input channel onto multiple output
+-- This example MIDIMonster Lua script spreads one input channel onto multiple output
 -- channels using a polynomial function evaluated at multiple points. This effect can
 -- be visualized e.g. with martrix (https://github.com/cbdevnet/martrix).
 
--- This is just a demonstration of global variables
-foo = 0
-
 -- The polynomial to evaluate
-function polynomial(offset, x)
-	return math.exp(-20 * (x - offset) ^ 2)
+function polynomial(x)
+	return math.exp(-40 * input_value("width") * (x - input_value("offset")) ^ 2)
 end
 
--- Handler function for the input channel
-function input(value)
-	foo = foo + 1
-	print("input at ", value, foo)
-
+-- Evaluate and set output channels
+function evaluate()
 	for chan=0,10 do
-		output("out" .. chan, polynomial(value, (1 / 10) * chan))
+		output("out" .. chan, polynomial((1 / 10) * chan))
 	end
 end
+
+-- Handler functions for the input channels
+function offset(value)
+	evaluate()
+end
+
+function width(value)
+	evaluate()
+end
+
+-- This is an example showing a simple chase running on its own without the need
+-- (but the possibility) for external input
+
+-- Global value for the current step
+current_step = 0
+
+function step()
+	if(current_step > 0) then
+		output("dim", 0.0)
+	else
+		output("dim", 1.0)
+	end
+		
+	current_step = (current_step + 1) % 2
+end
+
+interval(step, 1000)

@@ -9,9 +9,7 @@
 
 static size_t timers = 0;
 static lua_timer* timer = NULL;
-static struct itimerspec timer_config = {
-	0
-};
+uint64_t timer_interval = 0;
 static int timer_fd = -1;
 
 int init(){
@@ -43,8 +41,11 @@ int init(){
 }
 
 static int lua_update_timerfd(){
-	uint64_t interval = 0, gcd, residual;
+	uint64_t interval, gcd, residual;
 	size_t n = 0;
+	struct itimerspec timer_config = {
+		0
+	};
 
 	//find the minimum for the lower interval bounds
 	for(n = 0; n < timers; n++){
@@ -53,12 +54,8 @@ static int lua_update_timerfd(){
 		}
 	}
 
-	//stop the timer
-	if(!interval){
-		memset(&timer_config, 0, sizeof(struct itimerspec));
-	}
-	//calculate gcd of all timers
-	else{
+	//calculate gcd of all timers if any are active
+	if(interval){
 		for(n = 0; n < timers; n++){
 			if(timer[n].interval){
 				//calculate gcd of current interval and this timers interval
@@ -75,13 +72,17 @@ static int lua_update_timerfd(){
 			}
 		}
 
-		timer_config.it_interval.tv_sec = interval / 1000;
-		timer_config.it_interval.tv_nsec = (interval % 1000) * 1e6;
-		timer_config.it_value.tv_nsec = 1;
+		timer_config.it_interval.tv_sec = timer_config.it_value.tv_sec = interval / 1000;
+		timer_config.it_interval.tv_nsec = timer_config.it_value.tv_nsec = (interval % 1000) * 1e6;
+	}
+
+	if(interval == timer_interval){
+		return 0;
 	}
 
 	//configure the new interval
 	timerfd_settime(timer_fd, 0, &timer_config, NULL);
+	timer_interval = interval;
 	return 0;
 }
 
@@ -355,7 +356,7 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 static int lua_handle(size_t num, managed_fd* fds){
 	uint8_t read_buffer[100];
-	uint64_t delta = timer_config.it_interval.tv_sec * 1000 + timer_config.it_interval.tv_nsec / 1e6;
+	uint64_t delta = timer_interval;
 	size_t n;
 
 	if(!num){

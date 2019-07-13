@@ -341,7 +341,7 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 	for(n = 0; n < num; n++){
 		data->input[c[n]->ident] = v[n].normalised;
 		//call lua channel handlers if present
-		if(data->reference[n] != LUA_NOREF){
+		if(data->reference[c[n]->ident] != LUA_NOREF){
 			lua_rawgeti(data->interpreter, LUA_REGISTRYINDEX, data->reference[c[n]->ident]);
 			lua_pushnumber(data->interpreter, v[n].normalised);
 			if(lua_pcall(data->interpreter, 1, 0, 0) != LUA_OK){

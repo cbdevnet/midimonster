@@ -15,7 +15,7 @@ The following functions are provided within the Lua interpreter for interaction 
 | `output(string, number)`	| `output("foo", 0.75)`		| Output a value event to a channel	|
 | `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms) |
 | `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel	|
-| `output_value(string)`	| `output_value("bar")		| Get the last output value on a channel |
+| `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel |
 
 
 Example script:
@@ -58,7 +58,7 @@ lua1.foo > lua2.bar
 
 #### Known bugs / problems
 
-Using any of the interface functions (`output`, `interval`, `input\_value`, `output\_value`) as an
+Using any of the interface functions (`output`, `interval`, `input_value`, `output_value`) as an
 input channel name to a Lua instance will not call any handler functions.
 Using these names as arguments to the output and value interface functions works as intended.
 

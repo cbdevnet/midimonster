@@ -227,7 +227,7 @@ struct timeval backend_timeout(){
 
 	struct timeval tv = {
 		secs,
-		msecs
+		msecs * 1000
 	};
 	return tv;
 }

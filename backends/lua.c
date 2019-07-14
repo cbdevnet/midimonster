@@ -10,10 +10,17 @@
 static size_t timers = 0;
 static lua_timer* timer = NULL;
 uint64_t timer_interval = 0;
+#ifdef MMBACKEND_LUA_TIMERFD
 static int timer_fd = -1;
+#else
+static uint64_t last_timestamp;
+#endif
 
 int init(){
 	backend lua = {
+		#ifndef MMBACKEND_LUA_TIMERFD
+		.interval = lua_interval,
+		#endif
 		.name = BACKEND_NAME,
 		.conf = lua_configure,
 		.create = lua_instance,
@@ -31,21 +38,33 @@ int init(){
 		return 1;
 	}
 
+	#ifdef MMBACKEND_LUA_TIMERFD
 	//create the timer to expire intervals
 	timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 	if(timer_fd < 0){
 		fprintf(stderr, "Failed to create timer for Lua backend\n");
 		return 1;
 	}
+	#endif
 	return 0;
+}
+
+static uint32_t lua_interval(){
+	//FIXME Return delta for next timer here
+	if(timer_interval){
+		return timer_interval;
+	}
+	return 1000;
 }
 
 static int lua_update_timerfd(){
 	uint64_t interval, gcd, residual;
 	size_t n = 0;
+	#ifdef MMBACKEND_LUA_TIMERFD
 	struct itimerspec timer_config = {
 		0
 	};
+	#endif
 
 	//find the minimum for the lower interval bounds
 	for(n = 0; n < timers; n++){
@@ -72,16 +91,20 @@ static int lua_update_timerfd(){
 			}
 		}
 
+		#ifdef MMBACKEND_LUA_TIMERFD
 		timer_config.it_interval.tv_sec = timer_config.it_value.tv_sec = interval / 1000;
 		timer_config.it_interval.tv_nsec = timer_config.it_value.tv_nsec = (interval % 1000) * 1e6;
+		#endif
 	}
 
 	if(interval == timer_interval){
 		return 0;
 	}
 
+	#ifdef MMBACKEND_LUA_TIMERFD
 	//configure the new interval
 	timerfd_settime(timer_fd, 0, &timer_config, NULL);
+	#endif
 	timer_interval = interval;
 	return 0;
 }
@@ -359,6 +382,7 @@ static int lua_handle(size_t num, managed_fd* fds){
 	uint64_t delta = timer_interval;
 	size_t n;
 
+	#ifdef MMBACKEND_LUA_TIMERFD
 	if(!num){
 		return 0;
 	}
@@ -367,6 +391,18 @@ static int lua_handle(size_t num, managed_fd* fds){
 	if(read(timer_fd, read_buffer, sizeof(read_buffer)) < 0){
 		fprintf(stderr, "Failed to read from Lua timer: %s\n", strerror(errno));
 		return 1;
+	}
+	#else
+		if(!last_timestamp){
+			last_timestamp = mm_timestamp();
+		}
+		delta = mm_timestamp() - last_timestamp;
+		last_timestamp = mm_timestamp();
+	#endif
+
+	//no timers active
+	if(!timer_interval){
+		return 0;
 	}
 
 	//add delta to all active timers
@@ -418,11 +454,13 @@ static int lua_start(){
 		return 0;
 	}
 
+	#ifdef MMBACKEND_LUA_TIMERFD
 	//register the timer with the core
 	fprintf(stderr, "Lua backend registering 1 descriptor to core\n");
 	if(mm_manage_fd(timer_fd, BACKEND_NAME, 1, NULL)){
 		return 1;
 	}
+	#endif
 	return 0;
 }
 
@@ -457,8 +495,10 @@ static int lua_shutdown(){
 	free(timer);
 	timer = NULL;
 	timers = 0;
+	#ifdef MMBACKEND_LUA_TIMERFD
 	close(timer_fd);
 	timer_fd = -1;
+	#endif
 
 	fprintf(stderr, "Lua backend shut down\n");
 	return 0;

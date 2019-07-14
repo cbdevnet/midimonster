@@ -1,11 +1,11 @@
+#include "lua.h"
+
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #ifdef MMBACKEND_LUA_TIMERFD
 #include <sys/timerfd.h>
 #endif
-
-#include "lua.h"
 
 #define BACKEND_NAME "lua"
 #define LUA_REGISTRY_KEY "_midimonster_lua_instance"

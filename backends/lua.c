@@ -1,7 +1,10 @@
 #include <string.h>
-#include <sys/timerfd.h>
 #include <unistd.h>
 #include <errno.h>
+#ifdef MMBACKEND_LUA_TIMERFD
+#include <sys/timerfd.h>
+#endif
+
 #include "lua.h"
 
 #define BACKEND_NAME "lua"

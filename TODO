@@ -4,5 +4,5 @@ Optimize core channel search (store backend offset)
 Printing backend
 
 document example configs
-lua timer
 evdev relative axis size
+mm_managed_fd.impl is not freed currently

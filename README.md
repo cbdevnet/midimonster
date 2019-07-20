@@ -56,9 +56,23 @@ lines of the form `option = value`.
 Lines starting with a semicolon are treated as comments and ignored. Inline comments
 are not currently supported.
 
+Example configuration files may be found in [configs/](configs/).
+
+### Backend and instance configuration
+
 A configuration section may either be a *backend configuration* section, started by
 `[backend <backend-name>]`, an *instance configuration* section, started by
 `[<backend-name> <instance-name>]` or a *mapping* section started by `[map]`.
+
+Backends document their global options in their [backend documentation](#backend-documentation).
+Some backends may not require global configuration, in which case the configuration
+section for that particular backend can be omitted.
+
+To make an instance available for mapping channels, it requires at least the
+`[<backend-name> <instance-name>]` configuration stanza. Most backends require
+additional configuration for their instances.
+
+### Channel mapping
 
 The `[map]` section consists of lines of channel-to-channel assignments, reading like
 
@@ -76,7 +90,21 @@ output eachothers events.
 
 The last line is a shorter way to create a bi-directional mapping.
 
-Example configuration files may be found in [configs/](configs/).
+### Multi-channel mapping
+
+To make mapping large contiguous sets of channels easier, channel names may contain
+expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers
+delimiting a range of channels.  Multiple such expressions may be used in one channel
+specification, with the rightmost expression being incremented (or decremented) first for
+evaluation.
+
+Both sides of a multi-channel assignment need to have the same number of channels.
+
+Example multi-channel mapping:
+
+```
+instance-a.channel{1..10} > instance-b.{10..1}
+```
 
 ## Backend documentation
 

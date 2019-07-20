@@ -3,9 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+
+/* Straight-forward min / max macros */
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #define min(a,b) (((a) < (b)) ? (a) : (b))
+
+/* Clamp a value to a range */
 #define clamp(val,max,min) (((val) > (max)) ? (max) : (((val) < (min)) ? (min) : (val)))
+
+/* Debug messages only compile in when DEBUG is set */
 #ifdef DEBUG
 	#define DBGPF(format, ...) fprintf(stderr, (format), __VA_ARGS__)
 	#define DBG(message) fprintf(stderr, "%s", (message))
@@ -14,10 +20,13 @@
 	#define DBG(message)
 #endif
 
+/* Pull in additional defines for non-linux platforms */
 #include "portability.h"
 
+/* Default configuration file name to read when no other is specified */
 #define DEFAULT_CFG "monster.cfg"
 
+/* Forward declare some of the structs so we can use them in eachother */
 struct _channel_value;
 struct _backend_channel;
 struct _backend_instance;
@@ -86,6 +95,7 @@ typedef int (*mmbackend_start)();
 typedef uint32_t (*mmbackend_interval)();
 typedef int (*mmbackend_shutdown)();
 
+/* Channel event value, .normalised is used by backends to determine channel values */
 typedef struct _channel_value {
 	union {
 		double dbl;
@@ -94,6 +104,10 @@ typedef struct _channel_value {
 	double normalised;
 } channel_value;
 
+/* 
+ * Backend callback structure
+ * Used to register a backend with the core using mm_backend_register()
+ */
 typedef struct /*_mm_backend*/ {
 	char* name;
 	mmbackend_configure conf;
@@ -108,6 +122,10 @@ typedef struct /*_mm_backend*/ {
 	mmbackend_interval interval;
 } backend;
 
+/* 
+ * Backend instance structure - do not allocate directly!
+ * Use the memory returned by mm_instance()
+ */
 typedef struct _backend_instance {
 	backend* backend;
 	uint64_t ident;
@@ -115,20 +133,51 @@ typedef struct _backend_instance {
 	char* name;
 } instance;
 
+/*
+ * Channel specification glob
+ */
+typedef struct /*_mm_channel_glob*/ {
+	size_t offset[2];
+	union {
+		void* impl;
+		uint64_t u64[2];
+	} limits;
+	uint64_t values;
+} channel_glob;
+
+/*
+ * (Multi-)Channel specification
+ */
+typedef struct /*_mm_channel_spec*/ {
+	char* spec;
+	uint8_t internal;
+	size_t channels;
+	size_t globs;
+	channel_glob* glob;
+} channel_spec;
+
+/* 
+ * Instance channel structure
+ * Backends may either manage their own channel registry
+ * or use the memory returned by mm_channel()
+ */
 typedef struct _backend_channel {
 	instance* instance;
 	uint64_t ident;
 	void* impl;
 } channel;
 
-//FIXME might be replaced by struct pollfd
-//FIXME who frees impl
+/*
+ * File descriptor management structure
+ * Register for the core event loop using mm_manage_fd()
+ */
 typedef struct _managed_fd {
 	int fd;
 	backend* backend;
 	void* impl;
 } managed_fd;
 
+/* Internal channel mapping structure - Core use only */
 typedef struct /*_mm_channel_mapping*/ {
 	channel* from;
 	size_t destinations;

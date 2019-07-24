@@ -13,6 +13,12 @@
 #define osc_align(a) ((((a) / 4) + (((a) % 4) ? 1 : 0)) * 4)
 #define BACKEND_NAME "osc"
 
+static struct {
+	uint8_t detect;
+} osc_global_config = {
+	.detect = 0
+};
+
 int init(){
 	backend osc = {
 		.name = BACKEND_NAME,
@@ -248,7 +254,15 @@ static int osc_validate_path(char* path){
 }
 
 static int osc_configure(char* option, char* value){
-	fprintf(stderr, "The OSC backend does not take any global configuration\n");
+	if(!strcmp(option, "detect")){
+		osc_global_config.detect = 1;
+		if(!strcmp(value, "off")){
+			osc_global_config.detect = 0;
+		}
+		return 0;
+	}
+
+	fprintf(stderr, "Unknown configuration parameter %s for OSC backend\n", option);
 	return 1;
 }
 
@@ -384,7 +398,7 @@ static int osc_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown configuration parameter %s for OSC backend\n", option);
+	fprintf(stderr, "Unknown configuration parameter %s for OSC instance %s\n", option, inst->name);
 	return 1;
 }
 
@@ -585,15 +599,16 @@ static int osc_handle(size_t num, managed_fd* fds){
 			else{
 				bytes_read = recv(fds[fd].fd, recv_buf, sizeof(recv_buf), 0);
 			}
+
+			if(bytes_read < 0){
+				break;
+			}
+
 			if(data->root && strncmp(recv_buf, data->root, min(bytes_read, strlen(data->root)))){
 				//ignore packet for different root
 				continue;
 			}
 			osc_local = recv_buf + (data->root ? strlen(data->root) : 0);
-
-			if(bytes_read < 0){
-				break;
-			}
 
 			osc_fmt = recv_buf + osc_align(strlen(recv_buf) + 1);
 			if(*osc_fmt != ','){
@@ -602,6 +617,10 @@ static int osc_handle(size_t num, managed_fd* fds){
 				continue;
 			}
 			osc_fmt++;
+
+			if(osc_global_config.detect){
+				fprintf(stderr, "Incoming OSC data: Path %s.%s Format %s\n", inst->name, osc_local, osc_fmt);
+			}
 
 			osc_data = (uint8_t*) osc_fmt + (osc_align(strlen(osc_fmt) + 2) - 1);
 			//FIXME check supplied data length

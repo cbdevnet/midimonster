@@ -5,7 +5,9 @@ spoken primarily by visual interface tools and hardware such as TouchOSC.
 
 #### Global configuration
 
-This backend does not take any global configuration.
+| Option	| Example value		| Default value 	| Description		|
+|---------------|-----------------------|-----------------------|-----------------------|
+| `detect`	| `on`			| `off`			| Output the path of all incoming OSC packets to allow for easier configuration. Any path filters configured using the `root` instance configuration options still apply. |
 
 #### Instance configuration
 

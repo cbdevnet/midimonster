@@ -26,7 +26,7 @@
 /* Default configuration file name to read when no other is specified */
 #define DEFAULT_CFG "monster.cfg"
 
-/* Forward declare some of the structs so we can use them in eachother */
+/* Forward declare some of the structs so we can use them in each other */
 struct _channel_value;
 struct _backend_channel;
 struct _backend_instance;

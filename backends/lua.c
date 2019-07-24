@@ -61,7 +61,7 @@ static uint32_t lua_interval(){
 }
 
 static int lua_update_timerfd(){
-	uint64_t interval, gcd, residual;
+	uint64_t interval = 0, gcd, residual;
 	size_t n = 0;
 	#ifdef MMBACKEND_LUA_TIMERFD
 	struct itimerspec timer_config = {
@@ -396,11 +396,11 @@ static int lua_handle(size_t num, managed_fd* fds){
 		return 1;
 	}
 	#else
-		if(!last_timestamp){
-			last_timestamp = mm_timestamp();
-		}
-		delta = mm_timestamp() - last_timestamp;
+	if(!last_timestamp){
 		last_timestamp = mm_timestamp();
+	}
+	delta = mm_timestamp() - last_timestamp;
+	last_timestamp = mm_timestamp();
 	#endif
 
 	//no timers active

@@ -30,6 +30,8 @@ instances. The configuration value contains, space-separated, the following valu
 * `flat`: An offset, below which all deviations will be ignored
 * `resolution`: Axis resolution in units per millimeter (or units per radian for rotational axes)
 
+If an axis is not used for output, this configuration can be omitted.
+
 For real devices, all of these parameters for every axis can be found by running `evtest` on the device.
 
 #### Channel specification

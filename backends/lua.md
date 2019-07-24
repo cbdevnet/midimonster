@@ -43,7 +43,7 @@ The backend does not take any global configuration.
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `source`	| `script.lua`		| none			| Lua source file	|
+| `script`	| `script.lua`		| none			| Lua source file	|
 
 A single instance may have multiple `source` options specified, which will all be read cumulatively.
 

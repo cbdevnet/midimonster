@@ -277,7 +277,7 @@ static int lua_configure_instance(instance* inst, char* option, char* value){
 	lua_instance_data* data = (lua_instance_data*) inst->impl;
 
 	//load a lua file into the interpreter
-	if(!strcmp(option, "script")){
+	if(!strcmp(option, "script") || !strcmp(option, "source")){
 		if(luaL_dofile(data->interpreter, value)){
 			fprintf(stderr, "Failed to load lua source file %s for instance %s: %s\n", value, inst->name, lua_tostring(data->interpreter, -1));
 			return 1;
@@ -285,7 +285,7 @@ static int lua_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown configuration parameter %s for lua backend\n", option);
+	fprintf(stderr, "Unknown configuration parameter %s for lua instance %s\n", option, inst->name);
 	return 1;
 }
 

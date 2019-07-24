@@ -98,7 +98,8 @@ delimiting a range of channels.  Multiple such expressions may be used in one ch
 specification, with the rightmost expression being incremented (or decremented) first for
 evaluation.
 
-Both sides of a multi-channel assignment need to have the same number of channels.
+Both sides of a multi-channel assignment need to have the same number of channels, or one
+side must have exactly one channel.
 
 Example multi-channel mapping:
 

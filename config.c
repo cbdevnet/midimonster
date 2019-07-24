@@ -220,7 +220,7 @@ static int config_map(char* to_raw, char* from_raw){
 		goto done;
 	}
 	
-	if(spec_to.channels != spec_from.channels
+	if((spec_to.channels != spec_from.channels && spec_from.channels != 1 && spec_to.channels != 1)
 			|| spec_to.channels == 0
 			|| spec_from.channels == 0){
 		fprintf(stderr, "Multi-channel specification size mismatch: %s.%s (%lu channels) - %s.%s (%lu channels)\n",
@@ -235,9 +235,9 @@ static int config_map(char* to_raw, char* from_raw){
 
 	//iterate, resolve globs and map
 	rv = 0;
-	for(n = 0; !rv && n < spec_from.channels; n++){
-		channel_from = config_glob_resolve(instance_from, &spec_from, n);
-		channel_to = config_glob_resolve(instance_to, &spec_to, n);
+	for(n = 0; !rv && n < max(spec_from.channels, spec_to.channels); n++){
+		channel_from = config_glob_resolve(instance_from, &spec_from, min(n, spec_from.channels));
+		channel_to = config_glob_resolve(instance_to, &spec_to, min(n, spec_to.channels));
 		
 		if(!channel_from || !channel_to){
 			rv = 1;

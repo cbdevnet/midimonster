@@ -1,7 +1,7 @@
 MIDI NRPN
 Note source in channel value struct
 Optimize core channel search (store backend offset)
-Printing backend
+Printing backend / Verbose mode
 
 document example configs
 evdev relative axis size

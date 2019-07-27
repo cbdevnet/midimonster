@@ -499,7 +499,7 @@ static int osc_register_pattern(osc_instance_data* data, char* pattern_path, cha
 
 static int osc_configure_instance(instance* inst, char* option, char* value){
 	osc_instance_data* data = (osc_instance_data*) inst->impl;
-	char* host = NULL, *port = NULL, *token = NULL;
+	char* host = NULL, *port = NULL;
 
 	if(!strcmp(option, "root")){
 		if(osc_path_validate(value, 0)){
@@ -708,7 +708,7 @@ static int osc_output_channel(instance* inst, size_t channel){
 
 static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t evt = 0, mark = 0;
-	int rv;
+	int rv = 0;
 	osc_channel_ident ident = {
 		.label = 0
 	};

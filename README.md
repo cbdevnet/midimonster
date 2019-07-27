@@ -7,8 +7,8 @@ Currently, the MIDIMonster supports the following protocols:
 
 * MIDI (Linux, via ALSA)
 * ArtNet
-* sACN / E1.31
-* OSC
+* Streaming ACN (sACN / E1.31)
+* OpenSoundControl (OSC)
 * evdev input devices (Linux)
 * Open Lighting Architecture (OLA)
 

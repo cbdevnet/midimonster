@@ -34,22 +34,33 @@ typedef union {
 typedef struct /*_osc_channel*/ {
 	char* path;
 	size_t params;
-	size_t param_index;
 	uint8_t mark;
 
-	osc_parameter_type type;
-	osc_parameter_value max;
-	osc_parameter_value min;
-	osc_parameter_value current;
+	osc_parameter_type* type;
+	osc_parameter_value* max;
+	osc_parameter_value* min;
+	osc_parameter_value* in;
+	osc_parameter_value* out;
 } osc_channel;
 
 typedef struct /*_osc_instance_data*/ {
+	//pre-configured channel patterns
+	size_t patterns;
+	osc_channel* pattern;
+
+	//actual channel registry
 	size_t channels;
 	osc_channel* channel;
+
+	//instance config
 	char* root;
+	uint8_t learn;
+
+	//peer addressing
 	socklen_t dest_len;
 	struct sockaddr_storage dest;
-	int fd;
-	uint8_t learn;
 	uint16_t forced_rport;
+
+	//peer fd
+	int fd;
 } osc_instance_data;

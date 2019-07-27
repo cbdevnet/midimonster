@@ -6,8 +6,8 @@ BACKEND_LIB = libmmbackend.o
 
 SYSTEM := $(shell uname -s)
 
-CFLAGS += -fPIC -I../
-CPPFLAGS += -fPIC -I../
+CFLAGS += -g -fPIC -I../
+CPPFLAGS += -g -fPIC -I../
 LDFLAGS += -shared
 
 # Build Linux backends if possible

@@ -23,13 +23,21 @@ it are ignored early in processing.
 Channels that are to be output or require a value range different from the default ranges (see below)
 require special configuration, as their types and limits have to be set.
 
-This is done in the instance configuration using an assignment of the syntax
+This is done by specifying *patterns* in the instance configuration using an assignment of the syntax
 
 ```
 /local/osc/path = <format> <min> <max> <min> <max> ...
 ```
 
-The OSC path to be configured must only be the local part (omitting a configured instance root).
+The pattern will be matched only against the local part (that is, the path excluding any configured instance root).
+Patterns may contain the following expressions (conforming to the [OSC pattern matching specification](http://opensoundcontrol.org/spec-1_0)):
+* `?` matches any single legal character
+* `*` matches zero or more legal characters
+* A comma-separated list of strings inside curly braces `{}` matches any of the strings
+* A string of characters within square brackets `[]` matches any character in the string
+	* Two characters with a `-` between them specify a range of characters
+	* An exclamation mark immediately after the opening `[` negates the meaning of the expression (ie. it matches characters not in the range)
+* Any other legal character matches only itself
 
 **format** may be any sequence of valid OSC type characters. See below for a table of supported
 OSC types.
@@ -42,6 +50,12 @@ a range between 0.0 and 2.0 (for example, an X-Y control), would look as follows
 
 ```
 /1/xy1 = ff 0.0 2.0 0.0 2.0
+```
+
+To configure a range of faders, an expression similar to the following line could be used
+
+```
+/1/fader* = f 0.0 1.0
 ```
 
 #### Channel specification
@@ -79,5 +93,8 @@ The default ranges are:
 * **d**: `0.0` to `1.0`
 
 #### Known bugs / problems
+
+The OSC path match currently works on the unit of characters. This may lead to some unexpected results
+when matching expressions of the form `*<expr>`.
 
 Ping requests are not yet answered. There may be some problems using broadcast output and input.

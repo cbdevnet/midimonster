@@ -3,5 +3,4 @@ Note source in channel value struct
 Optimize core channel search (store backend offset)
 Printing backend / Verbose mode
 
-evdev relative axis size
 mm_managed_fd.impl is not freed currently

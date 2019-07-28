@@ -27,6 +27,12 @@ typedef union {
 	uint64_t label;
 } evdev_channel_ident;
 
+static struct {
+	uint8_t detect;
+} evdev_config = {
+	.detect = 0
+};
+
 int init(){
 	backend evdev = {
 		.name = BACKEND_NAME,
@@ -49,7 +55,15 @@ int init(){
 }
 
 static int evdev_configure(char* option, char* value) {
-	fprintf(stderr, "The evdev backend does not take any global configuration\n");
+	if(!strcmp(option, "detect")){
+		evdev_config.detect = 1;
+		if(!strcmp(value, "off")){
+			evdev_config.detect = 0;
+		}
+		return 0;
+	}
+
+	fprintf(stderr, "Unknown configuration option %s for evdev backend\n", option);
 	return 1;
 }
 
@@ -185,6 +199,22 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 		data->exclusive = 1;
 		return 0;
 	}
+	else if(!strncmp(option, "relaxis.", 8)){
+		data->relative_axis = realloc(data->relative_axis, (data->relative_axes + 1) * sizeof(evdev_relaxis_config));
+		if(!data->relative_axis){
+			fprintf(stderr, "Failed to allocate memory\n");
+			return 1;
+		}
+		data->relative_axis[data->relative_axes].code = libevdev_event_code_from_name(EV_REL, option + 8);
+		data->relative_axis[data->relative_axes].max = strtoul(value, &next_token, 0);
+		data->relative_axis[data->relative_axes].current = strtoul(next_token, NULL, 0);
+		if(data->relative_axis[data->relative_axes].code < 0){
+			fprintf(stderr, "Failed to configure relative axis extents for %s.%s\n", inst->name, option + 8);
+			return 1;
+		}
+		data->relative_axes++;
+		return 0;
+	}
 #ifndef EVDEV_NO_UINPUT
 	else if(!strcmp(option, "output")){
 		data->output_enabled = 1;
@@ -214,7 +244,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 		return 0;
 	}
 #endif
-	fprintf(stderr, "Unknown configuration parameter %s for evdev backend\n", option);
+	fprintf(stderr, "Unknown instance configuration parameter %s for evdev instance %s\n", option, inst->name);
 	return 1;
 }
 
@@ -275,21 +305,32 @@ static int evdev_push_event(instance* inst, evdev_instance_data* data, struct in
 		.fields.code = event.code
 	};
 	channel* chan = mm_channel(inst, ident.label, 0);
+	size_t axis;
 
 	if(chan){
 		val.raw.u64 = event.value;
 		switch(event.type){
 			case EV_REL:
-				val.normalised = 0.5 + ((event.value < 0) ? 0.5 : -0.5);
+				for(axis = 0; axis < data->relative_axes; axis++){
+					if(data->relative_axis[axis].code == event.code){
+						data->relative_axis[axis].current = clamp(data->relative_axis[axis].current + event.value, data->relative_axis[axis].max, 0);
+						val.normalised = (double) data->relative_axis[axis].current / (double) data->relative_axis[axis].max;
+						break;
+					}
+				}
+				if(axis == data->relative_axes){
+					val.normalised = 0.5 + ((event.value < 0) ? 0.5 : -0.5);
+					break;
+				}
 				break;
 			case EV_ABS:
 				range = libevdev_get_abs_maximum(data->input_ev, event.code) - libevdev_get_abs_minimum(data->input_ev, event.code);
-				val.normalised = (event.value - libevdev_get_abs_minimum(data->input_ev, event.code)) / (double) range;
+				val.normalised = clamp((event.value - libevdev_get_abs_minimum(data->input_ev, event.code)) / (double) range, 1.0, 0.0);
 				break;
 			case EV_KEY:
 			case EV_SW:
 			default:
-				val.normalised = 1.0 * event.value;
+				val.normalised = clamp(1.0 * event.value, 1.0, 0.0);
 				break;
 		}
 
@@ -297,6 +338,10 @@ static int evdev_push_event(instance* inst, evdev_instance_data* data, struct in
 			fprintf(stderr, "Failed to push evdev channel event to core\n");
 			return 1;
 		}
+	}
+
+	if(evdev_config.detect){
+		fprintf(stderr, "Incoming evdev data for channel %s.%s.%s\n", inst->name, libevdev_event_type_get_name(event.type), libevdev_event_code_get_name(event.type, event.code));
 	}
 
 	return 0;
@@ -470,6 +515,8 @@ static int evdev_shutdown(){
 
 		libevdev_free(data->output_proto);
 #endif
+		data->relative_axes = 0;
+		free(data->relative_axis);
 		free(data);
 	}
 

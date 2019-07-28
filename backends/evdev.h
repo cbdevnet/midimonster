@@ -24,10 +24,18 @@ static int evdev_shutdown();
 	#define UINPUT_MAX_NAME_SIZE 512
 #endif
 
+typedef struct /*_evdev_relative_axis_config*/ {
+	int code;
+	int64_t max;
+	int64_t current;
+} evdev_relaxis_config;
+
 typedef struct /*_evdev_instance_model*/ {
 	int input_fd;
 	struct libevdev* input_ev;
 	int exclusive;
+	size_t relative_axes;
+	evdev_relaxis_config* relative_axis;
 
 	int output_enabled;
 #ifndef EVDEV_NO_UINPUT

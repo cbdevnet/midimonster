@@ -58,6 +58,9 @@ To configure a range of faders, an expression similar to the following line coul
 /1/fader* = f 0.0 1.0
 ```
 
+When matching channels against the patterns to use, the first matching pattern (in the order in which they have been configured) will be used
+as configuration for that channel.
+
 #### Channel specification
 
 A channel may be any valid OSC path, to which the instance root will be prepended if

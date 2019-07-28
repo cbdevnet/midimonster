@@ -53,9 +53,16 @@ int init(){
 }
 
 static uint32_t lua_interval(){
-	//FIXME Return delta for next timer here
+	size_t n = 0;
+	uint64_t next_timer = 1000;
+
 	if(timer_interval){
-		return timer_interval;
+		for(n = 0; n < timers; n++){
+			if(timer[n].interval && timer[n].interval - timer[n].delta < next_timer){
+				next_timer = timer[n].interval - timer[n].delta;
+			}
+		}
+		return next_timer;
 	}
 	return 1000;
 }

@@ -25,6 +25,7 @@ static int evdev_shutdown();
 #endif
 
 typedef struct /*_evdev_relative_axis_config*/ {
+	uint8_t inverted;
 	int code;
 	int64_t max;
 	int64_t current;

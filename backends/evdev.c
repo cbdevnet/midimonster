@@ -205,8 +205,13 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			fprintf(stderr, "Failed to allocate memory\n");
 			return 1;
 		}
+		data->relative_axis[data->relative_axes].inverted = 0;
 		data->relative_axis[data->relative_axes].code = libevdev_event_code_from_name(EV_REL, option + 8);
-		data->relative_axis[data->relative_axes].max = strtoul(value, &next_token, 0);
+		data->relative_axis[data->relative_axes].max = strtoll(value, &next_token, 0);
+		if(data->relative_axis[data->relative_axes].max < 0){
+			data->relative_axis[data->relative_axes].max *= -1;
+			data->relative_axis[data->relative_axes].inverted = 1;
+		}
 		data->relative_axis[data->relative_axes].current = strtoul(next_token, NULL, 0);
 		if(data->relative_axis[data->relative_axes].code < 0){
 			fprintf(stderr, "Failed to configure relative axis extents for %s.%s\n", inst->name, option + 8);
@@ -313,6 +318,9 @@ static int evdev_push_event(instance* inst, evdev_instance_data* data, struct in
 			case EV_REL:
 				for(axis = 0; axis < data->relative_axes; axis++){
 					if(data->relative_axis[axis].code == event.code){
+						if(data->relative_axis[axis].inverted){
+							event.value *= -1;
+						}
 						data->relative_axis[axis].current = clamp(data->relative_axis[axis].current + event.value, data->relative_axis[axis].max, 0);
 						val.normalised = (double) data->relative_axis[axis].current / (double) data->relative_axis[axis].max;
 						break;
@@ -372,6 +380,11 @@ static int evdev_handle(size_t num, managed_fd* fds){
 			read_flags = LIBEVDEV_READ_FLAG_NORMAL;
 			if(read_status == LIBEVDEV_READ_STATUS_SYNC){
 				read_flags = LIBEVDEV_READ_FLAG_SYNC;
+			}
+
+			//exclude synchronization events
+			if(ev.type == EV_SYN){
+				continue;
 			}
 
 			//handle event

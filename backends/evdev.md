@@ -38,11 +38,17 @@ If an axis is not used for output, this configuration can be omitted.
 For real devices, all of these parameters for every axis can be found by running `evtest` on the device.
 
 To use the input from relative axes in absolute-value based protocols, the backend needs a reference frame to
-convert the relative movements to absolute values.
+convert the relative movements to absolute values. To invert the mapping of the relative axis, specify the `max` value
+as a negative number, for example:
+
+```
+relaxis.REL_X = -1024 512
+```
 
 If relative axes are used without specifying their extents, the channel will generate normalized values
 of `0`, `0.5` and `1` for any input less than, equal to and greater than `0`, respectively. As for output, only
 the values `-1`, `0` and `1` are generated for the same interval.
+
 
 #### Channel specification
 

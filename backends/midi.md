@@ -7,6 +7,7 @@ The MIDI backend provides read-write access to the MIDI protocol via virtual por
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
 | `name`	| `MIDIMonster`		| none			| MIDI client name	|
+| `detect`      | `on`                  | `off`                 | Output channel specifications for any events coming in on configured instances to help with configuration. |
 
 #### Instance configuration
 

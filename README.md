@@ -23,7 +23,7 @@ on any other (or the same) supported protocol, for example to:
 * Dynamically route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua)) to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
-* Control lighting fixtures or DAWs using gamepad controllers ([Example configuration](configs/evdev.conf))
+* Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.conf))
 * Play games or type using MIDI controllers
 
 [![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)

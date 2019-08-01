@@ -31,6 +31,12 @@ enum /*_midi_channel_type*/ {
 	sysmsg
 };
 
+static struct {
+	uint8_t detect;
+} midi_config = {
+	.detect = 0
+};
+
 int init(){
 	backend midi = {
 		.name = BACKEND_NAME,
@@ -55,8 +61,8 @@ int init(){
 		return 1;
 	}
 
-	snd_seq_nonblock(sequencer, 1);		
-		
+	snd_seq_nonblock(sequencer, 1);
+
 	fprintf(stderr, "MIDI client ID is %d\n", snd_seq_client_id(sequencer));
 	return 0;
 }
@@ -66,6 +72,14 @@ static int midi_configure(char* option, char* value){
 		if(snd_seq_set_client_name(sequencer, value) < 0){
 			fprintf(stderr, "Failed to set MIDI client name to %s\n", value);
 			return 1;
+		}
+		return 0;
+	}
+
+	if(!strcmp(option, "detect")){
+		midi_config.detect = 1;
+		if(!strcmp(value, "off")){
+			midi_config.detect = 0;
 		}
 		return 0;
 	}
@@ -214,7 +228,7 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 		snd_seq_ev_set_source(&ev, data->port);
 		snd_seq_ev_set_subs(&ev);
 		snd_seq_ev_set_direct(&ev);
-		
+
 		switch(ident.fields.type){
 			case note:
 				snd_seq_ev_set_noteon(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
@@ -224,7 +238,6 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 				break;
 			case pressure:
 				snd_seq_ev_set_keypress(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
-
 				break;
 			case pitchbend:
 				snd_seq_ev_set_pitchbend(&ev, ident.fields.channel, (v[u].normalised * 16383.0) - 8192);
@@ -249,6 +262,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 	instance* inst = NULL;
 	channel* changed = NULL;
 	channel_value val;
+	char* event_type = NULL;
 	midi_channel_ident ident = {
 		.label = 0
 	};
@@ -258,6 +272,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 	}
 
 	while(snd_seq_event_input(sequencer, &ev) > 0){
+		event_type = NULL;
 		ident.label = 0;
 		switch(ev->type){
 			case SND_SEQ_EVENT_NOTEON:
@@ -267,22 +282,26 @@ static int midi_handle(size_t num, managed_fd* fds){
 				ident.fields.channel = ev->data.note.channel;
 				ident.fields.control = ev->data.note.note;
 				val.normalised = (double)ev->data.note.velocity / 127.0;
+				event_type = "note";
 				break;
 			case SND_SEQ_EVENT_KEYPRESS:
 				ident.fields.type = pressure;
 				ident.fields.channel = ev->data.note.channel;
 				ident.fields.control = ev->data.note.note;
 				val.normalised = (double)ev->data.note.velocity / 127.0;
+				event_type = "pressure";
 				break;
 			case SND_SEQ_EVENT_CHANPRESS:
 				ident.fields.type = aftertouch;
 				ident.fields.channel = ev->data.control.channel;
 				val.normalised = (double)ev->data.control.value / 127.0;
+				event_type = "aftertouch";
 				break;
 			case SND_SEQ_EVENT_PITCHBEND:
 				ident.fields.type = pitchbend;
 				ident.fields.channel = ev->data.control.channel;
 				val.normalised = ((double)ev->data.control.value + 8192) / 16383.0;
+				event_type = "pitch";
 				break;
 			case SND_SEQ_EVENT_CONTROLLER:
 				ident.fields.type = cc;
@@ -290,6 +309,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 				ident.fields.control = ev->data.control.param;
 				val.raw.u64 = ev->data.control.value;
 				val.normalised = (double)ev->data.control.value / 127.0;
+				event_type = "cc";
 				break;
 			case SND_SEQ_EVENT_CONTROL14:
 			case SND_SEQ_EVENT_NONREGPARAM:
@@ -316,6 +336,15 @@ static int midi_handle(size_t num, managed_fd* fds){
 			if(mm_channel_event(changed, val)){
 				free(ev);
 				return 1;
+			}
+		}
+
+		if(midi_config.detect && event_type){
+			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch){
+				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s\n", inst->name, ident.fields.channel, event_type);
+			}
+			else{
+				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s%d\n", inst->name, ident.fields.channel, event_type, ident.fields.control);
 			}
 		}
 	}
@@ -375,13 +404,13 @@ static int midi_start(){
 	}
 
 	//register all fds to core
-	nfds = snd_seq_poll_descriptors_count(sequencer, POLLIN | POLLOUT);	
+	nfds = snd_seq_poll_descriptors_count(sequencer, POLLIN | POLLOUT);
 	pfds = calloc(nfds, sizeof(struct pollfd));
 	if(!pfds){
 		fprintf(stderr, "Failed to allocate memory\n");
 		goto bail;
 	}
-	nfds = snd_seq_poll_descriptors(sequencer, pfds, nfds, POLLIN | POLLOUT);	
+	nfds = snd_seq_poll_descriptors(sequencer, pfds, nfds, POLLIN | POLLOUT);
 
 	fprintf(stderr, "MIDI backend registering %d descriptors to core\n", nfds);
 	for(p = 0; p < nfds; p++){

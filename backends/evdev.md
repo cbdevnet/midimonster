@@ -9,7 +9,7 @@ This functionality may require elevated privileges (such as special group member
 
 | Option        | Example value         | Default value         | Description           |
 |---------------|-----------------------|-----------------------|-----------------------|
-| `detect`      | `on`                  | `off`                 | Output the channel specification for all events coming in on configured instances to help with configuration. |
+| `detect`      | `on`                  | `off`                 | Output channel specifications for any events coming in on configured instances to help with configuration. |
 
 #### Instance configuration
 

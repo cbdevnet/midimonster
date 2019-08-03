@@ -1,14 +1,20 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#ifdef _WIN32
+#include <ws2tcpip.h>
+//#define close closesocket
+#else
 #include <sys/socket.h>
 #include <netdb.h>
+#endif
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "../portability.h"
 
 /* Parse spec as host specification in the form
  *	host port

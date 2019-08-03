@@ -1,11 +1,20 @@
 #include <stdio.h>
 #include <string.h>
-#include <dlfcn.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include "portability.h"
+#ifdef _WIN32
+#define dlclose FreeLibrary
+#define dlsym GetProcAddress
+#define dlerror() "Failed"
+#define dlopen(lib,ig) LoadLibrary(lib)
+#else
+#include <dlfcn.h>
+#endif
+
 #include "plugin.h"
 
 static size_t plugins = 0;
@@ -14,19 +23,29 @@ static void** plugin_handle = NULL;
 static int plugin_attach(char* path, char* file){
 	plugin_init init = NULL;
 	void* handle = NULL;
+	char* lib = NULL;
+	char* error = NULL;
 
-	char* lib = calloc(strlen(path) + strlen(file) + 1, sizeof(char));
+	lib = calloc(strlen(path) + strlen(file) + 1, sizeof(char));
 	if(!lib){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return 1;
 	}
-
 	snprintf(lib, strlen(path) + strlen(file) + 1, "%s%s", path, file);
 
 	handle = dlopen(lib, RTLD_NOW);
 	if(!handle){
-		fprintf(stderr, "Failed to load plugin %s: %s\n", lib, dlerror());
+		#ifdef _WIN32
+		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
+		#else
+		error = dlerror();
+		#endif
+		fprintf(stderr, "Failed to load plugin %s: %s\n", lib, error);
 		free(lib);
+		#ifdef _WIN32
+		LocalFree(error);
+		#endif
 		return 0;
 	}
 
@@ -62,6 +81,38 @@ static int plugin_attach(char* path, char* file){
 int plugins_load(char* path){
 	int rv = -1;
 
+#ifdef _WIN32
+	char* search_expression = calloc(strlen(path) + strlen("*.dll") + 1, sizeof(char));
+	if(!search_expression){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return -1;
+	}
+	snprintf(search_expression, strlen(path) + strlen("*.dll"), "%s*.dll", path);
+
+	WIN32_FIND_DATA result;
+	HANDLE hSearch = FindFirstFile(search_expression, &result);
+
+	if(hSearch == INVALID_HANDLE_VALUE){
+		LPVOID lpMsgBuf = NULL;
+		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &lpMsgBuf, 0, NULL);
+		fprintf(stderr, "Failed to search for backend plugin files in %s: %s\n", path, lpMsgBuf);
+		LocalFree(lpMsgBuf);
+		return -1;
+	}
+
+	do {
+		if(plugin_attach(path, result.cFileName)){
+			goto load_done;
+		}
+	} while(FindNextFile(hSearch, &result));
+
+	rv = 0;
+load_done:
+	free(search_expression);
+	FindClose(hSearch);
+	return rv;
+#else
 	struct dirent* entry;
 	struct stat file_stat;
 	DIR* directory = opendir(path);
@@ -100,6 +151,7 @@ load_done:
 		return -1;
 	}
 	return rv;
+#endif
 }
 
 int plugins_close(){

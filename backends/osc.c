@@ -1,8 +1,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
-#include "libmmbackend.h"
 
+#include "libmmbackend.h"
 #include "osc.h"
 
 /*
@@ -480,14 +480,14 @@ static int osc_register_pattern(osc_instance_data* data, char* pattern_path, cha
 		//parse min/max values
 		token = strtok(NULL, " ");
 		if(!token){
-			fprintf(stderr, "Missing minimum specification for parameter %zu of OSC pattern %s\n", u, pattern_path);
+			fprintf(stderr, "Missing minimum specification for parameter %lu of OSC pattern %s\n", u, pattern_path);
 			return 1;
 		}
 		data->pattern[pattern].min[u] = osc_parse_value_spec(format[u], token);
 
 		token = strtok(NULL, " ");
 		if(!token){
-			fprintf(stderr, "Missing maximum specification for parameter %zu of OSC pattern %s\n", u, pattern_path);
+			fprintf(stderr, "Missing maximum specification for parameter %lu of OSC pattern %s\n", u, pattern_path);
 			return 1;
 		}
 		data->pattern[pattern].max[u] = osc_parse_value_spec(format[u], token);
@@ -689,7 +689,7 @@ static int osc_output_channel(instance* inst, size_t channel){
 
 		//write data
 		if(offset + osc_data_length(data->channel[channel].type[p]) >= sizeof(xmit_buf)){
-			fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s at parameter %zu\n", inst->name, data->channel[channel].path, p);
+			fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s at parameter %lu\n", inst->name, data->channel[channel].path, p);
 			return 1;
 		}
 
@@ -720,7 +720,7 @@ static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	if(!data->dest_len){
-		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%zu channels)\n", inst->name, num);
+		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%lu channels)\n", inst->name, num);
 		return 0;
 	}
 
@@ -778,7 +778,7 @@ static int osc_process_packet(instance* inst, char* local_path, char* format, ui
 	channel* chan = NULL;
 
 	if(payload_len % 4){
-		fprintf(stderr, "Invalid OSC packet, data length %zu\n", payload_len);
+		fprintf(stderr, "Invalid OSC packet, data length %lu\n", payload_len);
 		return 0;
 	}
 
@@ -877,7 +877,11 @@ static int osc_handle(size_t num, managed_fd* fds){
 			}
 		} while(bytes_read > 0);
 
+		#ifdef _WIN32
+		if(bytes_read < 0 && WSAGetLastError() != WSAEWOULDBLOCK){
+		#else
 		if(bytes_read < 0 && errno != EAGAIN){
+		#endif
 			fprintf(stderr, "OSC failed to receive data for instance %s: %s\n", inst->name, strerror(errno));
 		}
 
@@ -924,7 +928,7 @@ static int osc_start(){
 		}
 	}
 
-	fprintf(stderr, "OSC backend registered %zu descriptors to core\n", fds);
+	fprintf(stderr, "OSC backend registered %lu descriptors to core\n", fds);
 
 	free(inst);
 	return 0;

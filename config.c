@@ -20,6 +20,62 @@ typedef enum {
 static backend* current_backend = NULL;
 static instance* current_instance = NULL;
 
+#ifdef _WIN32
+#define GETLINE_BUFFER 4096
+
+static ssize_t getline(char** line, size_t* alloc, FILE* stream){
+	size_t bytes_read = 0;
+	char c;
+	//sanity checks
+	if(!line || !alloc || !stream){
+		return -1;
+	}
+
+	//allocate buffer if none provided
+	if(!*line || !*alloc){
+		*alloc = GETLINE_BUFFER;
+		*line = calloc(GETLINE_BUFFER, sizeof(char));
+		if(!*line){
+			fprintf(stderr, "Failed to allocate memory\n");
+			return -1;
+		}
+	}
+
+	if(feof(stream)){
+		return -1;
+	}
+
+	for(c = fgetc(stream); 1; c = fgetc(stream)){
+		//end of buffer, resize
+		if(bytes_read == (*alloc) - 1){
+			*alloc += GETLINE_BUFFER;
+			*line = realloc(*line, (*alloc) * sizeof(char));
+			if(!*line){
+				fprintf(stderr, "Failed to allocate memory\n");
+				return -1;
+			}
+		}
+
+		//store character
+		(*line)[bytes_read] = c;
+
+		//end of line
+		if(feof(stream) || c == '\n'){
+			//terminate string
+			(*line)[bytes_read + 1] = 0;
+			return bytes_read;
+		}
+
+		//input broken
+		if(ferror(stream) || c < 0){
+			return -1;
+		}
+
+		bytes_read++;
+	}
+}
+#endif
+
 static char* config_trim_line(char* in){
 	ssize_t n;
 	//trim front

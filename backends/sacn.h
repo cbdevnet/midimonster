@@ -1,4 +1,3 @@
-#include <sys/socket.h>
 #include "midimonster.h"
 
 int init();

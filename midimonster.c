@@ -1,9 +1,14 @@
 #include <string.h>
 #include <signal.h>
-#include <sys/select.h>
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#ifndef _WIN32
+#include <sys/select.h>
+#define MM_API __attribute__((visibility("default")))
+#else
+#define MM_API __attribute__((dllexport))
+#endif
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
@@ -35,11 +40,14 @@ static void signal_handler(int signum){
 	shutdown_requested = 1;
 }
 
-uint64_t mm_timestamp(){
+uint64_t MM_API mm_timestamp(){
 	return global_timestamp;
 }
 
 static void update_timestamp(){
+	#ifdef _WIN32
+	global_timestamp = GetTickCount();
+	#else
 	struct timespec current;
 	if(clock_gettime(CLOCK_MONOTONIC_COARSE, &current)){
 		fprintf(stderr, "Failed to update global timestamp, time-based processing for some backends may be impaired: %s\n", strerror(errno));
@@ -47,6 +55,7 @@ static void update_timestamp(){
 	}
 
 	global_timestamp = current.tv_sec * 1000 + current.tv_nsec / 1000000;
+	#endif
 }
 
 int mm_map_channel(channel* from, channel* to){
@@ -99,7 +108,7 @@ void map_free(){
 	map = NULL;
 }
 
-int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
+int MM_API mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	backend* b = backend_match(back);
 	size_t u;
 
@@ -163,7 +172,7 @@ void fds_free(){
 	fd = NULL;
 }
 
-int mm_channel_event(channel* c, channel_value v){
+int MM_API mm_channel_event(channel* c, channel_value v){
 	size_t u, p;
 
 	//find mapped channels
@@ -229,7 +238,7 @@ static fd_set fds_collect(int* max_fd){
 		*max_fd = -1;
 	}
 
-	DBGPF("Building selector set from %zu FDs registered to core\n", fds);
+	DBGPF("Building selector set from %lu FDs registered to core\n", fds);
 	FD_ZERO(&rv_fds);
 	for(u = 0; u < fds; u++){
 		if(fd[u].fd >= 0){
@@ -243,6 +252,17 @@ static fd_set fds_collect(int* max_fd){
 	return rv_fds;
 }
 
+int platform_initialize(){
+#ifdef _WIN32
+	WSADATA wsa;
+	WORD version = MAKEWORD(2, 2);
+	if(WSAStartup(version, &wsa)){
+		return 1;
+	}
+#endif
+	return 0;
+}
+
 int main(int argc, char** argv){
 	fd_set all_fds, read_fds;
 	event_collection* secondary = NULL;
@@ -253,6 +273,11 @@ int main(int argc, char** argv){
 	char* cfg_file = DEFAULT_CFG;
 	if(argc > 1){
 		cfg_file = argv[1];
+	}
+
+	if(platform_initialize()){
+		fprintf(stderr, "Failed to perform platform-specific initialization\n");
+		return EXIT_FAILURE;
 	}
 
 	FD_ZERO(&all_fds);
@@ -316,14 +341,14 @@ int main(int argc, char** argv){
 		update_timestamp();
 
 		//run backend processing, collect events
-		DBGPF("%zu backend FDs signaled\n", n);
+		DBGPF("%lu backend FDs signaled\n", n);
 		if(backends_handle(n, signaled_fds)){
 			goto bail;
 		}
 
 		while(primary->n){
 			//swap primary and secondary event collectors
-			DBGPF("Swapping event collectors, %zu events in primary\n", primary->n);
+			DBGPF("Swapping event collectors, %lu events in primary\n", primary->n);
 			for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
 				if(primary != event_pool + u){
 					secondary = primary;

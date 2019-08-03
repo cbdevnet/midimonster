@@ -1,16 +1,18 @@
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <ctype.h>
+#ifndef _WIN32
+#include <netdb.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#endif
 
 #include "libmmbackend.h"
-
 #include "sacn.h"
+
 //upper limit imposed by using the fd index as 16-bit part of the instance id
 #define MAX_FDS 4096
 #define BACKEND_NAME "sacn"
@@ -71,7 +73,7 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 		return -1;
 	}
 
-	fprintf(stderr, "sACN backend interface %zu bound to %s port %s\n", global_cfg.fds, host, port);
+	fprintf(stderr, "sACN backend interface %lu bound to %s port %s\n", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].flags = fd_flags;
 	global_cfg.fd[global_cfg.fds].universes = 0;
@@ -271,7 +273,7 @@ static int sacn_transmit(instance* inst){
 	memcpy(pdu.data.source_name, global_cfg.source_name, sizeof(pdu.data.source_name));
 	memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
 
-	if(sendto(global_cfg.fd[data->fd_index].fd, &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+	if(sendto(global_cfg.fd[data->fd_index].fd, (uint8_t*) &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
 		fprintf(stderr, "Failed to output sACN frame for instance %s: %s\n", inst->name, strerror(errno));
 	}
 
@@ -293,7 +295,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	}
 
 	if(!data->xmit_prio){
-		fprintf(stderr, "sACN instance %s not enabled for output (%zu channel events)\n", inst->name, num);
+		fprintf(stderr, "sACN instance %s not enabled for output (%lu channel events)\n", inst->name, num);
 		return 0;
 	}
 
@@ -378,7 +380,7 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 			}
 
 			if(!chan){
-				fprintf(stderr, "Active channel %zu on %s not known to core", u, inst->name);
+				fprintf(stderr, "Active channel %lu on %s not known to core", u, inst->name);
 				return 1;
 			}
 
@@ -445,8 +447,8 @@ static void sacn_discovery(size_t fd){
 		pdu.data.page = page;
 		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
-		if(sendto(global_cfg.fd[fd].fd, &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
-			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %zu: %s\n", fd, strerror(errno));
+		if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
+			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %lu: %s\n", fd, strerror(errno));
 		}
 	}
 }
@@ -512,7 +514,11 @@ static int sacn_handle(size_t num, managed_fd* fds){
 			}
 		} while(bytes_read > 0);
 
+		#ifdef _WIN32
+		if(bytes_read < 0 && WSAGetLastError() != WSAEWOULDBLOCK){
+		#else
 		if(bytes_read < 0 && errno != EAGAIN){
+		#endif
 			fprintf(stderr, "sACN failed to receive data: %s\n", strerror(errno));
 		}
 
@@ -577,7 +583,7 @@ static int sacn_start(){
 
 		if(!data->unicast_input){
 			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
-			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mcast_req, sizeof(mcast_req))){
+			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
 				fprintf(stderr, "Failed to join Multicast group for sACN universe %u on instance %s: %s\n", data->uni, inst[u]->name, strerror(errno));
 			}
 		}
@@ -604,7 +610,7 @@ static int sacn_start(){
 		}
 	}
 
-	fprintf(stderr, "sACN backend registering %zu descriptors to core\n", global_cfg.fds);
+	fprintf(stderr, "sACN backend registering %lu descriptors to core\n", global_cfg.fds);
 	for(u = 0; u < global_cfg.fds; u++){
 		//allocate memory for storing last frame transmission timestamp
 		global_cfg.fd[u].last_frame = calloc(global_cfg.fd[u].universes, sizeof(uint64_t));

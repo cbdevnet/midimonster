@@ -1,12 +1,13 @@
 .PHONY: all clean full
 OPTIONAL_BACKENDS = ola.so
+WINDOWS_BACKENDS = loopback.dll artnet.dll osc.dll sacn.dll
 LINUX_BACKENDS = midi.so evdev.so
 BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so
 BACKEND_LIB = libmmbackend.o
 
 SYSTEM := $(shell uname -s)
 
-CFLAGS += -g -fPIC -I../
+CFLAGS += -g -fPIC -I../ -Wall -Wpedantic
 CPPFLAGS += -g -fPIC -I../
 LDFLAGS += -shared
 
@@ -20,8 +21,17 @@ LDFLAGS += -undefined dynamic_lookup
 endif
 
 artnet.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+artnet.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
+artnet.dll: LDLIBS += -lws2_32
+
 osc.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+osc.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
+osc.dll: LDLIBS += -lws2_32
+
 sacn.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+sacn.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
+sacn.dll: LDLIBS += -lws2_32
+
 midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)
 evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
@@ -33,12 +43,24 @@ lua.so: LDLIBS += $(shell pkg-config --libs lua5.3)
 %.so :: %.c %.h $(BACKEND_LIB)
 	$(CC) $(CFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
 
+%.dll :: %.c %.h $(BACKEND_LIB)
+	$(CC) $(CFLAGS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
+
 %.so :: %.cpp %.h
 	$(CXX) $(CPPFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
 
 all: $(BACKEND_LIB) $(BACKENDS)
 
+../libmmapi.a:
+	$(MAKE) -C ../ midimonster.exe
+
+windows: export CC = x86_64-w64-mingw32-gcc
+windows: LDLIBS += -lmmapi
+windows: LDFLAGS += -L../
+windows: CFLAGS += -Wno-format -Wno-pointer-sign
+windows: ../libmmapi.a $(BACKEND_LIB) $(WINDOWS_BACKENDS)
+
 full: $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS)
 
 clean:
-	$(RM) $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS)
+	$(RM) $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS) $(WINDOWS_BACKENDS)

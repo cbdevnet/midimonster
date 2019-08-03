@@ -161,8 +161,6 @@ static int lua_callback_output(lua_State* interpreter){
 
 static int lua_callback_interval(lua_State* interpreter){
 	size_t n = 0;
-	instance* inst = NULL;
-	lua_instance_data* data = NULL;
 	uint64_t interval = 0;
 	int reference = LUA_NOREF;
 
@@ -174,8 +172,6 @@ static int lua_callback_interval(lua_State* interpreter){
 	//get instance pointer from registry
 	lua_pushstring(interpreter, LUA_REGISTRY_KEY);
 	lua_gettable(interpreter, LUA_REGISTRYINDEX);
-	inst = (instance*) lua_touserdata(interpreter, -1);
-	data = (lua_instance_data*) inst->impl;
 
 	//fetch and round the interval
 	interval = luaL_checkinteger(interpreter, 2);

@@ -4,6 +4,21 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#ifndef MM_API
+	#ifdef _WIN32
+		#define MM_API __attribute__((dllimport))
+	#else
+		#define MM_API
+	#endif
+#endif
+
+/* GCC ignores the visibility attributes on some API functions, so override visibility */
+#if !defined(_WIN32) && defined(__GNUC__) && !defined(__clang__)
+	#undef MM_API
+	#define MM_API
+	#pragma GCC visibility push(default)
+#endif
+
 /* Straight-forward min / max macros */
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #define min(a,b) (((a) < (b)) ? (a) : (b))
@@ -187,7 +202,7 @@ typedef struct /*_mm_channel_mapping*/ {
 /*
  * Register a new backend.
  */
-int mm_backend_register(backend b);
+int MM_API mm_backend_register(backend b);
 
 /*
  * Provides a pointer to a newly (zero-)allocated instance.
@@ -201,7 +216,8 @@ int mm_backend_register(backend b);
  * mmbackend_shutdown procedure of the backend, eg. by querying
  * all instances for the backend.
  */
-instance* mm_instance();
+instance* MM_API mm_instance();
+
 /*
  * Finds an instance matching the specified backend and identifier.
  * Since setting an identifier for an instance is optional,
@@ -209,7 +225,8 @@ instance* mm_instance();
  * Instance identifiers may for example be set in the backends
  * mmbackend_start call.
  */
-instance* mm_instance_find(char* backend, uint64_t ident);
+instance* MM_API mm_instance_find(char* backend, uint64_t ident);
+
 /*
  * Provides a pointer to a channel structure, pre-filled with
  * the provided instance reference and identifier.
@@ -224,30 +241,35 @@ instance* mm_instance_find(char* backend, uint64_t ident);
  * this function, the backend will receive a call to its channel_free
  * function.
  */
-channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
+channel* MM_API mm_channel(instance* i, uint64_t ident, uint8_t create);
 //TODO channel* mm_channel_find()
+
 /*
  * Register (manage = 1) or unregister (manage = 0) a file descriptor
  * to be selected on. The backend will be notified when the descriptor
  * becomes ready to read via its registered mmbackend_process_fd call.
  */
-int mm_manage_fd(int fd, char* backend, int manage, void* impl);
+int MM_API mm_manage_fd(int fd, char* backend, int manage, void* impl);
+
 /*
  * Notifies the core of a channel event. Called by backends to
  * inject events gathered from their backing implementation.
  */
-int mm_channel_event(channel* c, channel_value v);
+int MM_API mm_channel_event(channel* c, channel_value v);
+
 /*
  * Query all active instances for a given backend.
  * *i will need to be freed by the caller.
  */
-int mm_backend_instances(char* backend, size_t* n, instance*** i);
+int MM_API mm_backend_instances(char* backend, size_t* n, instance*** i);
+
 /*
  * Query an internal timestamp, which is updated every core iteration.
  * This timestamp should not be used as a performance counter, but can be
  * used for timeouting. Resolution is milliseconds.
  */
-uint64_t mm_timestamp();
+uint64_t MM_API mm_timestamp();
+
 /*
  * Create a channel-to-channel mapping. This API should not
  * be used by backends. It is only exported for core modules.

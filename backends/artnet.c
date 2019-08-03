@@ -3,8 +3,8 @@
 #include <errno.h>
 
 #include "libmmbackend.h"
-
 #include "artnet.h"
+
 #define MAX_FDS 255
 #define BACKEND_NAME "artnet"
 
@@ -32,7 +32,7 @@ static int artnet_listener(char* host, char* port){
 		return -1;
 	}
 
-	fprintf(stderr, "ArtNet backend interface %zu bound to %s port %s\n", artnet_fds, host, port);
+	fprintf(stderr, "ArtNet backend interface %lu bound to %s port %s\n", artnet_fds, host, port);
 	artnet_fd[artnet_fds].fd = fd;
 	artnet_fd[artnet_fds].output_instances = 0;
 	artnet_fd[artnet_fds].output_instance = NULL;
@@ -212,7 +212,7 @@ static int artnet_transmit(instance* inst){
 	};
 	memcpy(frame.data, data->data.out, 512);
 
-	if(sendto(artnet_fd[data->fd_index].fd, &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+	if(sendto(artnet_fd[data->fd_index].fd, (uint8_t*) &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
 		fprintf(stderr, "Failed to output ArtNet frame for instance %s: %s\n", inst->name, strerror(errno));
 	}
 
@@ -230,7 +230,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	if(!data->dest_len){
-		fprintf(stderr, "ArtNet instance %s not enabled for output (%zu channel events)\n", inst->name, num);
+		fprintf(stderr, "ArtNet instance %s not enabled for output (%lu channel events)\n", inst->name, num);
 		return 0;
 	}
 
@@ -295,7 +295,7 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 			}
 
 			if(!chan){
-				fprintf(stderr, "Active channel %zu on %s not known to core\n", p, inst->name);
+				fprintf(stderr, "Active channel %lu on %s not known to core\n", p, inst->name);
 				return 1;
 			}
 
@@ -367,7 +367,11 @@ static int artnet_handle(size_t num, managed_fd* fds){
 			}
 		} while(bytes_read > 0);
 
+		#ifdef _WIN32
+		if(bytes_read < 0 && WSAGetLastError() != WSAEWOULDBLOCK){
+		#else
 		if(bytes_read < 0 && errno != EAGAIN){
+		#endif
 			fprintf(stderr, "ArtNet failed to receive data: %s\n", strerror(errno));
 		}
 
@@ -438,7 +442,7 @@ static int artnet_start(){
 		}
 	}
 
-	fprintf(stderr, "ArtNet backend registering %zu descriptors to core\n", artnet_fds);
+	fprintf(stderr, "ArtNet backend registering %lu descriptors to core\n", artnet_fds);
 	for(u = 0; u < artnet_fds; u++){
 		if(mm_manage_fd(artnet_fd[u].fd, BACKEND_NAME, 1, (void*) u)){
 			goto bail;

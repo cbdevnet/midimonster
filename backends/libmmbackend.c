@@ -53,7 +53,7 @@ int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* ad
 }
 
 int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener){
-	int fd = -1, status, yes = 1, flags;
+	int fd = -1, status, yes = 1;
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = socktype,
@@ -106,12 +106,20 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener){
 	}
 
 	//set nonblocking
-	flags = fcntl(fd, F_GETFL, 0);
+	#ifdef _WIN32
+		u_long mode = 1;
+		if(ioctlsocket(fd, FIONBIO, &mode) != NO_ERROR){
+			closesocket(fd);
+			return 1;
+		}
+	#else
+	int flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
 		fprintf(stderr, "Failed to set socket nonblocking\n");
 		close(fd);
 		return -1;
 	}
+	#endif
 
 	return fd;
 }

@@ -1,6 +1,8 @@
 #include "midimonster.h"
 #include <sys/types.h>
+#ifndef _WIN32
 #include <sys/socket.h>
+#endif
 
 #define OSC_RECV_BUF 8192
 #define OSC_XMIT_BUF 8192

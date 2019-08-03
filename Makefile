@@ -1,10 +1,14 @@
-.PHONY: all clean run sanitize backends full backends-full
+.PHONY: all clean run sanitize backends windows full backends-full
 OBJS = config.o backend.o plugin.o
 PLUGINDIR = "\"./backends/\""
+PLUGINDIR_W32 = "\"backends\\\\\""
 
 SYSTEM := $(shell uname -s)
 
-CFLAGS ?= -g -Wall
+CFLAGS ?= -g -Wall -Wpedantic
+# Hide all non-API symbols for export
+CFLAGS += -fvisibility=hidden
+
 #CFLAGS += -DDEBUG
 midimonster: LDLIBS = -ldl
 midimonster: CFLAGS += -DPLUGINS=$(PLUGINDIR)
@@ -21,6 +25,8 @@ all: midimonster backends
 
 full: midimonster backends-full
 
+windows: midimonster.exe
+
 backends:
 	$(MAKE) -C backends
 
@@ -31,8 +37,21 @@ backends-full:
 midimonster: midimonster.c portability.h $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
 
+midimonster.exe: export CC = x86_64-w64-mingw32-gcc
+#midimonster.exe: CFLAGS += -Wno-format
+midimonster.exe: CFLAGS += -DPLUGINS=$(PLUGINDIR_W32) -Wno-format
+midimonster.exe: LDLIBS = -lws2_32
+midimonster.exe: LDFLAGS += -Wl,--out-implib,libmmapi.a
+midimonster.exe: midimonster.c portability.h $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
+	# The windows build for backends requires the import library generated with the build,
+	# so the backends can't be a prerequisite for the executable...
+	$(MAKE) -C backends windows
+
 clean:
 	$(RM) midimonster
+	$(RM) midimonster.exe
+	$(RM) libmmapi.a
 	$(RM) $(OBJS)
 	$(MAKE) -C backends clean
 

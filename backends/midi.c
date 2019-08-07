@@ -14,12 +14,6 @@ typedef union {
 	uint64_t label;
 } midi_channel_ident;
 
-/*
- * TODO
- * 	Optionally send note-off messages
- * 	Optionally send updates as after-touch
- */
-
 enum /*_midi_channel_type*/ {
 	none = 0,
 	note,

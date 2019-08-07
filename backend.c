@@ -71,7 +71,7 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 	return 0;
 }
 
-channel* MM_API mm_channel(instance* inst, uint64_t ident, uint8_t create){
+MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
 		if(channels[u]->instance == inst && channels[u]->ident == ident){
@@ -105,7 +105,7 @@ channel* MM_API mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	return channels[nchannels++];
 }
 
-instance* MM_API mm_instance(){
+MM_API instance* mm_instance(){
 	instance** new_inst = realloc(instances, (ninstances + 1) * sizeof(instance*));
 	if(!new_inst){
 		//TODO free
@@ -123,7 +123,7 @@ instance* MM_API mm_instance(){
 	return instances[ninstances++];
 }
 
-instance* MM_API mm_instance_find(char* name, uint64_t ident){
+MM_API instance* mm_instance_find(char* name, uint64_t ident){
 	size_t u;
 	backend* b = backend_match(name);
 	if(!b){
@@ -139,7 +139,7 @@ instance* MM_API mm_instance_find(char* name, uint64_t ident){
 	return NULL;
 }
 
-int MM_API mm_backend_instances(char* name, size_t* ninst, instance*** inst){
+MM_API int mm_backend_instances(char* name, size_t* ninst, instance*** inst){
 	backend* b = backend_match(name);
 	size_t n = 0, u;
 	//count number of affected instances
@@ -237,7 +237,7 @@ struct timeval backend_timeout(){
 	return tv;
 }
 
-int MM_API mm_backend_register(backend b){
+MM_API int mm_backend_register(backend b){
 	if(!backend_match(b.name)){
 		backends = realloc(backends, (nbackends + 1) * sizeof(backend));
 		if(!backends){

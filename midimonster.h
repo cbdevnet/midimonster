@@ -12,13 +12,6 @@
 	#endif
 #endif
 
-/* GCC ignores the visibility attributes on some API functions, so override visibility */
-#if !defined(_WIN32) && defined(__GNUC__) && !defined(__clang__)
-	#undef MM_API
-	#define MM_API
-	#pragma GCC visibility push(default)
-#endif
-
 /* Straight-forward min / max macros */
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #define min(a,b) (((a) < (b)) ? (a) : (b))
@@ -202,7 +195,7 @@ typedef struct /*_mm_channel_mapping*/ {
 /*
  * Register a new backend.
  */
-int MM_API mm_backend_register(backend b);
+MM_API int mm_backend_register(backend b);
 
 /*
  * Provides a pointer to a newly (zero-)allocated instance.
@@ -216,7 +209,7 @@ int MM_API mm_backend_register(backend b);
  * mmbackend_shutdown procedure of the backend, eg. by querying
  * all instances for the backend.
  */
-instance* MM_API mm_instance();
+MM_API instance* mm_instance();
 
 /*
  * Finds an instance matching the specified backend and identifier.
@@ -225,7 +218,7 @@ instance* MM_API mm_instance();
  * Instance identifiers may for example be set in the backends
  * mmbackend_start call.
  */
-instance* MM_API mm_instance_find(char* backend, uint64_t ident);
+MM_API instance* mm_instance_find(char* backend, uint64_t ident);
 
 /*
  * Provides a pointer to a channel structure, pre-filled with
@@ -241,7 +234,7 @@ instance* MM_API mm_instance_find(char* backend, uint64_t ident);
  * this function, the backend will receive a call to its channel_free
  * function.
  */
-channel* MM_API mm_channel(instance* i, uint64_t ident, uint8_t create);
+MM_API channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
 //TODO channel* mm_channel_find()
 
 /*
@@ -249,26 +242,26 @@ channel* MM_API mm_channel(instance* i, uint64_t ident, uint8_t create);
  * to be selected on. The backend will be notified when the descriptor
  * becomes ready to read via its registered mmbackend_process_fd call.
  */
-int MM_API mm_manage_fd(int fd, char* backend, int manage, void* impl);
+MM_API int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 
 /*
  * Notifies the core of a channel event. Called by backends to
  * inject events gathered from their backing implementation.
  */
-int MM_API mm_channel_event(channel* c, channel_value v);
+MM_API int mm_channel_event(channel* c, channel_value v);
 
 /*
  * Query all active instances for a given backend.
  * *i will need to be freed by the caller.
  */
-int MM_API mm_backend_instances(char* backend, size_t* n, instance*** i);
+MM_API int mm_backend_instances(char* backend, size_t* n, instance*** i);
 
 /*
  * Query an internal timestamp, which is updated every core iteration.
  * This timestamp should not be used as a performance counter, but can be
  * used for timeouting. Resolution is milliseconds.
  */
-uint64_t MM_API mm_timestamp();
+MM_API uint64_t mm_timestamp();
 
 /*
  * Create a channel-to-channel mapping. This API should not

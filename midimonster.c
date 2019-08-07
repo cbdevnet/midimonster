@@ -40,7 +40,7 @@ static void signal_handler(int signum){
 	shutdown_requested = 1;
 }
 
-uint64_t MM_API mm_timestamp(){
+MM_API uint64_t mm_timestamp(){
 	return global_timestamp;
 }
 
@@ -98,7 +98,7 @@ int mm_map_channel(channel* from, channel* to){
 	return 0;
 }
 
-void map_free(){
+static void map_free(){
 	size_t u;
 	for(u = 0; u < mappings; u++){
 		free(map[u].to);
@@ -108,7 +108,7 @@ void map_free(){
 	map = NULL;
 }
 
-int MM_API mm_manage_fd(int new_fd, char* back, int manage, void* impl){
+MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	backend* b = backend_match(back);
 	size_t u;
 
@@ -158,7 +158,7 @@ int MM_API mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	return 0;
 }
 
-void fds_free(){
+static void fds_free(){
 	size_t u;
 	for(u = 0; u < fds; u++){
 		//TODO free impl
@@ -172,7 +172,7 @@ void fds_free(){
 	fd = NULL;
 }
 
-int MM_API mm_channel_event(channel* c, channel_value v){
+MM_API int mm_channel_event(channel* c, channel_value v){
 	size_t u, p;
 
 	//find mapped channels
@@ -213,7 +213,7 @@ int MM_API mm_channel_event(channel* c, channel_value v){
 	return 0;
 }
 
-void event_free(){
+static void event_free(){
 	size_t u;
 
 	for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
@@ -223,7 +223,7 @@ void event_free(){
 	}
 }
 
-int usage(char* fn){
+static int usage(char* fn){
 	fprintf(stderr, "MIDIMonster v0.1\n");
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "\t%s <configfile>\n", fn);
@@ -252,7 +252,7 @@ static fd_set fds_collect(int* max_fd){
 	return rv_fds;
 }
 
-int platform_initialize(){
+static int platform_initialize(){
 #ifdef _WIN32
 	WSADATA wsa;
 	WORD version = MAKEWORD(2, 2);

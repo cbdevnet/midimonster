@@ -1,8 +1,8 @@
 .PHONY: all clean full
-OPTIONAL_BACKENDS = ola.so
-WINDOWS_BACKENDS = loopback.dll artnet.dll osc.dll sacn.dll
 LINUX_BACKENDS = midi.so evdev.so
-BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so
+WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll
+BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so
+OPTIONAL_BACKENDS = ola.so
 BACKEND_LIB = libmmbackend.o
 
 SYSTEM := $(shell uname -s)
@@ -31,6 +31,10 @@ osc.dll: LDLIBS += -lws2_32
 sacn.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
 sacn.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 sacn.dll: LDLIBS += -lws2_32
+
+maweb.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+maweb.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
+maweb.dll: LDLIBS += -lws2_32
 
 midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)

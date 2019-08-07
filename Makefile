@@ -26,6 +26,7 @@ all: midimonster backends
 full: midimonster backends-full
 
 windows: midimonster.exe
+	$(MAKE) -C backends windows
 
 backends:
 	$(MAKE) -C backends
@@ -38,15 +39,11 @@ midimonster: midimonster.c portability.h $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
 
 midimonster.exe: export CC = x86_64-w64-mingw32-gcc
-#midimonster.exe: CFLAGS += -Wno-format
 midimonster.exe: CFLAGS += -DPLUGINS=$(PLUGINDIR_W32) -Wno-format
 midimonster.exe: LDLIBS = -lws2_32
 midimonster.exe: LDFLAGS += -Wl,--out-implib,libmmapi.a
 midimonster.exe: midimonster.c portability.h $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
-	# The windows build for backends requires the import library generated with the build,
-	# so the backends can't be a prerequisite for the executable...
-	$(MAKE) -C backends windows
 
 clean:
 	$(RM) midimonster

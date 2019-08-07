@@ -12,8 +12,8 @@ void instances_free();
 void channels_free();
 
 /* Backend API */
-channel* MM_API mm_channel(instance* inst, uint64_t ident, uint8_t create);
-instance* MM_API mm_instance();
-instance* MM_API mm_instance_find(char* name, uint64_t ident);
-int MM_API mm_backend_instances(char* name, size_t* ninst, instance*** inst);
-int MM_API mm_backend_register(backend b);
+MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create);
+MM_API instance* mm_instance();
+MM_API instance* mm_instance_find(char* name, uint64_t ident);
+MM_API int mm_backend_instances(char* name, size_t* ninst, instance*** inst);
+MM_API int mm_backend_register(backend b);

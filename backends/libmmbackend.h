@@ -16,7 +16,8 @@
 #include <fcntl.h>
 #include "../portability.h"
 
-/* Parse spec as host specification in the form
+/* 
+ * Parse spec as host specification in the form
  *	host port
  * into its constituent parts.
  * Returns offsets into the original string and modifies it.
@@ -25,13 +26,26 @@
  */
 void mmbackend_parse_hostspec(char* spec, char** host, char** port);
 
-/* Parse a given host / port combination into a sockaddr_storage
+/* 
+ * Parse a given host / port combination into a sockaddr_storage
  * suitable for usage with connect / sendto
  * Returns 0 on success
  */
 int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* addr, socklen_t* len);
 
-/* Create a socket of given type and mode for a bind / connect host.
+/* 
+ * Create a socket of given type and mode for a bind / connect host.
  * Returns -1 on failure, a valid file descriptor for the socket on success.
  */
-int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener);
+int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast);
+
+/*
+ * Send arbitrary data over multiple writes if necessary
+ * Returns 1 on failure, 0 on success.
+ */
+int mmbackend_send(int fd, uint8_t* data, size_t length);
+
+/*
+ * Wraps mmbackend_send for cstrings
+ */
+int mmbackend_send_str(int fd, char* data);

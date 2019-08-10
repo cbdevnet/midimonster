@@ -525,7 +525,7 @@ static int osc_configure_instance(instance* inst, char* option, char* value){
 			return 1;
 		}
 
-		data->fd = mmbackend_socket(host, port, SOCK_DGRAM, 1);
+		data->fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
 		if(data->fd < 0){
 			fprintf(stderr, "Failed to bind for instance %s\n", inst->name);
 			return 1;

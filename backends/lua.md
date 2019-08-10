@@ -37,7 +37,7 @@ Input values range between 0.0 and 1.0, output values are clamped to the same ra
 
 #### Global configuration
 
-The backend does not take any global configuration.
+The `lua` backend does not take any global configuration.
 
 #### Instance configuration
 

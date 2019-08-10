@@ -52,7 +52,7 @@ int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* ad
 	return 0;
 }
 
-int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener){
+int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast){
 	int fd = -1, status, yes = 1;
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
@@ -80,20 +80,31 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener){
 			fprintf(stderr, "Failed to enable SO_REUSEADDR on socket\n");
 		}
 
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to enable SO_BROADCAST on socket\n");
+		if(mcast){
+			yes = 1;
+			if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
+				fprintf(stderr, "Failed to enable SO_BROADCAST on socket\n");
+			}
+
+			yes = 0;
+			if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
+				fprintf(stderr, "Failed to disable IP_MULTICAST_LOOP on socket: %s\n", strerror(errno));
+			}
 		}
 
-		yes = 0;
-		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to disable IP_MULTICAST_LOOP on socket: %s\n", strerror(errno));
+		if(listener){
+			status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
+			if(status < 0){
+				close(fd);
+				continue;
+			}
 		}
-
-		status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
-		if(status < 0){
-			close(fd);
-			continue;
+		else{
+			status = connect(fd, addr_it->ai_addr, addr_it->ai_addrlen);
+			if(status < 0){
+				close(fd);
+				continue;
+			}
 		}
 
 		break;
@@ -107,11 +118,11 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener){
 
 	//set nonblocking
 	#ifdef _WIN32
-		u_long mode = 1;
-		if(ioctlsocket(fd, FIONBIO, &mode) != NO_ERROR){
-			closesocket(fd);
-			return 1;
-		}
+	u_long mode = 1;
+	if(ioctlsocket(fd, FIONBIO, &mode) != NO_ERROR){
+		closesocket(fd);
+		return 1;
+	}
 	#else
 	int flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
@@ -122,4 +133,21 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener){
 	#endif
 
 	return fd;
+}
+
+int mmbackend_send(int fd, uint8_t* data, size_t length){
+	ssize_t total = 0, sent;
+	while(total < length){
+		sent = send(fd, data + total, length - total, 0);
+		if(sent < 0){
+			fprintf(stderr, "Failed to send: %s\n", strerror(errno));
+			return 1;
+		}
+		total += sent;
+	}
+	return 0;
+}
+
+int mmbackend_send_str(int fd, char* data){
+	return mmbackend_send(fd, (uint8_t*) data, strlen(data));
 }

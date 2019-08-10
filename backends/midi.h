@@ -15,3 +15,13 @@ typedef struct /*_midi_instance_data*/ {
 	char* read;
 	char* write;
 } midi_instance_data;
+
+typedef union {
+	struct {
+		uint8_t pad[5];
+		uint8_t type;
+		uint8_t channel;
+		uint8_t control;
+	} fields;
+	uint64_t label;
+} midi_channel_ident;

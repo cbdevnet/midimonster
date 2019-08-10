@@ -13,14 +13,6 @@
 #define osc_align(a) ((((a) / 4) + (((a) % 4) ? 1 : 0)) * 4)
 #define BACKEND_NAME "osc"
 
-typedef union {
-	struct {
-		uint32_t channel;
-		uint32_t parameter;
-	} fields;
-	uint64_t label;
-} osc_channel_ident;
-
 static struct {
 	uint8_t detect;
 } osc_global_config = {
@@ -39,6 +31,11 @@ int init(){
 		.start = osc_start,
 		.shutdown = osc_shutdown
 	};
+
+	if(sizeof(osc_channel_ident) != sizeof(uint64_t)){
+		fprintf(stderr, "OSC channel identification union out of bounds\n");
+		return 1;
+	}
 
 	//register backend
 	if(mm_backend_register(osc)){

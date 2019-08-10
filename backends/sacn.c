@@ -44,6 +44,11 @@ int init(){
 		.shutdown = sacn_shutdown
 	};
 
+	if(sizeof(sacn_instance_id) != sizeof(uint64_t)){
+		fprintf(stderr, "sACN instance identification union out of bounds\n");
+		return 1;
+	}
+
 	//register the backend
 	if(mm_backend_register(sacn)){
 		fprintf(stderr, "Failed to register sACN backend\n");

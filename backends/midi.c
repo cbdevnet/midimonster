@@ -4,15 +4,6 @@
 
 #define BACKEND_NAME "midi"
 static snd_seq_t* sequencer = NULL;
-typedef union {
-	struct {
-		uint8_t pad[5];
-		uint8_t type;
-		uint8_t channel;
-		uint8_t control;
-	} fields;
-	uint64_t label;
-} midi_channel_ident;
 
 enum /*_midi_channel_type*/ {
 	none = 0,
@@ -43,6 +34,11 @@ int init(){
 		.start = midi_start,
 		.shutdown = midi_shutdown
 	};
+
+	if(sizeof(midi_channel_ident) != sizeof(uint64_t)){
+		fprintf(stderr, "MIDI channel identification union out of bounds\n");
+		return 1;
+	}
 
 	if(snd_seq_open(&sequencer, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
 		fprintf(stderr, "Failed to open ALSA sequencer\n");

@@ -54,6 +54,11 @@ int init(){
 		.shutdown = artnet_shutdown
 	};
 
+	if(sizeof(artnet_instance_id) != sizeof(uint64_t)){
+		fprintf(stderr, "ArtNet instance identification union out of bounds\n");
+		return 1;
+	}
+
 	//register backend
 	if(mm_backend_register(artnet)){
 		fprintf(stderr, "Failed to register ArtNet backend\n");

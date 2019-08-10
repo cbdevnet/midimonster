@@ -66,3 +66,11 @@ typedef struct /*_osc_instance_data*/ {
 	//peer fd
 	int fd;
 } osc_instance_data;
+
+typedef union {
+	struct {
+		uint32_t channel;
+		uint32_t parameter;
+	} fields;
+	uint64_t label;
+} osc_channel_ident;

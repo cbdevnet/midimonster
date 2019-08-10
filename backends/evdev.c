@@ -18,15 +18,6 @@
 
 #define BACKEND_NAME "evdev"
 
-typedef union {
-	struct {
-		uint32_t pad;
-		uint16_t type;
-		uint16_t code;
-	} fields;
-	uint64_t label;
-} evdev_channel_ident;
-
 static struct {
 	uint8_t detect;
 } evdev_config = {
@@ -45,6 +36,11 @@ int init(){
 		.start = evdev_start,
 		.shutdown = evdev_shutdown
 	};
+
+	if(sizeof(evdev_channel_ident) != sizeof(uint64_t)){
+		fprintf(stderr, "evdev channel identification union out of bounds\n");
+		return 1;
+	}
 
 	if(mm_backend_register(evdev)){
 		fprintf(stderr, "Failed to register evdev backend\n");

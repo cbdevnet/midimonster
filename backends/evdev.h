@@ -44,3 +44,12 @@ typedef struct /*_evdev_instance_model*/ {
 	struct libevdev_uinput* output_ev;
 #endif
 } evdev_instance_data;
+
+typedef union {
+	struct {
+		uint32_t pad;
+		uint16_t type;
+		uint16_t code;
+	} fields;
+	uint64_t label;
+} evdev_channel_ident;

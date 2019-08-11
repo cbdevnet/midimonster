@@ -33,8 +33,10 @@ sacn.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 sacn.dll: LDLIBS += -lws2_32
 
 maweb.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+maweb.so: LDLIBS = -lssl
 maweb.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 maweb.dll: LDLIBS += -lws2_32
+maweb.dll: CFLAGS += -DMAWEB_NO_LIBSSL
 
 midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)

@@ -137,6 +137,7 @@ support for the protocols to translate.
 * `liblua5.3-dev` (for the lua backend)
 * `libola-dev` (for the optional OLA backend)
 * `pkg-config` (as some projects and systems like to spread their files around)
+* `libssl-dev` (for the MA Web Remote backend)
 * A C compiler
 * GNUmake
 

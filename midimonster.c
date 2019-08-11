@@ -298,6 +298,9 @@ int main(int argc, char** argv){
 		plugins_close();
 		return usage(argv[0]);
 	}
+	
+	//load an initial timestamp
+	update_timestamp();
 
 	//start backends
 	if(backends_start()){

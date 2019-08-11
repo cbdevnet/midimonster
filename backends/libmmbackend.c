@@ -151,3 +151,220 @@ int mmbackend_send(int fd, uint8_t* data, size_t length){
 int mmbackend_send_str(int fd, char* data){
 	return mmbackend_send(fd, (uint8_t*) data, strlen(data));
 }
+
+json_type json_identify(char* json, size_t length){
+	size_t n;
+
+	//skip leading blanks
+	for(n = 0; json[n] && n < length && isspace(json[n]); n++){
+	}
+
+	if(n == length){
+		return JSON_INVALID;
+	}
+
+	switch(json[n]){
+		case '{':
+			return JSON_OBJECT;
+		case '[':
+			return JSON_ARRAY;
+		case '"':
+			return JSON_STRING;
+		case '-':
+		case '+':
+			return JSON_NUMBER;
+		default:
+			//true false null number
+			if(!strncmp(json + n, "true", 4)
+					|| !strncmp(json + n, "false", 5)){
+				return JSON_BOOL;
+			}
+			else if(!strncmp(json + n, "null", 4)){
+				return JSON_NULL;
+			}
+			//a bit simplistic but it should do
+			if(isdigit(json[n])){
+				return JSON_NUMBER;
+			}
+	}
+	return JSON_INVALID;
+}
+
+size_t json_validate(char* json, size_t length){
+	switch(json_identify(json, length)){
+		case JSON_STRING:
+			return json_validate_string(json, length);
+		case JSON_ARRAY:
+			return json_validate_array(json, length);
+		case JSON_OBJECT:
+			return json_validate_object(json, length);
+		case JSON_INVALID:
+			return 0;
+		default:
+			return json_validate_value(json, length);
+	}
+}
+
+size_t json_validate_string(char* json, size_t length){
+	size_t string_length = 0, offset;
+
+	for(offset = 0; json[offset] && offset < length && json[offset] != '"'; offset++){
+	}
+
+	if(offset == length){
+		return 0;
+	}
+
+	//find terminating quotation mark not preceded by escape
+	for(string_length = 1; offset + string_length < length
+			&& isprint(json[offset + string_length])
+			&& (json[offset + string_length] != '"' || json[offset + string_length - 1] == '\\'); string_length++){
+	}
+
+	//complete string found
+	if(json[offset + string_length] == '"' && json[offset + string_length - 1] != '\\'){
+		return offset + string_length + 1;
+	}
+
+	return 0;
+}
+
+size_t json_validate_array(char* json, size_t length){
+	//TODO
+	return 0;
+}
+
+size_t json_validate_object(char* json, size_t length){
+	//TODO
+	return 0;
+}
+
+size_t json_validate_value(char* json, size_t length){
+	//TODO
+	return 0;
+}
+
+size_t json_obj_offset(char* json, char* key){
+	size_t offset = 0;
+	uint8_t match = 0;
+
+	//skip whitespace
+	for(offset = 0; json[offset] && isspace(json[offset]); offset++){
+	}
+
+	if(json[offset] != '{'){
+		return 0;
+	}
+	offset++;
+
+	while(json_identify(json + offset, strlen(json + offset)) == JSON_STRING){
+		//skip to key begin
+		for(; json[offset] && json[offset] != '"'; offset++){
+		}
+
+		if(!strncmp(json + offset + 1, key, strlen(key)) && json[offset + 1 + strlen(key)] == '"'){
+			//key found
+			match = 1;
+		}
+
+		offset += json_validate_string(json + offset, strlen(json + offset));
+
+		//skip to value separator
+		for(; json[offset] && json[offset] != ':'; offset++){
+		}
+
+		//skip whitespace
+		for(offset++; json[offset] && isspace(json[offset]); offset++){
+		}
+
+		if(match){
+			return offset;
+		}
+
+		//add length of value
+		offset += json_validate(json + offset, strlen(json + offset));
+
+		//find comma or closing brace
+		for(; json[offset] && json[offset] != ',' && json[offset] != '}'; offset++){
+		}
+
+		if(json[offset] == ','){
+			offset++;
+		}
+	}
+
+	return 0;
+}
+
+json_type json_obj(char* json, char* key){
+	size_t offset = json_obj_offset(json, key);
+	if(offset){
+		return json_identify(json + offset, strlen(json + offset));
+	}
+	return JSON_INVALID;
+}
+
+uint8_t json_obj_bool(char* json, char* key, uint8_t fallback){
+	size_t offset = json_obj_offset(json, key);
+	if(offset){
+		if(!strncmp(json + offset, "true", 4)){
+			return 1;
+		}
+		if(!strncmp(json + offset, "false", 5)){
+			return 0;
+		}
+	}
+	return fallback;
+}
+
+int64_t json_obj_int(char* json, char* key, int64_t fallback){
+	char* next_token = NULL;
+	int64_t result;
+	size_t offset = json_obj_offset(json, key);
+	if(offset){
+		result = strtol(json + offset, &next_token, 10);
+		if(next_token != json + offset){
+			return result;
+		}
+	}
+	return fallback;
+}
+
+double json_obj_double(char* json, char* key, double fallback){
+	char* next_token = NULL;
+	int64_t result;
+	size_t offset = json_obj_offset(json, key);
+	if(offset){
+		result = strtod(json + offset, &next_token);
+		if(next_token != json + offset){
+			return result;
+		}
+	}
+	return fallback;
+}
+
+char* json_obj_str(char* json, char* key, size_t* length){
+	size_t offset = json_obj_offset(json, key), raw_length;
+	if(offset){
+		raw_length = json_validate_string(json + offset, strlen(json + offset));
+		if(length){
+			*length = raw_length - 2;
+		}
+		return json + offset + 1;
+	}
+	return NULL;
+}
+
+char* json_obj_strdup(char* json, char* key){
+	size_t offset = json_obj_offset(json, key), raw_length;
+	char* rv = NULL;
+	if(offset){
+		raw_length = json_validate_string(json + offset, strlen(json + offset));
+		rv = calloc(raw_length - 1, sizeof(char));
+		if(rv){
+			memcpy(rv, json + offset + 1, raw_length - 2);
+		}
+		return rv;
+	}
+	return NULL;
+}

@@ -16,6 +16,10 @@
 #include <fcntl.h>
 #include "../portability.h"
 
+/*** BACKEND IMPLEMENTATION LIBRARY ***/
+
+/** Networking functions **/
+
 /* 
  * Parse spec as host specification in the form
  *	host port
@@ -49,3 +53,74 @@ int mmbackend_send(int fd, uint8_t* data, size_t length);
  * Wraps mmbackend_send for cstrings
  */
 int mmbackend_send_str(int fd, char* data);
+
+
+/** JSON parsing **/
+
+typedef enum /*_json_types*/ {
+	JSON_INVALID = 0,
+	JSON_STRING,
+	JSON_ARRAY,
+	JSON_OBJECT,
+	JSON_NUMBER,
+	JSON_BOOL,
+	JSON_NULL
+} json_type;
+
+/* 
+ * Try to identify the type of JSON data next in the buffer
+ * Will access at most the next `length` bytes
+ */
+json_type json_identify(char* json, size_t length);
+
+/* 
+ * Validate that a buffer contains a valid JSON document/data within `length` bytes
+ * Returns the length of a detected JSON document, 0 otherwise (ie. parse failures)
+ */
+size_t json_validate(char* json, size_t length);
+
+size_t json_validate_string(char* json, size_t length);
+
+size_t json_validate_array(char* json, size_t length);
+
+size_t json_validate_object(char* json, size_t length);
+
+size_t json_validate_value(char* json, size_t length);
+
+/* 
+ * Calculate offset for value of `key`
+ * Assumes a zero-terminated, validated JSON object as input
+ * Returns offset on success, 0 on failure
+ */
+size_t json_obj_offset(char* json, char* key);
+
+/*
+ * Check for for a key within a JSON object
+ * Assumes a zero-terminated, validated JSON object as input
+ * Returns type of value
+ */
+json_type json_obj(char* json, char* key);
+
+//json_type json_array(char* json, size_t index)
+
+/*
+ * Fetch boolean value for an object key
+ * Assumes a zero-terminated, validated JSON object as input
+ */
+uint8_t json_obj_bool(char* json, char* key, uint8_t fallback);
+
+/*
+ * Fetch integer/double value for an object key
+ * Assumes a zero-terminated validated JSON object as input
+ */
+int64_t json_obj_int(char* json, char* key, int64_t fallback);
+double json_obj_double(char* json, char* key, double fallback);
+
+/* 
+ * Fetch a string value for an object key
+ * Assumes a zero-terminated validated JSON object as input
+ * json_obj_strdup returns a newly-allocated buffer containing
+ * only the requested value
+ */
+char* json_obj_str(char* json, char* key, size_t* length);
+char* json_obj_strdup(char* json, char* key);

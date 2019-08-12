@@ -218,10 +218,15 @@ static channel* maweb_channel(instance* inst, char* spec){
 			next_token += 5;
 		}
 		else if(!strncmp(next_token, "button", 6)){
-			ident.fields.type = exec_fader;
+			ident.fields.type = exec_button;
 			next_token += 6;
 		}
 		ident.fields.index = strtoul(next_token, NULL, 10);
+
+		//fix up the identifiers for button execs
+		if(ident.fields.index > 100){
+			ident.fields.index -= 100;
+		}
 	}
 	else{
 		for(n = 0; n < sizeof(cmdline_keys) / sizeof(char*); n++){
@@ -562,6 +567,26 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						"\"session\":%ld"
 						"}", ident.fields.index, ident.fields.page,
 						(exec_flash - ident.fields.type),
+						(v[n].normalised > 0.9) ? "true" : "false",
+						(v[n].normalised > 0.9) ? "false" : "true",
+						data->session);
+				fprintf(stderr, "maweb out %s\n", xmit_buffer);
+				maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
+				break;
+			case exec_button:
+				snprintf(xmit_buffer, sizeof(xmit_buffer),
+						"{\"requestType\":\"playbacks_userInput\","
+						//"\"cmdline\":\"\","
+						"\"execIndex\":%d,"
+						"\"pageIndex\":%d,"
+						"\"buttonId\":%d,"
+						"\"pressed\":%s,"
+						"\"released\":%s,"
+						"\"type\":0,"
+						"\"session\":%ld"
+						"}", ident.fields.index + 100,
+						ident.fields.page,
+						0,
 						(v[n].normalised > 0.9) ? "true" : "false",
 						(v[n].normalised > 0.9) ? "false" : "true",
 						data->session);

@@ -27,7 +27,9 @@ Currently, three types of channels can be assigned
 
 ##### Executors
 
-Executors are arranged in pages, with each page having 90 fader executors and 90 button executors.
+Executors are arranged in pages, with each page having 90 fader executors (numbered 1 through 90) and
+90 button executors (numbered 101 through 190).
+
 Note that when creating a new show, only the first page is created and active.
 
 A fader executor consists of a fader, two buttons (`upper`, `lower`) above it and one `flash` button below it.
@@ -42,7 +44,7 @@ mw1.page3.lower3 > mw1.page2.flash2
 A button executor can likewise be mapped using the syntax
 
 ```
-mw1.page2.button3 > mw1.page3.button1
+mw1.page2.button103 > mw1.page3.button101
 ```
 
 ##### Command line buttons

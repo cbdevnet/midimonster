@@ -355,7 +355,7 @@ static int maweb_connect(instance* inst){
 			|| mmbackend_send_str(data->fd, "Connection: Upgrade\r\n")
 			|| mmbackend_send_str(data->fd, "Upgrade: websocket\r\n")
 			|| mmbackend_send_str(data->fd, "Sec-WebSocket-Version: 13\r\n")
-			//the websocket key probably should not be hardcoded, but this is not security criticial
+			//the websocket key probably should not be hardcoded, but this is not security critical
 			//and the whole websocket 'accept key' dance is plenty stupid as it is
 			|| mmbackend_send_str(data->fd, "Sec-WebSocket-Key: rbEQrXMEvCm4ZUjkj6juBQ==\r\n")
 			|| mmbackend_send_str(data->fd, "\r\n")){

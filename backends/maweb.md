@@ -34,7 +34,7 @@ Note that when creating a new show, only the first page is created and active.
 
 A fader executor consists of a fader, two buttons (`upper`, `lower`) above it and one `flash` button below it.
 
-These controls can be adressed like
+These controls can be addressed like
 
 ```
 mw1.page1.fader5 > mw1.page1.upper5

@@ -303,6 +303,12 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 
 	if(json_obj(payload, "status") && json_obj(payload, "appType")){
 		fprintf(stderr, "maweb connection established\n");
+		field = json_obj_str(payload, "appType", NULL);
+		if(!strncmp(field, "dot2", 4)){
+			fprintf(stderr, "maweb peer detected as dot2, forcing user name 'remote'\n");
+			free(data->user);
+			data->user = strdup("remote");
+		}
 		maweb_send_frame(inst, ws_text, (uint8_t*) "{\"session\":0}", 13);
 	}
 
@@ -535,6 +541,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	if(num && !data->login){
 		fprintf(stderr, "maweb instance %s can not send output, not logged in\n", inst->name);
+		return 0;
 	}
 
 	for(n = 0; n < num; n++){

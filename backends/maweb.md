@@ -15,10 +15,10 @@ The `maweb` backend does not take any global configuration.
 
 #### Instance configuration
 
-| Option        | Example value         | Default value         | Description							|
+| Option	| Example value		| Default value		| Description							|
 |---------------|-----------------------|-----------------------|---------------------------------------------------------------|
-| `host`	| `10.23.42.21 80`     	| none                  | Host address (and optional port) of the MA Web Remote 	|
-| `user`	| `midimonster`		| none			| User for the remote session					|
+| `host`	| `10.23.42.21 80`	| none			| Host address (and optional port) of the MA Web Remote		|
+| `user`	| `midimonster`		| none			| User for the remote session (GrandMA2)			|
 | `password`	| `midimonster`		| `midimonster`		| Password for the remote session				|
 
 #### Channel specification
@@ -58,71 +58,16 @@ mw1.<button-name>
 
 The following button names are recognized by the backend:
 
-* `SET`
-* `PREV`
-* `NEXT`
-* `CLEAR`
-* `FIXTURE_CHANNEL`
-* `FIXTURE_GROUP_PRESET`
-* `EXEC_CUE`
-* `STORE_UPDATE`
-* `OOPS`
-* `ESC`
-* `0`
-* `1`
-* `2`
-* `3`
-* `4`
-* `5`
-* `6`
-* `7`
-* `8`
-* `9`
-* `PUNKT`
-* `PLUS`
-* `MINUS`
-* `THRU`
-* `IF`
-* `AT`
-* `FULL`
-* `HIGH`
-* `ENTER`
-* `OFF`
-* `ON`
-* `ASSIGN`
-* `LABEL`
-* `COPY`
-* `TIME`
-* `PAGE`
-* `MACRO`
-* `DELETE`
-* `GOTO`
-* `GO_PLUS`
-* `GO_MINUS`
-* `PAUSE`
-* `SELECT`
-* `FIXTURE`
-* `SEQU`
-* `CUE`
-* `PRESET`
-* `EDIT`
-* `UPDATE`
-* `EXEC`
-* `STORE`
-* `GROUP`
-* `PROG_ONLY`
-* `SPECIAL_DIALOGUE`
-* `SOLO`
-* `ODD`
-* `EVEN`
-* `WINGS`
-* `RESET`
-* `MA`
-* `layerMode`
-* `featureSort`
-* `fixtureSort`
-* `channelSort`
-* `hideName`
+| `SET`		| `PREV`	| `NEXT`	| `CLEAR`	| `FIXTURE_CHANNEL`	| `FIXTURE_GROUP_PRESET`	| `EXEC_CUE`	|
+| `STORE_UPDATE`| `OOPS`	| `ESC`		| `OFF`		| `ON`			| `MA`				| `STORE`	|
+| `0`		| `1`		| `2`		| `3`		| `4`			| `5`				| `6`		|
+| `7`		| `8`		| `9`		| `PUNKT`	| `PLUS`		| `MINUS`			| `THRU`	|
+| `IF`		| `AT`		| `FULL`	| `HIGH`	| `ENTER`		| `ASSIGN`			| `LABEL`	|
+| `COPY`	| `TIME`	| `PAGE`	| `MACRO`	| `DELETE`		| `GOTO`			| `GO_PLUS`	|
+| `GO_MINUS`	| `PAUSE`	| `SELECT`	| `FIXTURE`	| `SEQU`		| `CUE`				| `PRESET`	|
+| `EDIT`	| `UPDATE`	| `EXEC`	| `GROUP`	| `PROG_ONLY`		| `SPECIAL_DIALOGUE` 		| `SOLO`	|
+| `ODD`		| `EVEN`	| `WINGS`	| `RESET` 	| `layerMode`		| `featureSort`			| `fixtureSort`	|
+| `channelSort`	| `hideName`	|		|		|			|				|		|
 
 Note that each Web Remote connection has it's own command line, as such commands entered using this backend will not affect
 the command line on the main console. To do that, you will need to use another backend to feed input to the MA, such as

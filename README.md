@@ -24,7 +24,7 @@ on any other (or the same) supported protocol, for example to:
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.conf))
-* Play games or type using MIDI controllers
+* Play games, type, or control your mouse using MIDI controllers ([Example configuration](configs/midi-mouse.cfg))
 
 [![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
 

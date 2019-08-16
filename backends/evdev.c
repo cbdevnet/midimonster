@@ -445,7 +445,7 @@ static int evdev_start(){
 
 static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) {
 #ifndef EVDEV_NO_UINPUT
-	size_t evt = 0;
+	size_t evt = 0, axis = 0;
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 	evdev_channel_ident ident = {
 		.label = 0
@@ -467,7 +467,20 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 
 		switch(ident.fields.type){
 			case EV_REL:
-				value = (v[evt].normalised < 0.5) ? -1 : ((v[evt].normalised > 0.5) ? 1 : 0);
+				for(axis = 0; axis < data->relative_axes; axis++){
+					if(data->relative_axis[axis].code == ident.fields.code){
+						value = (v[evt].normalised * data->relative_axis[axis].max) - data->relative_axis[axis].current;
+						data->relative_axis[axis].current = v[evt].normalised * data->relative_axis[axis].max;
+
+						if(data->relative_axis[axis].inverted){
+							value *= -1;
+						}
+						break;
+					}
+				}
+				if(axis == data->relative_axes){
+					value = (v[evt].normalised < 0.5) ? -1 : ((v[evt].normalised > 0.5) ? 1 : 0);
+				}
 				break;
 			case EV_ABS:
 				range = libevdev_get_abs_maximum(data->output_proto, ident.fields.code) - libevdev_get_abs_minimum(data->output_proto, ident.fields.code);

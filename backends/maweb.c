@@ -239,8 +239,7 @@ static channel* maweb_channel(instance* inst, char* spec){
 		}
 	}
 
-	if(ident.fields.type && ident.fields.index && ident.fields.page
-			&& ident.fields.index <= 90){
+	if(ident.fields.type && ident.fields.index && ident.fields.page){
 		//actually, those are zero-indexed...
 		ident.fields.index--;
 		ident.fields.page--;
@@ -297,7 +296,7 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		fprintf(stderr, "maweb sending user credentials\n");
 		snprintf(xmit_buffer, sizeof(xmit_buffer),
 				"{\"requestType\":\"login\",\"username\":\"%s\",\"password\":\"%s\",\"session\":%ld}",
-				data->user, data->pass, data->session);
+				(data->peer_type == peer_dot2) ? "remote" : data->user, data->pass, data->session);
 		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 	}
 
@@ -305,9 +304,10 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		fprintf(stderr, "maweb connection established\n");
 		field = json_obj_str(payload, "appType", NULL);
 		if(!strncmp(field, "dot2", 4)){
-			fprintf(stderr, "maweb peer detected as dot2, forcing user name 'remote'\n");
-			free(data->user);
-			data->user = strdup("remote");
+			data->peer_type = peer_dot2;
+		}
+		else if(!strncmp(field, "gma2", 4)){
+			data->peer_type = peer_ma2;
 		}
 		maweb_send_frame(inst, ws_text, (uint8_t*) "{\"session\":0}", 13);
 	}
@@ -573,7 +573,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						"\"type\":0,"
 						"\"session\":%ld"
 						"}", ident.fields.index, ident.fields.page,
-						(exec_flash - ident.fields.type),
+						(data->peer_type == peer_dot2) ? (ident.fields.type - 3) : (exec_flash - ident.fields.type),
 						(v[n].normalised > 0.9) ? "true" : "false",
 						(v[n].normalised > 0.9) ? "false" : "true",
 						data->session);
@@ -591,7 +591,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						"\"released\":%s,"
 						"\"type\":0,"
 						"\"session\":%ld"
-						"}", ident.fields.index + 100,
+						"}", ident.fields.index,
 						ident.fields.page,
 						0,
 						(v[n].normalised > 0.9) ? "true" : "false",

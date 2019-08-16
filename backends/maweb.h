@@ -28,6 +28,13 @@ typedef enum /*_maweb_channel_type*/ {
 	cmdline_button
 } maweb_channel_type;
 
+typedef enum /*_maweb_peer_type*/ {
+	peer_unidentified = 0,
+	peer_ma2,
+	peer_ma3,
+	peer_dot2
+} maweb_peer_type;
+
 typedef enum /*_ws_conn_state*/ {
 	ws_new,
 	ws_http,
@@ -57,9 +64,10 @@ typedef struct /*_maweb_instance_data*/ {
 	char* port;
 	char* user;
 	char* pass;
-	
+
 	uint8_t login;
 	int64_t session;
+	maweb_peer_type peer_type;
 
 	int fd;
 	maweb_state state;

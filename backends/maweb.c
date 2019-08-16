@@ -222,11 +222,6 @@ static channel* maweb_channel(instance* inst, char* spec){
 			next_token += 6;
 		}
 		ident.fields.index = strtoul(next_token, NULL, 10);
-
-		//fix up the identifiers for button execs
-		if(ident.fields.index > 100){
-			ident.fields.index -= 100;
-		}
 	}
 	else{
 		for(n = 0; n < sizeof(cmdline_keys) / sizeof(char*); n++){

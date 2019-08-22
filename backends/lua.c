@@ -384,11 +384,11 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 }
 
 static int lua_handle(size_t num, managed_fd* fds){
-	uint8_t read_buffer[100];
 	uint64_t delta = timer_interval;
 	size_t n;
 
 	#ifdef MMBACKEND_LUA_TIMERFD
+	uint8_t read_buffer[100];
 	if(!num){
 		return 0;
 	}

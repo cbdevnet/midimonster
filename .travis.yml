@@ -165,7 +165,7 @@ before_install:
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install ccache ola lua openssl; fi
 # OpenSSL is not a proper install due to some Apple bull, so provide additional locations via the environment...
- - export CPPFLAGS="$CPPFLAGS -I/usr/local/opt/openssl/include"
+ - export CFLAGS="$CFLAGS -I/usr/local/opt/openssl/include"
  - export LDFLAGS="$LDFLAGS -L/usr/local/opt/openssl/lib" 
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then PATH=/usr/local/opt/ccache/libexec:$PATH; fi # Use ccache on Mac too
 #Coverity doesn't work with g++ 5 or 6, so only upgrade to g++ 4.9 for that

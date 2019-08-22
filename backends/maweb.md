@@ -53,8 +53,8 @@ Currently, three types of MA controls can be assigned, with each having some sub
 		* B-Wing 2 has 316 to 309 (top row) through 816 to 809 (bottom row)
 
 When creating a new show, only the first page is created and active. Additional pages have to be created explicitly within
-the console before being usable. `fader` controls, when mapped as outputs from the MA, output their value, `button` controls
-output 1 when the corresponding executor is running, 0 otherwise.
+the console before being usable. When mapped as outputs, `fader` controls output their value, `button` controls output 1 when the corresponding
+executor is running, 0 otherwise.
 
 These controls can be addressed like
 

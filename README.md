@@ -20,7 +20,7 @@ on any other (or the same) supported protocol, for example to:
 * Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))
 * Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))
 * Translate OSC messages into MIDI ([Example configuration](configs/midi-osc.cfg))
-* Dynamically route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua)) to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
+* Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua)) to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))

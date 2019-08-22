@@ -74,3 +74,4 @@ typedef union {
 	} fields;
 	uint64_t label;
 } osc_channel_ident;
+

@@ -53,3 +53,4 @@ typedef union {
 	} fields;
 	uint64_t label;
 } evdev_channel_ident;
+

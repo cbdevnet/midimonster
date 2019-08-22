@@ -9,22 +9,22 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int maweb_handle(size_t num, managed_fd* fds);
 static int maweb_start();
 static int maweb_shutdown();
+static uint32_t maweb_interval();
 
 //Default login password: MD5("midimonster")
 #define MAWEB_DEFAULT_PASSWORD "2807623134739142b119aff358f8a219"
 #define MAWEB_DEFAULT_PORT "80"
 #define MAWEB_RECV_CHUNK 1024
-#define MAWEB_XMIT_CHUNK 2048
+#define MAWEB_XMIT_CHUNK 4096
 #define MAWEB_FRAME_HEADER_LENGTH 16
 #define MAWEB_CONNECTION_KEEPALIVE 10000
 
 typedef enum /*_maweb_channel_type*/ {
 	type_unset = 0,
 	exec_fader = 1,
-	exec_button = 2,
-	exec_upper = 3,
-	exec_lower = 4,
-	exec_flash = 5,
+	exec_button = 2, //gma: 0 dot: 0
+	exec_lower = 3, //gma: 1 dot: 1
+	exec_upper = 4, //gma: 2 dot: 0
 	cmdline_button
 } maweb_channel_type;
 
@@ -68,6 +68,10 @@ typedef struct /*_maweb_instance_data*/ {
 	uint8_t login;
 	int64_t session;
 	maweb_peer_type peer_type;
+
+	//need to keep an internal registry to optimize data polls
+	size_t input_channels;
+	maweb_channel_ident* input_channel;
 
 	int fd;
 	maweb_state state;

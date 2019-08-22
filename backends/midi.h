@@ -25,3 +25,4 @@ typedef union {
 	} fields;
 	uint64_t label;
 } midi_channel_ident;
+

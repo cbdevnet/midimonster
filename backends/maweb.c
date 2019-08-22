@@ -475,7 +475,6 @@ static int maweb_request_playbacks(instance* inst){
 
 			channels = data->input_channel[channel + channel_offset - 1].fields.index - (data->input_channel[channel].fields.index / 5) * 5;
 
-
 			snprintf(item_counts, sizeof(item_indices), "[%lu]", ((channels / 5) * 5 + 5));
 			channel += channel_offset - 1;
 		}

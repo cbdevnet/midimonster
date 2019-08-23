@@ -916,6 +916,7 @@ static int maweb_start(){
 
 		if(maweb_connect(inst[u])){
 			fprintf(stderr, "Failed to open connection to MA Web Remote for instance %s\n", inst[u]->name);
+			free(inst);
 			return 1;
 		}
 	}

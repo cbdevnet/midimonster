@@ -266,14 +266,17 @@ static channel* maweb_channel(instance* inst, char* spec){
 		ident.fields.index--;
 		ident.fields.page--;
 
-		//check if the channel is already known
+		//check if the (exec/meta) channel is already known
 		for(n = 0; n < data->input_channels; n++){
-			if(data->input_channel[n].label == ident.label){
+			if(data->input_channel[n].fields.page == ident.fields.page
+					&& data->input_channel[n].fields.index == ident.fields.index){
 				break;
 			}
 		}
 
-		if(n == data->input_channels){
+		//FIXME only register channels that are mapped as outputs
+		//only register exec channels for updates
+		if(n == data->input_channels && ident.fields.type != cmdline_button){
 			data->input_channel = realloc(data->input_channel, (data->input_channels + 1) * sizeof(maweb_channel_ident));
 			if(!data->input_channel){
 				fprintf(stderr, "Failed to allocate memory\n");
@@ -324,9 +327,9 @@ static int maweb_send_frame(instance* inst, maweb_operation op, uint8_t* payload
 static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_type metatype, char* payload, size_t payload_length){
 	size_t exec_blocks = json_obj_offset(payload, (metatype == 2) ? "executorBlocks" : "bottomButtons"), offset, block = 0, control;
 	channel* chan = NULL;
-	channel_value evt;	
+	channel_value evt;
 	maweb_channel_ident ident = {
-		.fields.page = page,
+		.fields.page = page - 1,
 		.fields.index = json_obj_int(payload, "iExec", 191)
 	};
 
@@ -335,10 +338,11 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 			//ignore unused buttons
 			return 0;
 		}
-		fprintf(stderr, "maweb missing exec block data on exec %d\n", ident.fields.index);
+		fprintf(stderr, "maweb missing exec block data on exec %ld.%d\n", page, ident.fields.index);
 		return 1;
 	}
 
+	//the bottomButtons key has an additional subentry
 	if(metatype == 3){
 		exec_blocks += json_obj_offset(payload + exec_blocks, "items");
 	}
@@ -363,7 +367,7 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 			mm_channel_event(chan, evt);
 		}
 
-		//printf("maweb page %ld exec %d value %f running %lu\n", page, ident.fields.index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
+		DBGPF("maweb page %ld exec %d value %f running %lu\n", page, ident.fields.index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
 		ident.fields.index++;
 		block++;
 	}
@@ -416,7 +420,7 @@ static int maweb_process_playbacks(instance* inst, int64_t page, char* payload, 
 		group++;
 	}
 	updates_inflight--;
-	fprintf(stderr, "maweb playback message processing done, %lu updates inflight\n", updates_inflight);
+	DBGPF("maweb playback message processing done, %lu updates inflight\n", updates_inflight);
 	return 0;
 }
 
@@ -425,45 +429,53 @@ static int maweb_request_playbacks(instance* inst){
 	char xmit_buffer[MAWEB_XMIT_CHUNK];
 	int rv = 0;
 
-	char item_indices[1024] = "[0,100,200]", item_counts[1024] = "[21,21,21]", item_types[1024] = "[2,3,3]";
-	//char item_indices[1024] = "[300,400]", item_counts[1024] = "[18,18]", item_types[1024] = "[3,3]";
-	size_t page_index = 0, view = 2, channel = 0, offsets[3], channel_offset, channels;
+	char item_indices[1024] = "[300,400,500]", item_counts[1024] = "[16,16,16]", item_types[1024] = "[3,3,3]";
+	size_t page_index = 0, view = 3, channel = 0, offsets[3], channel_offset, channels;
 
 	if(updates_inflight){
 		fprintf(stderr, "maweb skipping update request, %lu updates still inflight\n", updates_inflight);
 		return 0;
 	}
 
+	//don't quote me on this whole segment
 	for(channel = 0; channel < data->input_channels; channel++){
-		offsets[0] = offsets[1] = offsets[2] = 0;
+		offsets[0] = offsets[1] = offsets[2] = 1;
 		page_index = data->input_channel[channel].fields.page;
 		if(data->peer_type == peer_dot2){
-			//TODO implement poll segmentation for dot
-			//"\"startIndex\":[0,100,200],"
-			//"\"itemsCount\":[21,21,21],"
-			//"\"itemsType\":[2,3,3],"
-			//"\"view\":2,"
-			//view = (data->input_channel[channel].fields.index >= 300) ? 3 : 2;
-			//observed
-			//"startIndex":[300,400,500,600,700,800],
-			//"itemsCount":[13,13,13,13,13,13]
-			//"itemsType":[3,3,3,3,3,3]
-			/*fprintf(stderr, "range start at %lu.%lu (%lu/%lu) end at %lu.%lu (%lu/%lu)\n", 
-					page_index, 
-					data->input_channel[channel].fields.index,
-					channel,
-					data->input_channels,
-					page_index,
-					data->input_channel[channel + channel_offset - 1].fields.index,
-					channel + channel_offset - 1,
-					data->input_channels
-					);*/
-			//only send one request currently
-			channel = data->input_channels;
+			//blocks 0, 100 & 200 have 21 execs and need to be queried from fader view
+			view = (data->input_channel[channel].fields.index >= 300) ? 3 : 2;
+
+			for(channel_offset = 1; channel + channel_offset <= data->input_channels; channel_offset++){
+				channels = channel + channel_offset - 1;
+				//find end for this exec block
+				for(; channel + channel_offset < data->input_channels; channel_offset++){
+					if(data->input_channel[channel + channel_offset].fields.page != page_index
+							|| (data->input_channel[channels].fields.index / 100) != (data->input_channel[channel + channel_offset].fields.index / 100)){
+						break;
+					}
+				}
+
+				//add request block for the exec block
+				offsets[0] += snprintf(item_indices + offsets[0], sizeof(item_indices) - offsets[0], "%d,", data->input_channel[channels].fields.index);
+				offsets[1] += snprintf(item_counts + offsets[1], sizeof(item_counts) - offsets[1], "%d,", data->input_channel[channel + channel_offset - 1].fields.index - data->input_channel[channels].fields.index + 1);
+				offsets[2] += snprintf(item_types + offsets[2], sizeof(item_types) - offsets[2], "%d,", (data->input_channel[channels].fields.index < 100) ? 2 : 3);
+
+				//send on page boundary, metamode boundary, last channel
+				if(channel + channel_offset >= data->input_channels
+						|| data->input_channel[channel + channel_offset].fields.page != page_index
+						|| (data->input_channel[channel].fields.index < 300) != (data->input_channel[channel + channel_offset].fields.index < 300)){
+					break;
+				}
+			}
+
+			//terminate arrays (overwriting the last array separator)
+			offsets[0] += snprintf(item_indices + offsets[0] - 1, sizeof(item_indices) - offsets[0], "]");
+			offsets[1] += snprintf(item_counts + offsets[1] - 1, sizeof(item_counts) - offsets[1], "]");
+			offsets[2] += snprintf(item_types + offsets[2] - 1, sizeof(item_types) - offsets[2], "]");
 		}
 		else{
+			//for the ma, the view equals the exec type requested (we can query all button execs from button view, all fader execs from fader view)
 			view = (data->input_channel[channel].fields.index >= 100) ? 3 : 2;
-			//for the ma, the view equals the exec type
 			snprintf(item_types, sizeof(item_types), "[%lu]", view);
 			//this channel must be included, so it must be in range for the first startindex
 			snprintf(item_indices, sizeof(item_indices), "[%d]", (data->input_channel[channel].fields.index / 5) * 5);
@@ -476,8 +488,12 @@ static int maweb_request_playbacks(instance* inst){
 			channels = data->input_channel[channel + channel_offset - 1].fields.index - (data->input_channel[channel].fields.index / 5) * 5;
 
 			snprintf(item_counts, sizeof(item_indices), "[%lu]", ((channels / 5) * 5 + 5));
-			channel += channel_offset - 1;
 		}
+
+		//advance base channel
+		channel += channel_offset - 1;
+
+		//send current request
 		snprintf(xmit_buffer, sizeof(xmit_buffer),
 				"{"
 				"\"requestType\":\"playbacks\","
@@ -497,7 +513,7 @@ static int maweb_request_playbacks(instance* inst){
 				view,
 				data->session);
 		rv |= maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
-		//fprintf(stderr, "req: %s\n", xmit_buffer);		
+		DBGPF("maweb poll request: %s\n", xmit_buffer);
 		updates_inflight++;
 	}
 
@@ -530,7 +546,7 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		}
 	}
 
-	fprintf(stderr, "maweb message (%lu): %s\n", payload_length, payload);
+	DBGPF("maweb message (%lu): %s\n", payload_length, payload);
 	if(json_obj(payload, "session") == JSON_NUMBER){
 		data->session = json_obj_int(payload, "session", data->session);
 		fprintf(stderr, "maweb session id is now %ld\n", data->session);

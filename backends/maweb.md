@@ -109,8 +109,4 @@ Data input from the console is done by actively querying the state of all mapped
 at low latency. A lower input interval value will produce data with lower latency, at the cost of network & CPU usage.
 Higher values will make the input "step" more, but will not consume as many CPU cycles and network bandwidth.
 
-This backend is currently in active development. It therefore has some limitations:
-
-* It outputs a lot of debug information
-* Command line events are sent, but I'm not sure they're being handled yet
-* For the dot2, currently only the Core & F-Wings are supported for input from the console, not the B-Wings
+Command line events are sent, but I'm not sure they're being handled yet.

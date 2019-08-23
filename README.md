@@ -11,6 +11,7 @@ Currently, the MIDIMonster supports the following protocols:
 * OpenSoundControl (OSC)
 * evdev input devices (Linux)
 * Open Lighting Architecture (OLA)
+* MA Lighting Web Remote
 
 with additional flexibility provided by a Lua scripting environment.
 
@@ -121,6 +122,7 @@ special information. These documentation files are located in the `backends/` di
 * [`ola` backend documentation](backends/ola.md)
 * [`osc` backend documentation](backends/osc.md)
 * [`lua` backend documentation](backends/lua.md)
+* [`maweb` backend documentation](backends/maweb.md)
 
 ## Building
 

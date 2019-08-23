@@ -56,5 +56,5 @@ run:
 	valgrind --leak-check=full --show-leak-kinds=all ./midimonster
 
 sanitize: export CC = clang
-sanitize: export CFLAGS = -g -Wall -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
+sanitize: export CFLAGS += -g -Wall -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
 sanitize: midimonster backends

@@ -16,7 +16,7 @@ containing all write-enabled universes.
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `universe`	| `0`			| none			| Universe identifier	|
+| `universe`	| `1`			| none			| Universe identifier between 1 and 63999 |
 | `interface`	| `1`			| `0`			| The bound address to use for data input/output |
 | `priority`	| `100`			| none			| The data priority to transmit for this instance. Setting this option enables the instance for output and includes it in the universe discovery report. |
 | `destination`	| `10.2.2.2`		| Universe multicast	| Destination address for unicast output. If unset, the multicast destination for the specified universe is used. |

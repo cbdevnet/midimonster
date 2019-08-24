@@ -362,7 +362,7 @@ static int midi_start(){
 	fprintf(stderr, "MIDI client ID is %d\n", snd_seq_client_id(sequencer));
 
 	//update the sequencer client name
-	if(snd_seq_set_client_name(sequencer, sequencer_name) < 0){
+	if(snd_seq_set_client_name(sequencer, sequencer_name ? sequencer_name : "MIDIMonster") < 0){
 		fprintf(stderr, "Failed to set MIDI client name to %s\n", sequencer_name);
 		return 1;
 	}

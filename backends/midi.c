@@ -3,6 +3,7 @@
 #include "midi.h"
 
 #define BACKEND_NAME "midi"
+static char* sequencer_name = NULL;
 static snd_seq_t* sequencer = NULL;
 
 enum /*_midi_channel_type*/ {
@@ -40,29 +41,19 @@ int init(){
 		return 1;
 	}
 
-	if(snd_seq_open(&sequencer, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
-		fprintf(stderr, "Failed to open ALSA sequencer\n");
-		return 1;
-	}
-
 	//register backend
 	if(mm_backend_register(midi)){
 		fprintf(stderr, "Failed to register MIDI backend\n");
 		return 1;
 	}
 
-	snd_seq_nonblock(sequencer, 1);
-
-	fprintf(stderr, "MIDI client ID is %d\n", snd_seq_client_id(sequencer));
 	return 0;
 }
 
 static int midi_configure(char* option, char* value){
 	if(!strcmp(option, "name")){
-		if(snd_seq_set_client_name(sequencer, value) < 0){
-			fprintf(stderr, "Failed to set MIDI client name to %s\n", value);
-			return 1;
-		}
+		free(sequencer_name);
+		sequencer_name = strdup(value);
 		return 0;
 	}
 
@@ -361,6 +352,21 @@ static int midi_start(){
 		return 0;
 	}
 
+	//connect to the sequencer
+	if(snd_seq_open(&sequencer, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
+		fprintf(stderr, "Failed to open ALSA sequencer\n");
+		return 0;
+	}
+
+	snd_seq_nonblock(sequencer, 1);
+	fprintf(stderr, "MIDI client ID is %d\n", snd_seq_client_id(sequencer));
+
+	//update the sequencer client name
+	if(snd_seq_set_client_name(sequencer, sequencer_name) < 0){
+		fprintf(stderr, "Failed to set MIDI client name to %s\n", sequencer_name);
+		return 1;
+	}
+
 	//create all ports
 	for(p = 0; p < n; p++){
 		data = (midi_instance_data*) inst[p]->impl;
@@ -437,11 +443,16 @@ static int midi_shutdown(){
 	free(inst);
 
 	//close midi
-	snd_seq_close(sequencer);
-	sequencer = NULL;
+	if(sequencer){
+		snd_seq_close(sequencer);
+		sequencer = NULL;
+	}
 
 	//free configuration cache
 	snd_config_update_free_global();
+
+	free(sequencer_name);
+	sequencer_name = NULL;
 
 	fprintf(stderr, "MIDI backend shut down\n");
 	return 0;

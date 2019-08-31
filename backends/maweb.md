@@ -109,4 +109,6 @@ Data input from the console is done by actively querying the state of all mapped
 at low latency. A lower input interval value will produce data with lower latency, at the cost of network & CPU usage.
 Higher values will make the input "step" more, but will not consume as many CPU cycles and network bandwidth.
 
+When requesting button executor events on the fader pages (execs 101 to 222) of a dot2 console, map at least one fader control from the 0 - 22 range or input will not work due to strange limitations in the MA Web API.
+
 Command line events are sent, but I'm not sure they're being handled yet.

@@ -52,6 +52,9 @@ midi1.ch0.pitch > midi2.ch1.pitch
 ```
 #### Known bugs / problems
 
+To access MIDI data, the user running MIDIMonster needs read & write access to the ALSA sequencer.
+This can usually be done by adding this user to the `audio` system group.
+
 Currently, no Note Off messages are sent (instead, Note On messages with a velocity of 0 are
 generated, which amount to the same thing according to the spec). This may be implemented as
 a configuration option at a later time.

@@ -5,15 +5,17 @@ tool between multi-channel absolute-value-based control and/or bus protocols.
 
 Currently, the MIDIMonster supports the following protocols:
 
-* MIDI (Linux, via ALSA)
-* ArtNet
-* Streaming ACN (sACN / E1.31)
-* OpenSoundControl (OSC)
-* evdev input devices (Linux)
-* Open Lighting Architecture (OLA)
-* MA Lighting Web Remote
+| Protocol			| Operating Systems	| Notes				| Backends			|
+|-------------------------------|-----------------------|-------------------------------|-------------------------------|
+| MIDI				| Linux			| Via ALSA			| [`midi`](backends/midi.md)	|
+| ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)|
+| Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)	|
+| OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)	|
+| evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)	|
+| Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)	|
+| MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
 
-with additional flexibility provided by a Lua scripting environment.
+with additional flexibility provided by a [Lua scripting environment](backends/lua.md).
 
 The MIDIMonster allows the user to translate any channel on one protocol into channel(s)
 on any other (or the same) supported protocol, for example to:

@@ -162,7 +162,7 @@ static int config_glob_scan(instance* inst, channel_spec* spec){
 	}
 	if(!spec->internal){
 		//TODO try to parse globs externally
-		fprintf(stderr, "Failed to parse glob %lu in %s internally\n", u + 1, spec->spec);
+		fprintf(stderr, "Failed to parse glob %" PRIsize_t " in %s internally\n", u + 1, spec->spec);
 		return 1;
 	}
 
@@ -199,7 +199,7 @@ static channel* config_glob_resolve(instance* inst, channel_spec* spec, uint64_t
 		//write out value
 		bytes = snprintf(resolved_spec + spec->glob[glob - 1].offset[0],
 				glob_length,
-				"%lu",
+				"%" PRIu64,
 				current_value);
 		if(bytes > glob_length){
 			fprintf(stderr, "Internal error resolving glob %s\n", spec->spec);
@@ -279,7 +279,7 @@ static int config_map(char* to_raw, char* from_raw){
 	if((spec_to.channels != spec_from.channels && spec_from.channels != 1 && spec_to.channels != 1)
 			|| spec_to.channels == 0
 			|| spec_from.channels == 0){
-		fprintf(stderr, "Multi-channel specification size mismatch: %s.%s (%lu channels) - %s.%s (%lu channels)\n",
+		fprintf(stderr, "Multi-channel specification size mismatch: %s.%s (%" PRIsize_t " channels) - %s.%s (%" PRIsize_t " channels)\n",
 				instance_from->name,
 				spec_from.spec,
 				spec_from.channels,

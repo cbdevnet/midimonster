@@ -5,6 +5,8 @@
 #include <openssl/md5.h>
 #endif
 
+#define DEBUG
+
 #include "libmmbackend.h"
 #include "maweb.h"
 
@@ -338,7 +340,7 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 			//ignore unused buttons
 			return 0;
 		}
-		fprintf(stderr, "maweb missing exec block data on exec %ld.%d\n", page, ident.fields.index);
+		fprintf(stderr, "maweb missing exec block data on exec %" PRIu64 ".%d\n", page, ident.fields.index);
 		return 1;
 	}
 
@@ -367,7 +369,7 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 			mm_channel_event(chan, evt);
 		}
 
-		DBGPF("maweb page %ld exec %d value %f running %lu\n", page, ident.fields.index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
+		DBGPF("maweb page %" PRIu64 " exec %d value %f running %" PRIu64 "\n", page, ident.fields.index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
 		ident.fields.index++;
 		block++;
 	}
@@ -420,7 +422,7 @@ static int maweb_process_playbacks(instance* inst, int64_t page, char* payload, 
 		group++;
 	}
 	updates_inflight--;
-	DBGPF("maweb playback message processing done, %lu updates inflight\n", updates_inflight);
+	DBGPF("maweb playback message processing done, %" PRIu64 " updates inflight\n", updates_inflight);
 	return 0;
 }
 
@@ -433,7 +435,7 @@ static int maweb_request_playbacks(instance* inst){
 	size_t page_index = 0, view = 3, channel = 0, offsets[3], channel_offset, channels;
 
 	if(updates_inflight){
-		fprintf(stderr, "maweb skipping update request, %lu updates still inflight\n", updates_inflight);
+		fprintf(stderr, "maweb skipping update request, %" PRIu64 " updates still inflight\n", updates_inflight);
 		return 0;
 	}
 
@@ -476,7 +478,7 @@ static int maweb_request_playbacks(instance* inst){
 		else{
 			//for the ma, the view equals the exec type requested (we can query all button execs from button view, all fader execs from fader view)
 			view = (data->input_channel[channel].fields.index >= 100) ? 3 : 2;
-			snprintf(item_types, sizeof(item_types), "[%lu]", view);
+			snprintf(item_types, sizeof(item_types), "[%" PRIsize_t "]", view);
 			//this channel must be included, so it must be in range for the first startindex
 			snprintf(item_indices, sizeof(item_indices), "[%d]", (data->input_channel[channel].fields.index / 5) * 5);
 
@@ -487,7 +489,7 @@ static int maweb_request_playbacks(instance* inst){
 
 			channels = data->input_channel[channel + channel_offset - 1].fields.index - (data->input_channel[channel].fields.index / 5) * 5;
 
-			snprintf(item_counts, sizeof(item_indices), "[%lu]", ((channels / 5) * 5 + 5));
+			snprintf(item_counts, sizeof(item_indices), "[%" PRIsize_t "]", ((channels / 5) * 5 + 5));
 		}
 
 		//advance base channel
@@ -499,12 +501,12 @@ static int maweb_request_playbacks(instance* inst){
 				"\"requestType\":\"playbacks\","
 				"\"startIndex\":%s,"
 				"\"itemsCount\":%s,"
-				"\"pageIndex\":%lu,"
+				"\"pageIndex\":%" PRIsize_t ","
 				"\"itemsType\":%s,"
-				"\"view\":%lu,"
+				"\"view\":%" PRIsize_t ","
 				"\"execButtonViewMode\":2,"	//extended
 				"\"buttonsViewMode\":0,"	//get vfader for button execs
-				"\"session\":%lu"
+				"\"session\":%" PRIu64
 				"}",
 				item_indices,
 				item_counts,
@@ -546,16 +548,16 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		}
 	}
 
-	DBGPF("maweb message (%lu): %s\n", payload_length, payload);
+	DBGPF("maweb message (%" PRIsize_t "): %s\n", payload_length, payload);
 	if(json_obj(payload, "session") == JSON_NUMBER){
 		data->session = json_obj_int(payload, "session", data->session);
-		fprintf(stderr, "maweb session id is now %ld\n", data->session);
+		fprintf(stderr, "maweb session id is now %" PRIu64 "\n", data->session);
 	}
 
 	if(json_obj_bool(payload, "forceLogin", 0)){
 		fprintf(stderr, "maweb sending user credentials\n");
 		snprintf(xmit_buffer, sizeof(xmit_buffer),
-				"{\"requestType\":\"login\",\"username\":\"%s\",\"password\":\"%s\",\"session\":%ld}",
+				"{\"requestType\":\"login\",\"username\":\"%s\",\"password\":\"%s\",\"session\":%" PRIu64 "}",
 				(data->peer_type == peer_dot2) ? "remote" : data->user, data->pass, data->session);
 		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 	}
@@ -787,7 +789,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						"\"pageIndex\":%d,"
 						"\"faderValue\":%f,"
 						"\"type\":1,"
-						"\"session\":%ld"
+						"\"session\":%" PRIu64
 						"}", ident.fields.index, ident.fields.page, v[n].normalised, data->session);
 				maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 				break;
@@ -803,7 +805,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						"\"pressed\":%s,"
 						"\"released\":%s,"
 						"\"type\":0,"
-						"\"session\":%ld"
+						"\"session\":%" PRIu64
 						"}", ident.fields.index, ident.fields.page,
 						(data->peer_type == peer_dot2 && ident.fields.type == exec_upper) ? 0 : (ident.fields.type - exec_button),
 						(v[n].normalised > 0.9) ? "true" : "false",
@@ -844,7 +846,7 @@ static int maweb_keepalive(){
 	for(u = 0; u < n; u++){
 		data = (maweb_instance_data*) inst[u]->impl;
 		if(data->login){
-			snprintf(xmit_buffer, sizeof(xmit_buffer), "{\"session\":%ld}", data->session);
+			snprintf(xmit_buffer, sizeof(xmit_buffer), "{\"session\":%" PRIu64 "}", data->session);
 			maweb_send_frame(inst[u], ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 		}
 	}
@@ -926,7 +928,7 @@ static int maweb_start(){
 		return 0;
 	}
 
-	fprintf(stderr, "maweb backend registering %lu descriptors to core\n", n);
+	fprintf(stderr, "maweb backend registering %" PRIsize_t " descriptors to core\n", n);
 
 	//initialize timeouts
 	last_keepalive = last_update = mm_timestamp();

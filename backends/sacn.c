@@ -78,7 +78,7 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 		return -1;
 	}
 
-	fprintf(stderr, "sACN backend interface %lu bound to %s port %s\n", global_cfg.fds, host, port);
+	fprintf(stderr, "sACN backend interface %" PRIsize_t " bound to %s port %s\n", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].flags = fd_flags;
 	global_cfg.fd[global_cfg.fds].universes = 0;
@@ -300,7 +300,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	}
 
 	if(!data->xmit_prio){
-		fprintf(stderr, "sACN instance %s not enabled for output (%lu channel events)\n", inst->name, num);
+		fprintf(stderr, "sACN instance %s not enabled for output (%" PRIsize_t " channel events)\n", inst->name, num);
 		return 0;
 	}
 
@@ -385,7 +385,7 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 			}
 
 			if(!chan){
-				fprintf(stderr, "Active channel %lu on %s not known to core", u, inst->name);
+				fprintf(stderr, "Active channel %" PRIsize_t " on %s not known to core", u, inst->name);
 				return 1;
 			}
 
@@ -453,7 +453,7 @@ static void sacn_discovery(size_t fd){
 		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
 		if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
-			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %lu: %s\n", fd, strerror(errno));
+			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %" PRIsize_t ": %s\n", fd, strerror(errno));
 		}
 	}
 }
@@ -615,7 +615,7 @@ static int sacn_start(){
 		}
 	}
 
-	fprintf(stderr, "sACN backend registering %lu descriptors to core\n", global_cfg.fds);
+	fprintf(stderr, "sACN backend registering %" PRIsize_t " descriptors to core\n", global_cfg.fds);
 	for(u = 0; u < global_cfg.fds; u++){
 		//allocate memory for storing last frame transmission timestamp
 		global_cfg.fd[u].last_frame = calloc(global_cfg.fd[u].universes, sizeof(uint64_t));

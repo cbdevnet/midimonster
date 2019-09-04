@@ -35,4 +35,8 @@
 	#define htole64(x) (x)
 	#define be64toh(x) _byteswap_uint64(x)
 	#define le64toh(x) (x)
+
+	#define PRIsize_t "Iu"
+#else
+	#define PRIsize_t "zu"
 #endif

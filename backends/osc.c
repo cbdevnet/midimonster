@@ -239,20 +239,20 @@ static int osc_path_validate(char* path, uint8_t allow_patterns){
 	for(u = 0; u < strlen(path); u++){
 		for(c = 0; c < sizeof(illegal_chars); c++){
 			if(path[u] == illegal_chars[c]){
-				fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %lu\n", path, illegal_chars[c], u);
+				fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, illegal_chars[c], u);
 				return 1;
 			}
 		}
 
 		if(!isgraph(path[u])){
-			fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %lu\n", path, pattern_chars[c], u);
+			fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
 			return 1;
 		}
 
 		if(!allow_patterns){
 			for(c = 0; c < sizeof(pattern_chars); c++){
 				if(path[u] == pattern_chars[c]){
-					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %lu\n", path, pattern_chars[c], u);
+					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
 					return 1;
 				}
 			}
@@ -261,14 +261,14 @@ static int osc_path_validate(char* path, uint8_t allow_patterns){
 		switch(path[u]){
 			case '{':
 				if(square_open || curly_open){
-					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %lu\n", path, pattern_chars[c], u);
+					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
 					return 1;
 				}
 				curly_open = 1;
 				break;
 			case '[':
 				if(square_open || curly_open){
-					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %lu\n", path, pattern_chars[c], u);
+					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
 					return 1;
 				}
 				square_open = 1;
@@ -477,14 +477,14 @@ static int osc_register_pattern(osc_instance_data* data, char* pattern_path, cha
 		//parse min/max values
 		token = strtok(NULL, " ");
 		if(!token){
-			fprintf(stderr, "Missing minimum specification for parameter %lu of OSC pattern %s\n", u, pattern_path);
+			fprintf(stderr, "Missing minimum specification for parameter %" PRIsize_t " of OSC pattern %s\n", u, pattern_path);
 			return 1;
 		}
 		data->pattern[pattern].min[u] = osc_parse_value_spec(format[u], token);
 
 		token = strtok(NULL, " ");
 		if(!token){
-			fprintf(stderr, "Missing maximum specification for parameter %lu of OSC pattern %s\n", u, pattern_path);
+			fprintf(stderr, "Missing maximum specification for parameter %" PRIsize_t " of OSC pattern %s\n", u, pattern_path);
 			return 1;
 		}
 		data->pattern[pattern].max[u] = osc_parse_value_spec(format[u], token);
@@ -686,7 +686,7 @@ static int osc_output_channel(instance* inst, size_t channel){
 
 		//write data
 		if(offset + osc_data_length(data->channel[channel].type[p]) >= sizeof(xmit_buf)){
-			fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s at parameter %lu\n", inst->name, data->channel[channel].path, p);
+			fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s at parameter %" PRIsize_t "\n", inst->name, data->channel[channel].path, p);
 			return 1;
 		}
 
@@ -717,7 +717,7 @@ static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	if(!data->dest_len){
-		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%lu channels)\n", inst->name, num);
+		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%" PRIsize_t " channels)\n", inst->name, num);
 		return 0;
 	}
 
@@ -775,7 +775,7 @@ static int osc_process_packet(instance* inst, char* local_path, char* format, ui
 	channel* chan = NULL;
 
 	if(payload_len % 4){
-		fprintf(stderr, "Invalid OSC packet, data length %lu\n", payload_len);
+		fprintf(stderr, "Invalid OSC packet, data length %" PRIsize_t "\n", payload_len);
 		return 0;
 	}
 
@@ -784,7 +784,7 @@ static int osc_process_packet(instance* inst, char* local_path, char* format, ui
 			ident.fields.channel = c;
 			//unconfigured input should work without errors (using default limits)
 			if(data->channel[c].params && strlen(format) != data->channel[c].params){
-				fprintf(stderr, "OSC message %s.%s had format %s, internal representation has %lu parameters\n", inst->name, local_path, format, data->channel[c].params);
+				fprintf(stderr, "OSC message %s.%s had format %s, internal representation has %" PRIsize_t " parameters\n", inst->name, local_path, format, data->channel[c].params);
 				continue;
 			}
 
@@ -925,7 +925,7 @@ static int osc_start(){
 		}
 	}
 
-	fprintf(stderr, "OSC backend registered %lu descriptors to core\n", fds);
+	fprintf(stderr, "OSC backend registered %" PRIsize_t " descriptors to core\n", fds);
 
 	free(inst);
 	return 0;

@@ -5,8 +5,6 @@
 #include <openssl/md5.h>
 #endif
 
-#define DEBUG
-
 #include "libmmbackend.h"
 #include "maweb.h"
 

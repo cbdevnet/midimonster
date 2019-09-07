@@ -14,9 +14,6 @@
 #define WS_FLAG_FIN 0x80
 #define WS_FLAG_MASK 0x80
 
-//TODO test using different pages simultaneously
-//TODO test dot2 button virtual faders in fader view
-
 static uint64_t last_keepalive = 0;
 static uint64_t update_interval = 50;
 static uint64_t last_update = 0;
@@ -104,11 +101,6 @@ int init(){
 		.interval = maweb_interval
 	};
 
-	if(sizeof(maweb_channel_ident) != sizeof(uint64_t)){
-		fprintf(stderr, "maweb channel identification union out of bounds\n");
-		return 1;
-	}
-
 	//register backend
 	if(mm_backend_register(maweb)){
 		fprintf(stderr, "Failed to register maweb backend\n");
@@ -117,14 +109,31 @@ int init(){
 	return 0;
 }
 
-static int channel_comparator(const void* raw_a, const void* raw_b){
-	maweb_channel_ident* a = (maweb_channel_ident*) raw_a;
-	maweb_channel_ident* b = (maweb_channel_ident*) raw_b;
-
-	if(a->fields.page != b->fields.page){
-		return a->fields.page - b->fields.page;
+static ssize_t maweb_channel_index(maweb_instance_data* data, maweb_channel_type type, uint16_t page, uint16_t index){
+	size_t n;
+	for(n = 0; n < data->channels; n++){
+		if(data->channel[n].type == type
+				&& data->channel[n].page == page
+				&& data->channel[n].index == index){
+			return n;
+		}
 	}
-	return a->fields.index - b->fields.index;
+	return -1;
+}
+
+static int channel_comparator(const void* raw_a, const void* raw_b){
+	maweb_channel_data* a = (maweb_channel_data*) raw_a;
+	maweb_channel_data* b = (maweb_channel_data*) raw_b;
+	
+	//this needs to take into account command line channels
+	//they need to be sorted last so that the channel poll logic works properly
+	if(a->type != b->type){
+		return a->type - b->type;
+	}
+	if(a->page != b->page){
+		return a->page - b->page;
+	}
+	return a->index - b->index;
 }
 
 static uint32_t maweb_interval(){
@@ -214,14 +223,14 @@ static instance* maweb_instance(){
 
 static channel* maweb_channel(instance* inst, char* spec){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
-	maweb_channel_ident ident = {
-		.label = 0
+	maweb_channel_data chan = {
+		0
 	};
 	char* next_token = NULL;
 	size_t n;
 
 	if(!strncmp(spec, "page", 4)){
-		ident.fields.page = strtoul(spec + 4, &next_token, 10);
+		chan.page = strtoul(spec + 4, &next_token, 10);
 		if(*next_token != '.'){
 			fprintf(stderr, "Failed to parse maweb channel spec %s: Missing separator\n", spec);
 			return NULL;
@@ -229,65 +238,57 @@ static channel* maweb_channel(instance* inst, char* spec){
 
 		next_token++;
 		if(!strncmp(next_token, "fader", 5)){
-			ident.fields.type = exec_fader;
+			chan.type = exec_fader;
 			next_token += 5;
 		}
 		else if(!strncmp(next_token, "upper", 5)){
-			ident.fields.type = exec_upper;
+			chan.type = exec_upper;
 			next_token += 5;
 		}
 		else if(!strncmp(next_token, "lower", 5)){
-			ident.fields.type = exec_lower;
+			chan.type = exec_lower;
 			next_token += 5;
 		}
 		else if(!strncmp(next_token, "flash", 5)){
-			ident.fields.type = exec_button;
+			chan.type = exec_button;
 			next_token += 5;
 		}
 		else if(!strncmp(next_token, "button", 6)){
-			ident.fields.type = exec_button;
+			chan.type = exec_button;
 			next_token += 6;
 		}
-		ident.fields.index = strtoul(next_token, NULL, 10);
+		chan.index = strtoul(next_token, NULL, 10);
 	}
 	else{
 		for(n = 0; n < sizeof(cmdline_keys) / sizeof(char*); n++){
-			if(!strcmp(spec, cmdline_keys[n])){
-				ident.fields.type = cmdline_button;
-				ident.fields.index = n + 1;
-				ident.fields.page = 1;
+			//FIXME this is broken for layerMode
+			if(!strcmp(spec, cmdline_keys[n]) || (*spec == 'l' && !strcmp(spec + 1, cmdline_keys[n]))){
+				chan.type = (*spec == 'l') ? cmdline_local : cmdline;
+				chan.index = n + 1;
+				chan.page = 1;
 				break;
 			}
 		}
 	}
 
-	if(ident.fields.type && ident.fields.index && ident.fields.page){
+	if(chan.type && chan.index && chan.page){
 		//actually, those are zero-indexed...
-		ident.fields.index--;
-		ident.fields.page--;
+		chan.index--;
+		chan.page--;
 
-		//check if the (exec/meta) channel is already known
-		for(n = 0; n < data->input_channels; n++){
-			if(data->input_channel[n].fields.page == ident.fields.page
-					&& data->input_channel[n].fields.index == ident.fields.index){
-				break;
-			}
-		}
-
-		//FIXME only register channels that are mapped as outputs
-		//only register exec channels for updates
-		if(n == data->input_channels && ident.fields.type != cmdline_button){
-			data->input_channel = realloc(data->input_channel, (data->input_channels + 1) * sizeof(maweb_channel_ident));
-			if(!data->input_channel){
+		if(maweb_channel_index(data, chan.type, chan.page, chan.index) == -1){
+			data->channel = realloc(data->channel, (data->channels + 1) * sizeof(maweb_channel_data));
+			if(!data->channel){
 				fprintf(stderr, "Failed to allocate memory\n");
 				return NULL;
 			}
-			data->input_channel[n].label = ident.label;
-			data->input_channels++;
+			data->channel[data->channels] = chan;
+			data->channels++;
 		}
 
-		return mm_channel(inst, ident.label, 1);
+		return mm_channel(inst, maweb_channel_index(data, chan.type, chan.page, chan.index), 1);
 	}
+
 	fprintf(stderr, "Failed to parse maweb channel spec %s\n", spec);
 	return NULL;
 }
@@ -325,20 +326,18 @@ static int maweb_send_frame(instance* inst, maweb_operation op, uint8_t* payload
 }
 
 static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_type metatype, char* payload, size_t payload_length){
+	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
 	size_t exec_blocks = json_obj_offset(payload, (metatype == 2) ? "executorBlocks" : "bottomButtons"), offset, block = 0, control;
-	channel* chan = NULL;
 	channel_value evt;
-	maweb_channel_ident ident = {
-		.fields.page = page - 1,
-		.fields.index = json_obj_int(payload, "iExec", 191)
-	};
+	int64_t exec_index = json_obj_int(payload, "iExec", 191);
+	ssize_t channel_index;
 
 	if(!exec_blocks){
 		if(metatype == 3){
 			//ignore unused buttons
 			return 0;
 		}
-		fprintf(stderr, "maweb missing exec block data on exec %" PRIu64 ".%d\n", page, ident.fields.index);
+		fprintf(stderr, "maweb missing exec block data on exec %" PRIu64 ".%" PRIu64 "\n", page, exec_index);
 		return 1;
 	}
 
@@ -348,27 +347,41 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 	}
 
 	//TODO detect unused faders
-	//TODO state tracking for fader values / exec run state
 
 	//iterate over executor blocks
 	for(offset = json_array_offset(payload + exec_blocks, block); offset; offset = json_array_offset(payload + exec_blocks, block)){
 		control = exec_blocks + offset + json_obj_offset(payload + exec_blocks + offset, "fader");
-		ident.fields.type = exec_fader;
-		chan = mm_channel(inst, ident.label, 0);
-		if(chan){
-			evt.normalised = json_obj_double(payload + control, "v", 0.0);
-			mm_channel_event(chan, evt);
+
+		channel_index = maweb_channel_index(data, exec_fader, page - 1, exec_index);
+		if(channel_index >= 0){
+			if(!data->channel[channel_index].input_blocked){
+				evt.normalised = json_obj_double(payload + control, "v", 0.0);
+				if(evt.normalised != data->channel[channel_index].in){
+					mm_channel_event(mm_channel(inst, channel_index, 0), evt);
+					data->channel[channel_index].in = evt.normalised;
+				}
+			}
+			else{
+				data->channel[channel_index].input_blocked--;
+			}
 		}
 
-		ident.fields.type = exec_button;
-		chan = mm_channel(inst, ident.label, 0);
-		if(chan){
-			evt.normalised = json_obj_int(payload, "isRun", 0);
-			mm_channel_event(chan, evt);
+		channel_index = maweb_channel_index(data, exec_button, page - 1, exec_index);
+		if(channel_index >= 0){
+			if(!data->channel[channel_index].input_blocked){
+				evt.normalised = json_obj_int(payload, "isRun", 0);
+				if(evt.normalised != data->channel[channel_index].in){
+					mm_channel_event(mm_channel(inst, channel_index, 0), evt);
+					data->channel[channel_index].in = evt.normalised;
+				}
+			}
+			else{
+				data->channel[channel_index].input_blocked--;
+			}
 		}
 
-		DBGPF("maweb page %" PRIu64 " exec %d value %f running %" PRIu64 "\n", page, ident.fields.index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
-		ident.fields.index++;
+		DBGPF("maweb page %" PRIu64 " exec %" PRIu64 " value %f running %" PRIu64 "\n", page, exec_index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
+		exec_index++;
 		block++;
 	}
 
@@ -437,33 +450,37 @@ static int maweb_request_playbacks(instance* inst){
 		return 0;
 	}
 
+	//TODO this needs to ignore non-metamoded execs
 	//don't quote me on this whole segment
-	for(channel = 0; channel < data->input_channels; channel++){
+	
+	//only request faders and buttons
+	for(channel = 0; channel < data->channels && data->channel[channel].type <= exec_button; channel++){
 		offsets[0] = offsets[1] = offsets[2] = 1;
-		page_index = data->input_channel[channel].fields.page;
+		page_index = data->channel[channel].page;
 		if(data->peer_type == peer_dot2){
 			//blocks 0, 100 & 200 have 21 execs and need to be queried from fader view
-			view = (data->input_channel[channel].fields.index >= 300) ? 3 : 2;
+			view = (data->channel[channel].index >= 300) ? 3 : 2;
 
-			for(channel_offset = 1; channel + channel_offset <= data->input_channels; channel_offset++){
+			for(channel_offset = 1; channel + channel_offset <= data->channels && data->channel[channel + channel_offset - 1].type < exec_button; channel_offset++){
 				channels = channel + channel_offset - 1;
 				//find end for this exec block
-				for(; channel + channel_offset < data->input_channels; channel_offset++){
-					if(data->input_channel[channel + channel_offset].fields.page != page_index
-							|| (data->input_channel[channels].fields.index / 100) != (data->input_channel[channel + channel_offset].fields.index / 100)){
+				for(; channel + channel_offset < data->channels; channel_offset++){
+					if(data->channel[channel + channel_offset].page != page_index
+							|| data->channel[channels].type != data->channel[channel + channel_offset].type
+							|| (data->channel[channels].index / 100) != (data->channel[channel + channel_offset].index / 100)){
 						break;
 					}
 				}
 
 				//add request block for the exec block
-				offsets[0] += snprintf(item_indices + offsets[0], sizeof(item_indices) - offsets[0], "%d,", data->input_channel[channels].fields.index);
-				offsets[1] += snprintf(item_counts + offsets[1], sizeof(item_counts) - offsets[1], "%d,", data->input_channel[channel + channel_offset - 1].fields.index - data->input_channel[channels].fields.index + 1);
-				offsets[2] += snprintf(item_types + offsets[2], sizeof(item_types) - offsets[2], "%d,", (data->input_channel[channels].fields.index < 100) ? 2 : 3);
+				offsets[0] += snprintf(item_indices + offsets[0], sizeof(item_indices) - offsets[0], "%d,", data->channel[channels].index);
+				offsets[1] += snprintf(item_counts + offsets[1], sizeof(item_counts) - offsets[1], "%d,", data->channel[channel + channel_offset - 1].index - data->channel[channels].index + 1);
+				offsets[2] += snprintf(item_types + offsets[2], sizeof(item_types) - offsets[2], "%d,", (data->channel[channels].index < 100) ? 2 : 3);
 
-				//send on page boundary, metamode boundary, last channel
-				if(channel + channel_offset >= data->input_channels
-						|| data->input_channel[channel + channel_offset].fields.page != page_index
-						|| (data->input_channel[channel].fields.index < 300) != (data->input_channel[channel + channel_offset].fields.index < 300)){
+				//send on last channel, page boundary, metamode boundary
+				if(channel + channel_offset >= data->channels
+						|| data->channel[channel + channel_offset].page != page_index
+						|| (data->channel[channel].index < 300) != (data->channel[channel + channel_offset].index < 300)){
 					break;
 				}
 			}
@@ -475,17 +492,18 @@ static int maweb_request_playbacks(instance* inst){
 		}
 		else{
 			//for the ma, the view equals the exec type requested (we can query all button execs from button view, all fader execs from fader view)
-			view = (data->input_channel[channel].fields.index >= 100) ? 3 : 2;
+			view = (data->channel[channel].index >= 100) ? 3 : 2;
 			snprintf(item_types, sizeof(item_types), "[%" PRIsize_t "]", view);
 			//this channel must be included, so it must be in range for the first startindex
-			snprintf(item_indices, sizeof(item_indices), "[%d]", (data->input_channel[channel].fields.index / 5) * 5);
+			snprintf(item_indices, sizeof(item_indices), "[%d]", (data->channel[channel].index / 5) * 5);
 
-			for(channel_offset = 1; channel + channel_offset < data->input_channels
-					&& data->input_channel[channel].fields.page == data->input_channel[channel + channel_offset].fields.page
-					&& data->input_channel[channel].fields.index / 100 == data->input_channel[channel + channel_offset].fields.index / 100; channel_offset++){
+			for(channel_offset = 1; channel + channel_offset < data->channels
+					&& data->channel[channel].type == data->channel[channel + channel_offset].type
+					&& data->channel[channel].page == data->channel[channel + channel_offset].page
+					&& data->channel[channel].index / 100 == data->channel[channel + channel_offset].index / 100; channel_offset++){
 			}
 
-			channels = data->input_channel[channel + channel_offset - 1].fields.index - (data->input_channel[channel].fields.index / 5) * 5;
+			channels = data->channel[channel + channel_offset - 1].index - (data->channel[channel].index / 5) * 5;
 
 			snprintf(item_counts, sizeof(item_indices), "[%" PRIsize_t "]", ((channels / 5) * 5 + 5));
 		}
@@ -549,7 +567,12 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 	DBGPF("maweb message (%" PRIsize_t "): %s\n", payload_length, payload);
 	if(json_obj(payload, "session") == JSON_NUMBER){
 		data->session = json_obj_int(payload, "session", data->session);
-		fprintf(stderr, "maweb session id is now %" PRIu64 "\n", data->session);
+		if(data->session < 0){
+				fprintf(stderr, "maweb login failed\n");
+				data->login = 0;
+				return 0;
+		}
+		fprintf(stderr, "maweb session id is now %" PRId64 "\n", data->session);
 	}
 
 	if(json_obj_bool(payload, "forceLogin", 0)){
@@ -768,8 +791,8 @@ static int maweb_handle_fd(instance* inst){
 
 static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
+	maweb_channel_data* chan = NULL;
 	char xmit_buffer[MAWEB_XMIT_CHUNK];
-	maweb_channel_ident ident;
 	size_t n;
 
 	if(num && !data->login){
@@ -778,8 +801,23 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 	}
 
 	for(n = 0; n < num; n++){
-		ident.label = c[n]->ident;
-		switch(ident.fields.type){
+		//sanity check
+		if(c[n]->ident >= data->channels){
+			return 1;
+		}
+		chan = data->channel + c[n]->ident;
+
+		//channel state tracking
+		if(chan->out == v[n].normalised){
+			continue;
+		}
+		chan->out = v[n].normalised;
+
+		//i/o value space separation
+		chan->in = v[n].normalised;
+		chan->input_blocked = 1;
+
+		switch(chan->type){
 			case exec_fader:
 				snprintf(xmit_buffer, sizeof(xmit_buffer),
 						"{\"requestType\":\"playbacks_userInput\","
@@ -788,8 +826,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						"\"faderValue\":%f,"
 						"\"type\":1,"
 						"\"session\":%" PRIu64
-						"}", ident.fields.index, ident.fields.page, v[n].normalised, data->session);
-				maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
+						"}", chan->index, chan->page, v[n].normalised, data->session);
 				break;
 			case exec_upper:
 			case exec_lower:
@@ -804,26 +841,26 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						"\"released\":%s,"
 						"\"type\":0,"
 						"\"session\":%" PRIu64
-						"}", ident.fields.index, ident.fields.page,
-						(data->peer_type == peer_dot2 && ident.fields.type == exec_upper) ? 0 : (ident.fields.type - exec_button),
+						"}", chan->index, chan->page,
+						(data->peer_type == peer_dot2 && chan->type == exec_upper) ? 0 : (chan->type - exec_button),
 						(v[n].normalised > 0.9) ? "true" : "false",
 						(v[n].normalised > 0.9) ? "false" : "true",
 						data->session);
-				maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 				break;
-			case cmdline_button:
+			case cmdline:
 				snprintf(xmit_buffer, sizeof(xmit_buffer),
 						"{\"keyname\":\"%s\","
 						//"\"autoSubmit\":false,"
 						"\"value\":%d"
-						"}", cmdline_keys[ident.fields.index],
+						"}", cmdline_keys[chan->index],
 						(v[n].normalised > 0.9) ? 1 : 0);
-				maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 				break;
+			//TODO cmdline_local
 			default:
 				fprintf(stderr, "maweb control not yet implemented\n");
-				break;
+				return 1;
 		}
+		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 	}
 	return 0;
 }
@@ -912,7 +949,7 @@ static int maweb_start(){
 	for(u = 0; u < n; u++){
 		//sort channels
 		data = (maweb_instance_data*) inst[u]->impl;
-		qsort(data->input_channel, data->input_channels, sizeof(maweb_channel_ident), channel_comparator);
+		qsort(data->channel, data->channels, sizeof(maweb_channel_data), channel_comparator);
 
 		if(maweb_connect(inst[u])){
 			fprintf(stderr, "Failed to open connection to MA Web Remote for instance %s\n", inst[u]->name);
@@ -964,9 +1001,9 @@ static int maweb_shutdown(){
 		data->offset = data->allocated = 0;
 		data->state = ws_new;
 
-		free(data->input_channel);
-		data->input_channel = NULL;
-		data->input_channels = 0;
+		free(data->channel);
+		data->channel = NULL;
+		data->channels = 0;
 	}
 
 	free(inst);

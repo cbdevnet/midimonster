@@ -155,9 +155,9 @@ For Linux and OSX, just running `make` in the source directory should do the tri
 Some backends have been marked as optional as they require rather large additional software to be installed,
 for example the `ola` backend. To create a build including these, run `make full`.
 
-To build on windows, install the crosscompiler package listed above and run
-`make windows`. This will build `midimonster.exe` as well as a set of backends as DLL
-files.
+To build for Windows, you still need to compile on a Linux machine.
+Install the crosscompiler package listed above and run `make windows`.
+This will build `midimonster.exe` as well as a set of backends as DLL files.
 
 ## Development
 

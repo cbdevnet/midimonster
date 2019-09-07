@@ -25,7 +25,8 @@ typedef enum /*_maweb_channel_type*/ {
 	exec_button = 2, //gma: 0 dot: 0
 	exec_lower = 3, //gma: 1 dot: 1
 	exec_upper = 4, //gma: 2 dot: 0
-	cmdline_button
+	cmdline,
+	cmdline_local
 } maweb_channel_type;
 
 typedef enum /*_maweb_peer_type*/ {
@@ -49,15 +50,16 @@ typedef enum /*_ws_frame_op*/ {
 	ws_pong = 10
 } maweb_operation;
 
-typedef union {
-	struct {
-		uint8_t padding[3];
-		uint8_t type;
-		uint16_t page;
-		uint16_t index;
-	} fields;
-	uint64_t label;
-} maweb_channel_ident;
+typedef struct /*_maweb_channel*/ {
+	maweb_channel_type type;
+	uint16_t page;
+	uint16_t index;
+
+	uint8_t input_blocked;
+
+	double in;
+	double out;
+} maweb_channel_data;
 
 typedef struct /*_maweb_instance_data*/ {
 	char* host;
@@ -69,9 +71,8 @@ typedef struct /*_maweb_instance_data*/ {
 	int64_t session;
 	maweb_peer_type peer_type;
 
-	//need to keep an internal registry to optimize data polls
-	size_t input_channels;
-	maweb_channel_ident* input_channel;
+	size_t channels;
+	maweb_channel_data* channel;
 
 	int fd;
 	maweb_state state;

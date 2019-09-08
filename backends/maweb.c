@@ -346,8 +346,6 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 		exec_blocks += json_obj_offset(payload + exec_blocks, "items");
 	}
 
-	//TODO detect unused faders
-
 	//iterate over executor blocks
 	for(offset = json_array_offset(payload + exec_blocks, block); offset; offset = json_array_offset(payload + exec_blocks, block)){
 		control = exec_blocks + offset + json_obj_offset(payload + exec_blocks + offset, "fader");
@@ -362,6 +360,7 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 				}
 			}
 			else{
+				//block input immediately after channel set to prevent feedback loops
 				data->channel[channel_index].input_blocked--;
 			}
 		}
@@ -508,8 +507,18 @@ static int maweb_request_playbacks(instance* inst){
 			snprintf(item_counts, sizeof(item_indices), "[%" PRIsize_t "]", ((channels / 5) * 5 + 5));
 		}
 
+		DBGPF("maweb poll range first %d: %d.%d last %d: %d.%d next %d: %d.%d\n",
+				data->channel[channel].type, data->channel[channel].page, data->channel[channel].index,
+				data->channel[channel + channel_offset - 1].type, data->channel[channel + channel_offset - 1].page, data->channel[channel + channel_offset - 1].index,
+				data->channel[channel + channel_offset].type, data->channel[channel + channel_offset].page, data->channel[channel + channel_offset].index);
+
 		//advance base channel
 		channel += channel_offset - 1;
+
+		//fader flash buttons have the same type as button execs, but can't be requested
+		if(data->channel[channel].index < 100 && data->channel[channel].type == exec_button){
+			continue;
+		}
 
 		//send current request
 		snprintf(xmit_buffer, sizeof(xmit_buffer),

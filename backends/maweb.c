@@ -124,14 +124,23 @@ static ssize_t maweb_channel_index(maweb_instance_data* data, maweb_channel_type
 static int channel_comparator(const void* raw_a, const void* raw_b){
 	maweb_channel_data* a = (maweb_channel_data*) raw_a;
 	maweb_channel_data* b = (maweb_channel_data*) raw_b;
-	
+
 	//this needs to take into account command line channels
 	//they need to be sorted last so that the channel poll logic works properly
-	if(a->type != b->type){
-		return a->type - b->type;
-	}
 	if(a->page != b->page){
 		return a->page - b->page;
+	}
+	//execs and their components are sorted by index first, type second
+	if(a->type < cmdline && b->type < cmdline){
+		if(a->index != b->index){
+			return a->index - b->index;
+		}
+		return a->type - b->type;
+
+	}
+	//if either one is not an exec, sort by type first, index second
+	if(a->type != b->type){
+		return a->type - b->type;
 	}
 	return a->index - b->index;
 }
@@ -153,9 +162,6 @@ static int maweb_configure(char* option, char* value){
 static int maweb_configure_instance(instance* inst, char* option, char* value){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
 	char* host = NULL, *port = NULL;
-	#ifndef MAWEB_NO_LIBSSL
-	uint8_t password_hash[MD5_DIGEST_LENGTH];
-	#endif
 
 	if(!strcmp(option, "host")){
 		mmbackend_parse_hostspec(value, &host, &port);
@@ -180,6 +186,8 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 	else if(!strcmp(option, "password")){
 		#ifndef MAWEB_NO_LIBSSL
 		size_t n;
+		uint8_t password_hash[MD5_DIGEST_LENGTH];
+
 		MD5((uint8_t*) value, strlen(value), (uint8_t*) password_hash);
 		data->pass = realloc(data->pass, (2 * MD5_DIGEST_LENGTH + 1) * sizeof(char));
 		for(n = 0; n < MD5_DIGEST_LENGTH; n++){
@@ -192,7 +200,7 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 		#endif
 	}
 
-	fprintf(stderr, "Unknown configuration parameter %s for manet instance %s\n", option, inst->name);
+	fprintf(stderr, "Unknown configuration parameter %s for maweb instance %s\n", option, inst->name);
 	return 1;
 }
 
@@ -328,9 +336,9 @@ static int maweb_send_frame(instance* inst, maweb_operation op, uint8_t* payload
 static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_type metatype, char* payload, size_t payload_length){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
 	size_t exec_blocks = json_obj_offset(payload, (metatype == 2) ? "executorBlocks" : "bottomButtons"), offset, block = 0, control;
-	channel_value evt;
 	int64_t exec_index = json_obj_int(payload, "iExec", 191);
 	ssize_t channel_index;
+	channel_value evt;
 
 	if(!exec_blocks){
 		if(metatype == 3){
@@ -449,23 +457,22 @@ static int maweb_request_playbacks(instance* inst){
 		return 0;
 	}
 
-	//TODO this needs to ignore non-metamoded execs
-	//don't quote me on this whole segment
-	
 	//only request faders and buttons
-	for(channel = 0; channel < data->channels && data->channel[channel].type <= exec_button; channel++){
+	for(channel = 0; channel < data->channels && data->channel[channel].type < cmdline; channel++){
 		offsets[0] = offsets[1] = offsets[2] = 1;
 		page_index = data->channel[channel].page;
+		//poll logic differs between the consoles because reasons
+		//dont quote me on this section
 		if(data->peer_type == peer_dot2){
 			//blocks 0, 100 & 200 have 21 execs and need to be queried from fader view
 			view = (data->channel[channel].index >= 300) ? 3 : 2;
 
-			for(channel_offset = 1; channel + channel_offset <= data->channels && data->channel[channel + channel_offset - 1].type < exec_button; channel_offset++){
+			for(channel_offset = 1; channel + channel_offset <= data->channels
+					&& data->channel[channel + channel_offset].type < cmdline; channel_offset++){
 				channels = channel + channel_offset - 1;
 				//find end for this exec block
 				for(; channel + channel_offset < data->channels; channel_offset++){
 					if(data->channel[channel + channel_offset].page != page_index
-							|| data->channel[channels].type != data->channel[channel + channel_offset].type
 							|| (data->channel[channels].index / 100) != (data->channel[channel + channel_offset].index / 100)){
 						break;
 					}
@@ -496,14 +503,14 @@ static int maweb_request_playbacks(instance* inst){
 			//this channel must be included, so it must be in range for the first startindex
 			snprintf(item_indices, sizeof(item_indices), "[%d]", (data->channel[channel].index / 5) * 5);
 
+			//find end of exec block
 			for(channel_offset = 1; channel + channel_offset < data->channels
-					&& data->channel[channel].type == data->channel[channel + channel_offset].type
 					&& data->channel[channel].page == data->channel[channel + channel_offset].page
 					&& data->channel[channel].index / 100 == data->channel[channel + channel_offset].index / 100; channel_offset++){
 			}
 
+			//gma execs are grouped in blocks of 5
 			channels = data->channel[channel + channel_offset - 1].index - (data->channel[channel].index / 5) * 5;
-
 			snprintf(item_counts, sizeof(item_indices), "[%" PRIsize_t "]", ((channels / 5) * 5 + 5));
 		}
 
@@ -514,11 +521,6 @@ static int maweb_request_playbacks(instance* inst){
 
 		//advance base channel
 		channel += channel_offset - 1;
-
-		//fader flash buttons have the same type as button execs, but can't be requested
-		if(data->channel[channel].index < 100 && data->channel[channel].type == exec_button){
-			continue;
-		}
 
 		//send current request
 		snprintf(xmit_buffer, sizeof(xmit_buffer),
@@ -544,6 +546,7 @@ static int maweb_request_playbacks(instance* inst){
 		updates_inflight++;
 	}
 
+	DBGPF("maweb poll request handling done, %" PRIu64 " updates requested\n", updates_inflight);
 	return rv;
 }
 

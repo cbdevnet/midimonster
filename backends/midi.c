@@ -84,14 +84,14 @@ static instance* midi_instance(){
 	return inst;
 }
 
-static int midi_configure_instance(instance* instance, char* option, char* value){
-	midi_instance_data* data = (midi_instance_data*) instance->impl;
+static int midi_configure_instance(instance* inst, char* option, char* value){
+	midi_instance_data* data = (midi_instance_data*) inst->impl;
 
 	//FIXME maybe allow connecting more than one device
 	if(!strcmp(option, "read")){
 		//connect input device
 		if(data->read){
-			fprintf(stderr, "MIDI port already connected to an input device\n");
+			fprintf(stderr, "MIDI instance %s was already connected to an input device\n", inst->name);
 			return 1;
 		}
 		data->read = strdup(value);
@@ -100,7 +100,7 @@ static int midi_configure_instance(instance* instance, char* option, char* value
 	else if(!strcmp(option, "write")){
 		//connect output device
 		if(data->write){
-			fprintf(stderr, "MIDI port already connected to an output device\n");
+			fprintf(stderr, "MIDI instance %s was already connected to an output device\n", inst->name);
 			return 1;
 		}
 		data->write = strdup(value);
@@ -111,7 +111,7 @@ static int midi_configure_instance(instance* instance, char* option, char* value
 	return 1;
 }
 
-static channel* midi_channel(instance* instance, char* spec){
+static channel* midi_channel(instance* inst, char* spec){
 	midi_channel_ident ident = {
 		.label = 0
 	};
@@ -142,13 +142,13 @@ static channel* midi_channel(instance* instance, char* spec){
 		old_syntax = 1;
 	}
 	else{
-		fprintf(stderr, "Unknown MIDI channel specification %s\n", spec);
+		fprintf(stderr, "Unknown MIDI channel control type in %s\n", spec);
 		return NULL;
 	}
 
 	ident.fields.channel = strtoul(channel, &channel, 10);
 	if(ident.fields.channel > 15){
-		fprintf(stderr, "MIDI channel out of range in channel spec %s\n", spec);
+		fprintf(stderr, "MIDI channel out of range in midi channel spec %s\n", spec);
 		return NULL;
 	}
 
@@ -176,18 +176,22 @@ static channel* midi_channel(instance* instance, char* spec){
 			ident.fields.type = pressure;
 			channel += 8;
 		}
-		else if(!strncmp(channel, "pitch", 8)){
+		else if(!strncmp(channel, "pitch", 5)){
 			ident.fields.type = pitchbend;
 		}
 		else if(!strncmp(channel, "aftertouch", 10)){
 			ident.fields.type = aftertouch;
+		}
+		else{
+			fprintf(stderr, "Unknown MIDI channel control type in %s\n", spec);
+			return NULL;
 		}
 	}
 
 	ident.fields.control = strtoul(channel, NULL, 10);
 
 	if(ident.label){
-		return mm_channel(instance, ident.label, 1);
+		return mm_channel(inst, ident.label, 1);
 	}
 
 	return NULL;
@@ -196,13 +200,12 @@ static channel* midi_channel(instance* instance, char* spec){
 static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u;
 	snd_seq_event_t ev;
-	midi_instance_data* data;
+	midi_instance_data* data = (midi_instance_data*) inst->impl;
 	midi_channel_ident ident = {
 		.label = 0
 	};
 
 	for(u = 0; u < num; u++){
-		data = (midi_instance_data*) c[u]->instance->impl;
 		ident.label = c[u]->ident;
 
 		snd_seq_ev_clear(&ev);
@@ -334,7 +337,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 }
 
 static int midi_start(){
-	size_t n, p;
+	size_t n = 0, p;
 	int nfds, rv = 1;
 	struct pollfd* pfds = NULL;
 	instance** inst = NULL;

@@ -24,7 +24,6 @@ static int plugin_attach(char* path, char* file){
 	plugin_init init = NULL;
 	void* handle = NULL;
 	char* lib = NULL;
-	char* error = NULL;
 
 	lib = calloc(strlen(path) + strlen(file) + 1, sizeof(char));
 	if(!lib){
@@ -36,16 +35,15 @@ static int plugin_attach(char* path, char* file){
 	handle = dlopen(lib, RTLD_NOW);
 	if(!handle){
 		#ifdef _WIN32
+		char* error = NULL;
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-		#else
-		error = dlerror();
-		#endif
 		fprintf(stderr, "Failed to load plugin %s: %s\n", lib, error);
-		free(lib);
-		#ifdef _WIN32
 		LocalFree(error);
+		#else
+		fprintf(stderr, "Failed to load plugin %s: %s\n", lib, dlerror());
 		#endif
+		free(lib);
 		return 0;
 	}
 
@@ -156,10 +154,22 @@ load_done:
 
 int plugins_close(){
 	size_t u;
+
 	for(u = 0; u < plugins; u++){
+#ifdef _WIN32
+		char* error = NULL;
+		//FreeLibrary returns the inverse of dlclose
+		if(!FreeLibrary(plugin_handle[u])){
+			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+				NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
+			fprintf(stderr, "Failed to unload plugin: %s\n", error);
+			LocalFree(error);
+		}
+#else
 		if(dlclose(plugin_handle[u])){
 			fprintf(stderr, "Failed to unload plugin: %s\n", dlerror());
 		}
+#endif
 	}
 
 	free(plugin_handle);

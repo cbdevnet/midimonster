@@ -591,7 +591,7 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		fprintf(stderr, "maweb sending user credentials\n");
 		snprintf(xmit_buffer, sizeof(xmit_buffer),
 				"{\"requestType\":\"login\",\"username\":\"%s\",\"password\":\"%s\",\"session\":%" PRIu64 "}",
-				(data->peer_type == peer_dot2) ? "remote" : data->user, data->pass, data->session);
+				(data->peer_type == peer_dot2) ? "remote" : data->user, data->pass ? data->pass : MAWEB_DEFAULT_PASSWORD, data->session);
 		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 	}
 	if(json_obj(payload, "status") && json_obj(payload, "appType")){

@@ -181,6 +181,11 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	};
 	size_t u;
 
+	//early exit
+	if(!num){
+		return 0;
+	}
+
 	if(!data->device_out){
 		fprintf(stderr, "winmidi instance %s has no output device\n", inst->name);
 		return 0;
@@ -433,9 +438,12 @@ static int winmidi_start(){
 	int device, rv = -1;
 	instance** inst = NULL;
 	winmidi_instance_data* data = NULL;
-	struct sockaddr_storage sockadd;
+	struct sockaddr_storage sockadd = {
+		0
+	};
 	//this really should be a size_t but getsockname specifies int* for some reason
 	int sockadd_len = sizeof(sockadd);
+	char* error = NULL;
 	DBGPF("winmidi main thread ID is %ld\n", GetCurrentThreadId());
 
 	//fetch all instances
@@ -457,18 +465,41 @@ static int winmidi_start(){
 	}
 
 	//open the feedback sockets
-	backend_config.socket_pair[0] = mmbackend_socket(NULL, "0", SOCK_DGRAM, 1, 0);
+	//for some reason this while construct fails to work on 'real' windows with ipv6
+	backend_config.socket_pair[0] = mmbackend_socket("127.0.0.1", "0", SOCK_DGRAM, 1, 0);
 	if(backend_config.socket_pair[0] < 0){
 		fprintf(stderr, "winmidi failed to open feedback socket\n");
 		return 1;
 	}
 	if(getsockname(backend_config.socket_pair[0], (struct sockaddr*) &sockadd, &sockadd_len)){
-		fprintf(stderr, "winmidi failed to query feedback socket information\n");
+		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
+		fprintf(stderr, "winmidi failed to query feedback socket information: %s\n", error);
+		LocalFree(error);
 		return 1;
 	}
+	//getsockname on 'real' windows may not set the adress - works on wine, though
+	switch(sockadd.ss_family){
+		case AF_INET:
+		case AF_INET6:
+			((struct sockaddr_in*) &sockadd)->sin_family = AF_INET;
+			((struct sockaddr_in*) &sockadd)->sin_addr.s_addr = htobe32(INADDR_LOOPBACK);
+			break;
+		//for some absurd reason 'real' windows announces the socket as AF_INET6 but rejects any connection unless its AF_INET
+//		case AF_INET6:
+//			((struct sockaddr_in6*) &sockadd)->sin6_addr = in6addr_any;
+//			break;
+		default:
+			fprintf(stderr, "winmidi invalid feedback socket family\n");
+			return 1;
+	}
+	DBGPF("winmidi feedback socket family %d port %d\n", sockadd.ss_family, be16toh(((struct sockaddr_in*)&sockadd)->sin_port));
 	backend_config.socket_pair[1] = socket(sockadd.ss_family, SOCK_DGRAM, IPPROTO_UDP);
 	if(backend_config.socket_pair[1] < 0 || connect(backend_config.socket_pair[1], (struct sockaddr*) &sockadd, sockadd_len)){
-		fprintf(stderr, "winmidi failed to connect to feedback socket\n");
+		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
+		fprintf(stderr, "winmidi failed to connect to feedback socket: %s\n", error);
+		LocalFree(error);
 		return 1;
 	}
 

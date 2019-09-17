@@ -71,6 +71,11 @@ elif [[ $TASK = 'sanitize' ]]; then
   travis_fold start "make_sanitize"
   make sanitize;
   travis_fold end "make_sanitize"
+elif [[ $TASK = 'windows' ]]; then
+  # Run sanitized compile
+  travis_fold start "make_windows"
+  make windows;
+  travis_fold end "make_windows"
 else
   # Otherwise compile as normal
   travis_fold start "make"

@@ -29,6 +29,10 @@ addons:
     packages: &core_build_clang_latest
      - *core_build
      - clang-6.0
+    packages: &core_build_windows
+     - *core_build
+     - mingw-w64
+
 
 matrix:
   fast_finish: true
@@ -67,6 +71,16 @@ matrix:
         apt:
           packages:
            - *core_build_gpp_latest
+          sources:
+           - ubuntu-toolchain-r-test
+    - os: linux
+      dist: xenial
+      compiler: mingw-gcc
+      env: TASK='windows'
+      addons:
+        apt:
+          packages:
+           - *core_build_windows
           sources:
            - ubuntu-toolchain-r-test
     - os: linux

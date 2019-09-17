@@ -7,7 +7,7 @@ Currently, the MIDIMonster supports the following protocols:
 
 | Protocol			| Operating Systems	| Notes				| Backends			|
 |-------------------------------|-----------------------|-------------------------------|-------------------------------|
-| MIDI				| Linux			| Via ALSA			| [`midi`](backends/midi.md)	|
+| MIDI				| Linux, Windows	| Linux: via ALSA		| [`midi`](backends/midi.md), [`winmidi`](backends/winmidi.md) |
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)	|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)	|
@@ -117,6 +117,7 @@ configuration options, channel specification syntax and any known problems or ot
 special information. These documentation files are located in the `backends/` directory.
 
 * [`midi` backend documentation](backends/midi.md)
+* [`winmidi` backend documentation](backends/winmidi.md)
 * [`artnet` backend documentation](backends/artnet.md)
 * [`sacn` backend documentation](backends/sacn.md)
 * [`evdev` backend documentation](backends/evdev.md)

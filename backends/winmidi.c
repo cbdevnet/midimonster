@@ -478,7 +478,7 @@ static int winmidi_start(){
 		LocalFree(error);
 		return 1;
 	}
-	//getsockname on 'real' windows may not set the adress - works on wine, though
+	//getsockname on 'real' windows may not set the address - works on wine, though
 	switch(sockadd.ss_family){
 		case AF_INET:
 		case AF_INET6:

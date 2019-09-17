@@ -75,8 +75,10 @@ matrix:
            - ubuntu-toolchain-r-test
     - os: linux
       dist: xenial
-      compiler: x86_64-w64-mingw32-gcc
-      env: TASK='windows'
+      compiler: mingw32-gcc
+      env: 
+        - TASK='windows'
+        - CC='x86_64-w64-mingw32-gcc'
       addons:
         apt:
           packages:

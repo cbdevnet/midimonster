@@ -20,11 +20,12 @@ some deviations may still be present.
 | `read`	| `2`			| none			| MIDI device to connect for input |
 | `write`	| `DeviceName`		| none			| MIDI device to connect for output |
 
-MIDI device names may either be prefixes of MIDI device names or a numeric index corresponding to the list output at startup using the backend `list` option.
+MIDI device names may either be prefixes of MIDI device names or a numeric indices corresponding to the listing shown
+at startup when using the global `list` option.
 
 #### Channel specification
 
-The MIDI backend supports mapping different MIDI events to MIDIMonster channels. The currently supported event types are
+The `winmidi` backend supports mapping different MIDI events as MIDIMonster channels. The currently supported event types are
 
 * `cc` - Control Changes
 * `note` - Note On/Off messages

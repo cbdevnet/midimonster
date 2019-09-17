@@ -21,7 +21,6 @@ static struct {
 	.socket_pair = {-1, -1}
 };
 
-//TODO allow connect-device specification by index
 //TODO detect option
 
 int init(){

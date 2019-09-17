@@ -20,8 +20,8 @@ some deviations may still be present.
 | `read`	| `2`			| none			| MIDI device to connect for input |
 | `write`	| `DeviceName`		| none			| MIDI device to connect for output |
 
-MIDI device names may either be prefixes of MIDI device names or a numeric indices corresponding to the listing shown
-at startup when using the global `list` option.
+Input/output device names may either be prefixes of MIDI device names or numeric indices corresponding
+to the listing shown at startup when using the global `list` option.
 
 #### Channel specification
 

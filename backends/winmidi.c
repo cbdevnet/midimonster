@@ -3,7 +3,6 @@
 #include "libmmbackend.h"
 #include <mmsystem.h>
 
-#define DEBUG
 #include "winmidi.h"
 
 #define BACKEND_NAME "winmidi"

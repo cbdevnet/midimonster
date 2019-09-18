@@ -19,72 +19,57 @@ static uint64_t update_interval = 50;
 static uint64_t last_update = 0;
 static uint64_t updates_inflight = 0;
 
-static char* cmdline_keys[] = {
-	"SET",
-	"PREV",
-	"NEXT",
-	"CLEAR",
-	"FIXTURE_CHANNEL",
-	"FIXTURE_GROUP_PRESET",
-	"EXEC_CUE",
-	"STORE_UPDATE",
-	"OOPS",
-	"ESC",
-	"0",
-	"1",
-	"2",
-	"3",
-	"4",
-	"5",
-	"6",
-	"7",
-	"8",
-	"9",
-	"PUNKT",
-	"PLUS",
-	"MINUS",
-	"THRU",
-	"IF",
-	"AT",
-	"FULL",
-	"HIGH",
-	"ENTER",
-	"OFF",
-	"ON",
-	"ASSIGN",
-	"LABEL",
-	"COPY",
-	"TIME",
-	"PAGE",
-	"MACRO",
-	"DELETE",
-	"GOTO",
-	"GO_PLUS",
-	"GO_MINUS",
-	"PAUSE",
-	"SELECT",
-	"FIXTURE",
-	"SEQU",
-	"CUE",
-	"PRESET",
-	"EDIT",
-	"UPDATE",
-	"EXEC",
-	"STORE",
-	"GROUP",
-	"PROG_ONLY",
-	"SPECIAL_DIALOGUE",
-	"SOLO",
-	"ODD",
-	"EVEN",
-	"WINGS",
-	"RESET",
-	"MA",
-	"layerMode",
-	"featureSort",
-	"fixtureSort",
-	"channelSort",
-	"hideName"
+static maweb_command_key cmdline_keys[] = {
+	{"PREV", 109, 0, 1}, {"SET", 108, 1, 0, 1}, {"NEXT", 110, 0, 1},
+	{"TIME", 58, 1, 1}, {"EDIT", 55, 1, 1}, {"UPDATE", 57, 1, 1},
+	{"OOPS", 53, 1, 1}, {"ESC", 54, 1, 1}, {"CLEAR", 105, 1, 1},
+	{"0", 86, 1, 1}, {"1", 87, 1, 1}, {"2", 88, 1, 1},
+	{"3", 89, 1, 1}, {"4", 90, 1, 1}, {"5", 91, 1, 1},
+	{"6", 92, 1, 1}, {"7", 93, 1, 1}, {"8", 94, 1, 1},
+	{"9", 95, 1, 1}, {"PUNKT", 98, 1, 1}, {"ENTER", 106, 1, 1},
+	{"PLUS", 96, 1, 1}, {"MINUS", 97, 1, 1}, {"THRU", 102, 1, 1},
+	{"IF", 103, 1, 1}, {"AT", 104, 1, 1}, {"FULL", 99, 1, 1},
+	{"MA", 68, 0, 1}, {"HIGH", 100, 1, 1, 1}, {"SOLO", 101, 1, 1, 1},
+	{"SELECT", 42, 1, 1}, {"OFF", 43, 1, 1}, {"ON", 46, 1, 1},
+	{"ASSIGN", 63, 1, 1}, {"LABEL", 0, 1, 1},
+	{"COPY", 73, 1, 1}, {"DELETE", 69, 1, 1}, {"STORE", 59, 1, 1},
+	{"GOTO", 56, 1, 1}, {"PAGE", 70, 1, 1}, {"MACRO", 71, 1, 1},
+	{"PRESET", 72, 1, 1}, {"SEQU", 74, 1, 1}, {"CUE", 75, 1, 1},
+	{"EXEC", 76, 1, 1}, {"FIXTURE", 83, 1, 1}, {"GROUP", 84, 1, 1},
+	{"GO_MINUS", 10, 1, 1}, {"PAUSE", 9, 1, 1}, {"GO_PLUS", 11, 1, 1},
+
+	{"FIXTURE_CHANNEL", 0, 1, 1}, {"FIXTURE_GROUP_PRESET", 0, 1, 1},
+	{"EXEC_CUE", 0, 1, 1}, {"STORE_UPDATE", 0, 1, 1}, {"PROG_ONLY", 0, 1, 1, 1},
+	{"SPECIAL_DIALOGUE", 0, 1, 1},
+	{"ODD", 0, 1, 1}, {"EVEN", 0, 1, 1},
+	{"WINGS", 0, 1, 1}, {"RESET", 0, 1, 1},
+	//gma2 internal only
+	{"CHPGPLUS", 3}, {"CHPGMINUS", 4},
+	{"FDPGPLUS", 5}, {"FDPGMINUS", 6},
+	{"BTPGPLUS", 7}, {"BTPGMINUS", 8},
+	{"X1", 12}, {"X2", 13}, {"X3", 14},
+	{"X4", 15}, {"X5", 16}, {"X6", 17},
+	{"X7", 18}, {"X8", 19}, {"X9", 20},
+	{"X10", 21}, {"X11", 22}, {"X12", 23},
+	{"X13", 24}, {"X14", 25}, {"X15", 26},
+	{"X16", 27}, {"X17", 28}, {"X18", 29},
+	{"X19", 30}, {"X20", 31},
+	{"V1", 120}, {"V2", 121}, {"V3", 122},
+	{"V4", 123}, {"V5", 124}, {"V6", 125},
+	{"V7", 126}, {"V8", 127}, {"V9", 128},
+	{"V10", 129},
+	{"NIPPLE", 40},
+	{"TOOLS", 119}, {"SETUP", 117}, {"BACKUP", 117},
+	{"BLIND", 60}, {"FREEZE", 61}, {"PREVIEW", 62},
+	{"FIX", 41}, {"TEMP", 44}, {"TOP", 45},
+	{"VIEW", 66}, {"EFFECT", 67}, {"CHANNEL", 82},
+	{"MOVE", 85}, {"BLACKOUT", 65},
+	{"PLEASE", 106},
+	{"LIST", 32}, {"USER1", 33}, {"USER2", 34},
+	{"ALIGN", 64}, {"HELP", 116},
+	{"UP", 107}, {"DOWN", 111},
+	{"FASTREVERSE", 47}, {"LEARN", 48}, {"FASTFORWARD", 49},
+	{"GO_MINUS_SMALL", 50}, {"PAUSE_SMALL", 51}, {"GO_PLUS_SMALL", 52}
 };
 
 int init(){
@@ -199,6 +184,22 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 		return 1;
 		#endif
 	}
+	else if(!strcmp(option, "cmdline")){
+		if(!strcmp(value, "console")){
+			data->cmdline = cmd_console;
+		}
+		else if(!strcmp(value, "remote")){
+			data->cmdline = cmd_remote;
+		}
+		else if(!strcmp(value, "downgrade")){
+			data->cmdline = cmd_downgrade;
+		}
+		else{
+			fprintf(stderr, "Unknown maweb commandline mode %s for instance %s\n", value, inst->name);
+			return 1;
+		}
+		return 0;
+	}
 
 	fprintf(stderr, "Unknown configuration parameter %s for maweb instance %s\n", option, inst->name);
 	return 1;
@@ -268,10 +269,15 @@ static channel* maweb_channel(instance* inst, char* spec){
 		chan.index = strtoul(next_token, NULL, 10);
 	}
 	else{
-		for(n = 0; n < sizeof(cmdline_keys) / sizeof(char*); n++){
-			//FIXME this is broken for layerMode
-			if(!strcmp(spec, cmdline_keys[n]) || (*spec == 'l' && !strcmp(spec + 1, cmdline_keys[n]))){
-				chan.type = (*spec == 'l') ? cmdline_local : cmdline;
+		for(n = 0; n < sizeof(cmdline_keys) / sizeof(maweb_command_key); n++){
+			if(!strcmp(spec, cmdline_keys[n].name)){
+				if((data->cmdline == cmd_remote && !cmdline_keys[n].press && !cmdline_keys[n].release)
+							|| (data->cmdline == cmd_console && !cmdline_keys[n].lua)){
+					fprintf(stderr, "maweb cmdline key %s does not work with the current commandline mode for instance %s\n", spec, inst->name);
+					return NULL;
+				}
+
+				chan.type = cmdline;
 				chan.index = n + 1;
 				chan.page = 1;
 				break;
@@ -599,6 +605,8 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		field = json_obj_str(payload, "appType", NULL);
 		if(!strncmp(field, "dot2", 4)){
 			data->peer_type = peer_dot2;
+			//the dot2 can't handle lua commands
+			data->cmdline = cmd_remote;
 		}
 		else if(!strncmp(field, "gma2", 4)){
 			data->peer_type = peer_ma2;
@@ -860,14 +868,41 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						data->session);
 				break;
 			case cmdline:
-				snprintf(xmit_buffer, sizeof(xmit_buffer),
-						"{\"keyname\":\"%s\","
-						//"\"autoSubmit\":false,"
-						"\"value\":%d"
-						"}", cmdline_keys[chan->index],
-						(v[n].normalised > 0.9) ? 1 : 0);
+				if(cmdline_keys[chan->index].lua
+						&& (data->cmdline == cmd_console || data->cmdline == cmd_downgrade)
+						&& data->peer_type != peer_dot2){
+					//push canbus events
+					snprintf(xmit_buffer, sizeof(xmit_buffer),
+							"{\"command\":\"LUA 'gma.canbus.hardkey(%d, %s, false)'\","
+							"\"requestType\":\"command\","
+							"\"session\":%" PRIu64
+							"}", cmdline_keys[chan->index].lua,
+							(v[n].normalised > 0.9) ? "true" : "false",
+							data->session);
+				}
+				else if((cmdline_keys[chan->index].press || cmdline_keys[chan->index].release)
+						&& (data->cmdline != cmd_console)){
+					//send press/release events if required
+					if((cmdline_keys[chan->index].press && v[n].normalised > 0.9)
+							|| (cmdline_keys[chan->index].release && v[n].normalised < 0.9)){
+						snprintf(xmit_buffer, sizeof(xmit_buffer),
+								"{\"keyname\":\"%s\","
+								"\"autoSubmit\":%s,"
+								"\"value\":%d"
+								"}", cmdline_keys[chan->index].name,
+								cmdline_keys[chan->index].auto_submit ? "true" : "null",
+								(v[n].normalised > 0.9) ? 1 : 0);
+					}
+					else{
+						continue;
+					}
+				}
+				else{
+					fprintf(stderr, "maweb commandline key %s not executed on %s due to mode mismatch\n",
+							cmdline_keys[chan->index].name, inst->name);
+					continue;
+				}
 				break;
-			//TODO cmdline_local
 			default:
 				fprintf(stderr, "maweb control not yet implemented\n");
 				return 1;

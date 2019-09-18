@@ -25,8 +25,7 @@ typedef enum /*_maweb_channel_type*/ {
 	exec_button = 2, //gma: 0 dot: 0
 	exec_lower = 3, //gma: 1 dot: 1
 	exec_upper = 4, //gma: 2 dot: 0
-	cmdline,
-	cmdline_local
+	cmdline
 } maweb_channel_type;
 
 typedef enum /*_maweb_peer_type*/ {
@@ -43,12 +42,26 @@ typedef enum /*_ws_conn_state*/ {
 	ws_closed
 } maweb_state;
 
+typedef enum /*_maweb_cmdline_mode*/ {
+	cmd_remote = 0,
+	cmd_console,
+	cmd_downgrade
+} maweb_cmdline_mode;
+
 typedef enum /*_ws_frame_op*/ {
 	ws_text = 1,
 	ws_binary = 2,
 	ws_ping = 9,
 	ws_pong = 10
 } maweb_operation;
+
+typedef struct {
+	char* name;
+	unsigned lua;
+	uint8_t press;
+	uint8_t release;
+	uint8_t auto_submit;
+} maweb_command_key;
 
 typedef struct /*_maweb_channel*/ {
 	maweb_channel_type type;
@@ -73,6 +86,7 @@ typedef struct /*_maweb_instance_data*/ {
 
 	size_t channels;
 	maweb_channel_data* channel;
+	maweb_cmdline_mode cmdline;
 
 	int fd;
 	maweb_state state;

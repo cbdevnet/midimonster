@@ -26,6 +26,14 @@ Web Remote. Set a web remote password using the option below the activation sett
 | `host`	| `10.23.42.21 80`	| none			| Host address (and optional port) of the MA Web Remote		|
 | `user`	| `midimonster`		| none			| User for the remote session (GrandMA2)			|
 | `password`	| `midimonster`		| `midimonster`		| Password for the remote session				|
+| `cmdline`	| `console`		| `remote`		| Commandline key handling mode (see below)			|
+
+The per-instance command line mode may be one of `remote`, `console` or `downgrade`. The first option handles
+command keys with a "virtual" commandline belonging to the Web Remote connection. Any commands entered are
+not visible on the main console. The `console` mode is only available with GrandMA2 remotes and injects the
+key events into the main console's command line. When connected to a dot2 console, the use of commandline keys
+will not be possible. With the `downgrade` mode, keys are handled on the console if possible, falling back to
+remote handling if not.
 
 #### Channel specification
 
@@ -33,7 +41,7 @@ Currently, three types of MA controls can be assigned, with each having some sub
 
 * Fader executor
 * Button executor
-* Command line buttons
+* Command keys
 
 ##### Executors
 
@@ -70,33 +78,52 @@ mw1.page2.button103 > mw1.page3.fader101
 mw1.page2.button803 > mw1.page3.button516
 ```
 
-##### Command line buttons
+##### Command keys
 
-Command line buttons will be pressed when the incoming event value is greater than `0.9` and released when it is less than that.
+Command keys will be pressed when the incoming event value is greater than `0.9` and released when it is less than that.
 They can be mapped using the syntax
 
 ```
-mw1.<button-name>
+mw1.<key-name>
 ```
 
-The following button names are recognized by the backend:
+The following keys are mappable in all commandline modes and work on all consoles
 
-| Supported	| Command	| Line		| Keys		|			|				|		|
-|---------------|---------------|---------------|---------------|-----------------------|-------------------------------|---------------|
-| `SET`		| `PREV`	| `NEXT`	| `CLEAR`	| `FIXTURE_CHANNEL`	| `FIXTURE_GROUP_PRESET`	| `EXEC_CUE`	|
-| `STORE_UPDATE`| `OOPS`	| `ESC`		| `OFF`		| `ON`			| `MA`				| `STORE`	|
-| `0`		| `1`		| `2`		| `3`		| `4`			| `5`				| `6`		|
-| `7`		| `8`		| `9`		| `PUNKT`	| `PLUS`		| `MINUS`			| `THRU`	|
-| `IF`		| `AT`		| `FULL`	| `HIGH`	| `ENTER`		| `ASSIGN`			| `LABEL`	|
-| `COPY`	| `TIME`	| `PAGE`	| `MACRO`	| `DELETE`		| `GOTO`			| `GO_PLUS`	|
-| `GO_MINUS`	| `PAUSE`	| `SELECT`	| `FIXTURE`	| `SEQU`		| `CUE`				| `PRESET`	|
-| `EDIT`	| `UPDATE`	| `EXEC`	| `GROUP`	| `PROG_ONLY`		| `SPECIAL_DIALOGUE` 		| `SOLO`	|
-| `ODD`		| `EVEN`	| `WINGS`	| `RESET` 	| `layerMode`		| `featureSort`			| `fixtureSort`	|
-| `channelSort`	| `hideName`	|		|		|			|				|		|
+| Supported	| Command	| Line		| Keys		|		|		|
+|---------------|---------------|---------------|---------------|---------------|---------------|
+| `PREV`	| `SET`		| `NEXT`	| `TIME`	| `EDIT`	| `UPDATE`	|
+| `OOPS`	| `ESC`		| `CLEAR`	| `0`		| `1`		| `2`		|
+| `3`		| `4`		| `5`		| `6`		| `7`		| `8`		|
+| `9`		| `PUNKT`	| `ENTER`	| `PLUS`	| `MINUS`	| `THRU`	|
+| `IF`		| `AT`		| `FULL`	| `MA`		| `HIGH`	| `SOLO`	|
+| `SELECT`	| `OFF`		| `ON`		| `ASSIGN`	| `COPY`	| `DELETE`	|
+| `STORE`	| `GOTO`	| `PAGE`	| `MACRO`	| `PRESET`	| `SEQU`	|
+| `CUE`		| `EXEC`	| `FIXTURE`	| `GROUP`	| `GO_MINUS`	| `PAUSE`	|
+| `GO_PLUS`	|		|		|		|		|		|
 
-Note that each Web Remote connection has it's own command line, as such commands entered using this backend will not affect
-the command line on the main console. To do that, you will need to use another backend to feed input to the MA, such as
-the ArtNet or MIDI backends.
+The following keys only work in the `remote` or `downgrade` commandline mode, but on all consoles
+
+| Web		| Remote		| specific			|		|			|
+|---------------|-----------------------|-------------------------------|---------------|-----------------------|
+| `LABEL`	|`FIXTURE_CHANNEL`	| `FIXTURE_GROUP_PRESET`	| `EXEC_CUE`	| `STORE_UPDATE`	|
+| `PROG_ONLY`	| `SPECIAL_DIALOGUE`	| `ODD`				| `EVEN`	| `WINGS`		|
+| `RESET`	|			|				|		|			|
+
+The following keys only work in the `console` or `downgrade` command line modes on a GrandMA2
+
+| GrandMA2	| console	| only		|		|		|		|
+|---------------|---------------|---------------|---------------|---------------|---------------|
+| `CHPGPLUS`	| `CHPGMINUS`	| `FDPGPLUS`	| `FDPGMINUS`	| `BTPGPLUS`	| `BTPGMINUS`	|
+| `X1`		| `X2`		| `X3`		| `X4`		| `X5`		| `X6`		|
+| `X7`		| `X8`		| `X9`		| `X10`		| `X11`		| `X12`		|
+| `X13`		| `X14`		| `X15`		| `X16`		| `X17`		| `X18`		|
+| `X19`		| `X20`		| `V1`		| `V2`		| `V3`		| `V4`		|
+| `V5`		| `V6`		| `V7`		| `V8`		| `V9`		| `V10`		|
+| `NIPPLE`	| `TOOLS`	| `SETUP`	| `BACKUP`	| `BLIND`	| `FREEZE`	|
+| `PREVIEW`	| `FIX`		| `TEMP`	| `TOP`		| `VIEW`	| `EFFECT`	|
+| `CHANNEL`	| `MOVE`	| `BLACKOUT`	| `PLEASE`	| `LIST`	| `USER1`	|
+| `USER2`	| `ALIGN`	| `HELP`	| `UP`		| `DOWN`	| `FASTREVERSE`	|
+| `LEARN`	| `FASTFORWARD`	| `GO_MINUS_SMALL` | `PAUSE_SMALL` | `GO_PLUS_SMALL` |		|
 
 #### Known bugs / problems
 
@@ -109,6 +136,5 @@ Data input from the console is done by actively querying the state of all mapped
 at low latency. A lower input interval value will produce data with lower latency, at the cost of network & CPU usage.
 Higher values will make the input "step" more, but will not consume as many CPU cycles and network bandwidth.
 
-When requesting button executor events on the fader pages (execs 101 to 222) of a dot2 console, map at least one fader control from the 0 - 22 range or input will not work due to strange limitations in the MA Web API.
-
-Command line events are sent, but I'm not sure they're being handled yet.
+When requesting button executor events on the fader pages (execs 101 to 222) of a dot2 console, map at least one fader control from the 0 - 22 range
+or input will not work due to strange limitations in the MA Web API.

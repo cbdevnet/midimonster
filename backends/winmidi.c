@@ -21,6 +21,7 @@ static struct {
 };
 
 //TODO detect option
+//TODO receive feedback socket until EAGAIN
 
 int init(){
 	backend winmidi = {
@@ -465,7 +466,7 @@ static int winmidi_start(){
 	}
 
 	//open the feedback sockets
-	//for some reason this while construct fails to work on 'real' windows with ipv6
+	//for some reason the feedback connection fails to work on 'real' windows with ipv6
 	backend_config.socket_pair[0] = mmbackend_socket("127.0.0.1", "0", SOCK_DGRAM, 1, 0);
 	if(backend_config.socket_pair[0] < 0){
 		fprintf(stderr, "winmidi failed to open feedback socket\n");

@@ -5,6 +5,7 @@
 #include <openssl/md5.h>
 #endif
 
+#define DEBUG
 #include "libmmbackend.h"
 #include "maweb.h"
 
@@ -235,6 +236,7 @@ static channel* maweb_channel(instance* inst, char* spec){
 		0
 	};
 	char* next_token = NULL;
+	channel* channel_ref = NULL;
 	size_t n;
 
 	if(!strncmp(spec, "page", 4)){
@@ -299,7 +301,9 @@ static channel* maweb_channel(instance* inst, char* spec){
 			data->channels++;
 		}
 
-		return mm_channel(inst, maweb_channel_index(data, chan.type, chan.page, chan.index), 1);
+		channel_ref = mm_channel(inst, maweb_channel_index(data, chan.type, chan.page, chan.index), 1);
+		data->channel[maweb_channel_index(data, chan.type, chan.page, chan.index)].chan = channel_ref;
+		return channel_ref;
 	}
 
 	fprintf(stderr, "Failed to parse maweb channel spec %s\n", spec);
@@ -906,6 +910,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 				fprintf(stderr, "maweb control not yet implemented\n");
 				return 1;
 		}
+		DBGPF("maweb command out %s\n", xmit_buffer);
 		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 	}
 	return 0;
@@ -982,7 +987,7 @@ static int maweb_handle(size_t num, managed_fd* fds){
 }
 
 static int maweb_start(){
-	size_t n, u;
+	size_t n, u, p;
 	instance** inst = NULL;
 	maweb_instance_data* data = NULL;
 
@@ -996,6 +1001,11 @@ static int maweb_start(){
 		//sort channels
 		data = (maweb_instance_data*) inst[u]->impl;
 		qsort(data->channel, data->channels, sizeof(maweb_channel_data), channel_comparator);
+
+		//re-set channel identifiers
+		for(p = 0; p < data->channels; p++){
+			data->channel[p].chan->ident = p;
+		}
 
 		if(maweb_connect(inst[u])){
 			fprintf(stderr, "Failed to open connection to MA Web Remote for instance %s\n", inst[u]->name);

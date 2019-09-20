@@ -72,6 +72,10 @@ typedef struct /*_maweb_channel*/ {
 
 	double in;
 	double out;
+
+	//reverse reference required because the identifiers are not stable
+	//because we sort the backing store...
+	channel* chan;
 } maweb_channel_data;
 
 typedef struct /*_maweb_instance_data*/ {

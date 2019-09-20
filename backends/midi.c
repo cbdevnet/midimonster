@@ -358,7 +358,7 @@ static int midi_start(){
 	//connect to the sequencer
 	if(snd_seq_open(&sequencer, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
 		fprintf(stderr, "Failed to open ALSA sequencer\n");
-		return 0;
+		goto bail;
 	}
 
 	snd_seq_nonblock(sequencer, 1);
@@ -367,7 +367,7 @@ static int midi_start(){
 	//update the sequencer client name
 	if(snd_seq_set_client_name(sequencer, sequencer_name ? sequencer_name : "MIDIMonster") < 0){
 		fprintf(stderr, "Failed to set MIDI client name to %s\n", sequencer_name);
-		return 1;
+		goto bail;
 	}
 
 	//create all ports

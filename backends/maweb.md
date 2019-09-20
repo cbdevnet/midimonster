@@ -2,7 +2,8 @@
 
 This backend connects directly with the integrated *MA Web Remote* of MA Lighting consoles and OnPC
 instances (GrandMA2 / GrandMA2 OnPC / GrandMA Dot2 / GrandMA Dot2 OnPC).
-It grants read-write access to the console's playback controls as well as write access to the command line.
+It grants read-write access to the console's playback controls as well as write access to most command
+line and control keys.
 
 #### Setting up the console
 
@@ -30,10 +31,10 @@ Web Remote. Set a web remote password using the option below the activation sett
 
 The per-instance command line mode may be one of `remote`, `console` or `downgrade`. The first option handles
 command keys with a "virtual" commandline belonging to the Web Remote connection. Any commands entered are
-not visible on the main console. The `console` mode is only available with GrandMA2 remotes and injects the
-key events into the main console's command line. When connected to a dot2 console, the use of commandline keys
-will not be possible. With the `downgrade` mode, keys are handled on the console if possible, falling back to
-remote handling if not.
+not visible on the main console. The `console` mode is only available with GrandMA2 remotes and injects key events
+into the main console. This mode also supports additional hardkeys that are only available on GrandMA consoles.
+When connected to a dot2 console while this mode is active, the use of commandline keys will not be possible.
+With the `downgrade` mode, keys are handled on the console if possible, falling back to remote handling if not.
 
 #### Channel specification
 
@@ -101,7 +102,7 @@ The following keys are mappable in all commandline modes and work on all console
 | `CUE`		| `EXEC`	| `FIXTURE`	| `GROUP`	| `GO_MINUS`	| `PAUSE`	|
 | `GO_PLUS`	|		|		|		|		|		|
 
-The following keys only work in the `remote` or `downgrade` commandline mode, but on all consoles
+The following keys only work when keys are being handled with a virtual command line
 
 | Web		| Remote		| specific			|		|			|
 |---------------|-----------------------|-------------------------------|---------------|-----------------------|

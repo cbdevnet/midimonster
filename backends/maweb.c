@@ -121,7 +121,6 @@ static int channel_comparator(const void* raw_a, const void* raw_b){
 			return a->index - b->index;
 		}
 		return a->type - b->type;
-
 	}
 	//if either one is not an exec, sort by type first, index second
 	if(a->type != b->type){

@@ -56,8 +56,7 @@ static int midi_configure(char* option, char* value){
 		sequencer_name = strdup(value);
 		return 0;
 	}
-
-	if(!strcmp(option, "detect")){
+	else if(!strcmp(option, "detect")){
 		midi_config.detect = 1;
 		if(!strcmp(value, "off")){
 			midi_config.detect = 0;

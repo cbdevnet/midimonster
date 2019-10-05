@@ -9,6 +9,7 @@
 
 static struct {
 	uint8_t list_devices;
+	uint8_t detect;
 	int socket_pair[2];
 
 	CRITICAL_SECTION push_events;
@@ -57,6 +58,13 @@ static int winmidi_configure(char* option, char* value){
 		backend_config.list_devices = 0;
 		if(!strcmp(value, "on")){
 			backend_config.list_devices = 1;
+		}
+		return 0;
+	}
+	else if(!strcmp(option, "detect")){
+		backend_config.detect = 0;
+		if(!strcmp(value, "on")){
+			backend_config.detect = 1;
 		}
 		return 0;
 	}
@@ -232,6 +240,22 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	return 0;
 }
 
+static char* winmidi_type_name(uint8_t typecode){
+	switch(typecode){
+		case note:
+			return "note";
+		case cc:
+			return "cc";
+		case pressure:
+			return "pressure";
+		case aftertouch:
+			return "aftertouch";
+		case pitchbend:
+			return "pitch";
+	}
+	return "unknown";
+}
+
 static int winmidi_handle(size_t num, managed_fd* fds){
 	size_t u;
 	ssize_t bytes = 0;
@@ -249,6 +273,23 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 	//push queued events
 	EnterCriticalSection(&backend_config.push_events);
 	for(u = 0; u < backend_config.events_active; u++){
+		if(backend_config.detect){
+			//pretty-print channel-wide events
+			if(backend_config.event[u].channel.fields.type == pitchbend
+					|| backend_config.event[u].channel.fields.type == aftertouch){
+				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s\n",
+						backend_config.event[u].inst->name,
+						backend_config.event[u].channel.fields.channel,
+						winmidi_type_name(backend_config.event[u].channel.fields.type));
+			}
+			else{
+				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s%d\n",
+						backend_config.event[u].inst->name,
+						backend_config.event[u].channel.fields.channel,
+						winmidi_type_name(backend_config.event[u].channel.fields.type),
+						backend_config.event[u].channel.fields.control);
+			}
+		}
 		chan = mm_channel(backend_config.event[u].inst, backend_config.event[u].channel.label, 0);
 		if(chan){
 			mm_channel_event(chan, backend_config.event[u].value);

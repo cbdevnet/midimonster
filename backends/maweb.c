@@ -5,7 +5,6 @@
 #include <openssl/md5.h>
 #endif
 
-#define DEBUG
 #include "libmmbackend.h"
 #include "maweb.h"
 
@@ -891,10 +890,12 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 						snprintf(xmit_buffer, sizeof(xmit_buffer),
 								"{\"keyname\":\"%s\","
 								"\"autoSubmit\":%s,"
-								"\"value\":%d"
+								"\"value\":%d,"
+								"\"session\":%" PRIu64
 								"}", cmdline_keys[chan->index].name,
 								cmdline_keys[chan->index].auto_submit ? "true" : "null",
-								(v[n].normalised > 0.9) ? 1 : 0);
+								(v[n].normalised > 0.9) ? 1 : 0,
+								data->session);
 					}
 					else{
 						continue;

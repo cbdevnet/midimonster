@@ -21,7 +21,6 @@ static struct {
 	.socket_pair = {-1, -1}
 };
 
-//TODO detect option
 //TODO receive feedback socket until EAGAIN
 
 int init(){
@@ -123,8 +122,9 @@ static channel* winmidi_channel(instance* inst, char* spec){
 			next_token = spec + 7;
 		}
 	}
-	else{
-		fprintf(stderr, "Unknown winmidi channel specification %s\n", spec);
+	
+	if(!next_token){
+		fprintf(stderr, "Invalid winmidi channel specification %s\n", spec);
 		return NULL;
 	}
 
@@ -226,8 +226,8 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 				break;
 			case pitchbend:
 				output.components.status = 0xE0 | ident.fields.channel;
-				output.components.data1 = ((int)(v[u].normalised * 32639.0)) & 0xFF;
-				output.components.data2 = (((int)(v[u].normalised * 32639.0)) & 0xFF00) >> 8;
+				output.components.data1 = ((int)(v[u].normalised * 16384.0)) & 0x7F;
+				output.components.data2 = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
 				break;
 			default:
 				fprintf(stderr, "Unknown winmidi channel type %d\n", ident.fields.type);
@@ -357,7 +357,7 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 				case 0xE0:
 					ident.fields.type = pitchbend;
 					ident.fields.control = 0;
-					val.normalised = (double)((input.components.data2 << 8) | input.components.data1) / 32639.0;
+					val.normalised = (double)((input.components.data2 << 7) | input.components.data1) / 16384.0;
 					break;
 				default:
 					fprintf(stderr, "winmidi unhandled status byte %02X\n", input.components.status);

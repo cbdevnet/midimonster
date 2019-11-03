@@ -456,9 +456,6 @@ static int lua_start(){
 	}
 
 	free(inst);
-	if(!n){
-		return 0;
-	}
 
 	#ifdef MMBACKEND_LUA_TIMERFD
 	//register the timer with the core

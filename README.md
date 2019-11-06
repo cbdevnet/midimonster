@@ -7,13 +7,14 @@ Currently, the MIDIMonster supports the following protocols:
 
 | Protocol			| Operating Systems	| Notes				| Backends			|
 |-------------------------------|-----------------------|-------------------------------|-------------------------------|
-| MIDI				| Linux, Windows	| Linux: via ALSA		| [`midi`](backends/midi.md), [`winmidi`](backends/winmidi.md) |
+| MIDI				| Linux, Windows	| Linux: via ALSA/JACK		| [`midi`](backends/midi.md), [`winmidi`](backends/winmidi.md), [`jack`](backends/jack.md) |
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)	|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)	|
 | evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)	|
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)	|
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
+| JACK/LV2 Control Voltage (CV)	| Linux			|				| [`jack`](backends/jack.md)	|
 
 with additional flexibility provided by a [Lua scripting environment](backends/lua.md).
 
@@ -117,6 +118,7 @@ configuration options, channel specification syntax and any known problems or ot
 special information. These documentation files are located in the `backends/` directory.
 
 * [`midi` backend documentation](backends/midi.md)
+* [`jack` backend documentation](backends/jack.md)
 * [`winmidi` backend documentation](backends/winmidi.md)
 * [`artnet` backend documentation](backends/artnet.md)
 * [`sacn` backend documentation](backends/sacn.md)
@@ -137,10 +139,11 @@ This section will explain how to build the provided sources to be able to run
 In order to build the MIDIMonster, you'll need some libraries that provide
 support for the protocols to translate.
 
-* `libasound2-dev` (for the MIDI backend)
+* `libasound2-dev` (for the ALSA MIDI backend)
 * `libevdev-dev` (for the evdev backend)
 * `liblua5.3-dev` (for the lua backend)
 * `libola-dev` (for the optional OLA backend)
+* `libjack-jackd2-dev` (for the JACK backend)
 * `pkg-config` (as some projects and systems like to spread their files around)
 * `libssl-dev` (for the MA Web Remote backend)
 * A C compiler

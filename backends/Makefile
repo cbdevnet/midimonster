@@ -1,5 +1,5 @@
 .PHONY: all clean full
-LINUX_BACKENDS = midi.so evdev.so
+LINUX_BACKENDS = midi.so evdev.so jack.so
 WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll
 BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so
 OPTIONAL_BACKENDS = ola.so
@@ -41,6 +41,7 @@ maweb.dll: CFLAGS += -DMAWEB_NO_LIBSSL
 winmidi.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 winmidi.dll: LDLIBS += -lwinmm -lws2_32
 
+jack.so: LDLIBS = -ljack -lpthread
 midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)
 evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)

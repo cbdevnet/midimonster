@@ -20,6 +20,7 @@ addons:
      - libasound2-dev
      - libevdev-dev
      - libola-dev
+     - libjack-jackd2-dev
      - liblua5.3-dev
      - libssl-dev
     packages: &core_build_gpp_latest

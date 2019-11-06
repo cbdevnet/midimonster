@@ -7,7 +7,7 @@ Currently, the MIDIMonster supports the following protocols:
 
 | Protocol			| Operating Systems	| Notes				| Backends			|
 |-------------------------------|-----------------------|-------------------------------|-------------------------------|
-| MIDI				| Linux, Windows	| Linux: via ALSA/JACK		| [`midi`](backends/midi.md), [`winmidi`](backends/winmidi.md), [`jack`](backends/jack.md) |
+| MIDI				| Linux, Windows, OSX	| Linux: via ALSA/JACK, OSX: via JACK | [`midi`](backends/midi.md), [`winmidi`](backends/winmidi.md), [`jack`](backends/jack.md) |
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)	|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)	|

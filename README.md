@@ -14,7 +14,7 @@ Currently, the MIDIMonster supports the following protocols:
 | evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)	|
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)	|
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
-| JACK/LV2 Control Voltage (CV)	| Linux			|				| [`jack`](backends/jack.md)	|
+| JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)	|
 
 with additional flexibility provided by a [Lua scripting environment](backends/lua.md).
 

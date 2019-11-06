@@ -607,7 +607,11 @@ static int mmjack_start(){
 
 	//prepare mutex attributes because the initializer macro for adaptive mutexes is a GNU extension...
 	if(pthread_mutexattr_init(&mutex_attr)
+#ifndef __APPLE__
 			|| pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ADAPTIVE_NP)){
+#else
+		}
+#endif
 		fprintf(stderr, "Failed to initialize mutex attributes\n");
 		goto bail;
 	}

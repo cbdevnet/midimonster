@@ -153,7 +153,7 @@ static int mmjack_process_cv(instance* inst, mmjack_port* port, size_t nframes, 
 
 	if(port->input){
 		//read updated data into the local buffer
-		//FIXME maybe we dont want to always use the first sample...
+		//FIXME maybe we don't want to always use the first sample...
 		if((double) audio_buffer[0] != port->last){
 			port->last = audio_buffer[0];
 			port->mark = 1;

@@ -550,13 +550,13 @@ static int mmjack_handle(size_t num, managed_fd* fds){
 
 	if(num){
 		for(u = 0; u < num; u++){
+			inst = (instance*) fds[u].impl;
+			data = (mmjack_instance_data*) inst->impl;
 			bytes = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
 			if(bytes < 0){
 				fprintf(stderr, "Failed to receive on feedback socket for instance %s\n", inst->name);
 				return 1;
 			}
-			inst = (instance*) fds[u].impl;
-			data = (mmjack_instance_data*) inst->impl;
 
 			for(p = 0; p < data->ports; p++){
 				if(data->port[p].input && data->port[p].mark){
@@ -672,14 +672,14 @@ static int mmjack_start(){
 
 			if(!data->port[p].port){
 				fprintf(stderr, "Failed to create jack port %s.%s\n", inst[u]->name, data->port[p].name);
-				return 1;
+				goto bail;
 			}
 		}
 
 		//do the thing
 		if(jack_activate(data->client)){
 			fprintf(stderr, "Failed to activate jack client for instance %s\n", inst[u]->name);
-			return 1;
+			goto bail;
 		}
 	}
 

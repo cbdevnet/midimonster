@@ -33,7 +33,18 @@
 #include "portability.h"
 
 /* Default configuration file name to read when no other is specified */
-#define DEFAULT_CFG "monster.cfg"
+#ifndef DEFAULT_CFG
+	#define DEFAULT_CFG "monster.cfg"
+#endif
+
+/* Default backend plugin location */
+#ifndef PLUGINS
+	#ifndef _WIN32
+		#define PLUGINS "./backends/"
+	#else
+		#define PLUGINS "backends\\"
+	#endif
+#endif
 
 /* Forward declare some of the structs so we can use them in each other */
 struct _channel_value;

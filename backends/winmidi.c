@@ -84,7 +84,7 @@ static int winmidi_configure_instance(instance* inst, char* option, char* value)
 	}
 	if(!strcmp(option, "write")){
 		if(data->write){
-			fprintf(stderr, "winmidi instance %s already connected to an otput device\n", inst->name);
+			fprintf(stderr, "winmidi instance %s already connected to an output device\n", inst->name);
 			return 1;
 		}
 		data->write = strdup(value);

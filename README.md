@@ -156,12 +156,35 @@ be used to build a subset of the backends as well as the core.
 
 For Linux and OSX, just running `make` in the source directory should do the trick.
 
+The build process accepts the following parameters, either from the environment or
+as arguments to the `make` invocation:
+
+| Target	| Parameter		| Default value			| Description			|
+|---------------|-----------------------|-------------------------------|-------------------------------|
+| build targets	| `DEFAULT_CFG`		| `monster.cfg`			| Default configuration file	|
+| build targets	| `PLUGINS`		| Linux/OSX: `./backends/`, Windows: `backends\` | Backend plugin library path	|
+| `install`	| `DESTDIR`		| empty				| Destination directory for packaging builds	|
+| `install`	| `PREFIX`		| `/usr`			| Install prefix for binaries	|
+
 Some backends have been marked as optional as they require rather large additional software to be installed,
 for example the `ola` backend. To create a build including these, run `make full`.
 
 To build for Windows, you still need to compile on a Linux machine.
 Install the crosscompiler package listed above and run `make windows`.
 This will build `midimonster.exe` as well as a set of backends as DLL files.
+
+For system-wide install or packaging builds, the following steps are recommended:
+
+```
+export PREFIX=/usr
+export PLUGINS=$PREFIX/lib/midimonster
+export DEFAULT_CFG=/etc/midimonster.cfg
+make
+make install
+```
+
+Depending on your configuration of `DESTDIR`, the `make install` step may require root privileges to
+install the binaries to the appropriate destinations.
 
 ## Development
 

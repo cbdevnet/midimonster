@@ -24,13 +24,21 @@ static int plugin_attach(char* path, char* file){
 	plugin_init init = NULL;
 	void* handle = NULL;
 	char* lib = NULL;
+	#ifdef _WIN32
+	char* path_separator = "\\";
+	#else
+	char* path_separator = "/";
+	#endif
 
-	lib = calloc(strlen(path) + strlen(file) + 1, sizeof(char));
+	lib = calloc(strlen(path) + strlen(file) + 2, sizeof(char));
 	if(!lib){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return 1;
 	}
-	snprintf(lib, strlen(path) + strlen(file) + 1, "%s%s", path, file);
+	snprintf(lib, strlen(path) + strlen(file) + 2, "%s%s%s",
+			path,
+			(path[strlen(path)] == path_separator[0]) ? "" : path_separator,
+			file);
 
 	handle = dlopen(lib, RTLD_NOW);
 	if(!handle){

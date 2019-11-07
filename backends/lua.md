@@ -43,7 +43,7 @@ The `lua` backend does not take any global configuration.
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `script`	| `script.lua`		| none			| Lua source file	|
+| `script`	| `script.lua`		| none			| Lua source file (relative to configuration file)|
 
 A single instance may have multiple `source` options specified, which will all be read cumulatively.
 
@@ -64,6 +64,3 @@ Using these names as arguments to the output and value interface functions works
 
 Output values will not trigger corresponding input event handlers unless the channel is mapped
 back in the MIDIMonster configuration.
-
-The path to the Lua source files is relative to the current working directory. This may lead
-to problems when copying configuration between installations.

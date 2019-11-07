@@ -470,7 +470,7 @@ static int maweb_request_playbacks(instance* inst){
 		offsets[0] = offsets[1] = offsets[2] = 1;
 		page_index = data->channel[channel].page;
 		//poll logic differs between the consoles because reasons
-		//dont quote me on this section
+		//don't quote me on this section
 		if(data->peer_type == peer_dot2){
 			//blocks 0, 100 & 200 have 21 execs and need to be queried from fader view
 			view = (data->channel[channel].index >= 300) ? 3 : 2;

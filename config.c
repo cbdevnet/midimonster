@@ -1,5 +1,7 @@
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h>
+#include <errno.h>
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
@@ -310,16 +312,45 @@ done:
 	return rv;
 }
 
-int config_read(char* cfg_file){
+int config_read(char* cfg_filepath){
 	int rv = 1;
 	size_t line_alloc = 0;
 	ssize_t status;
 	map_type mapping_type = map_rtl;
 	char* line_raw = NULL, *line, *separator;
-	FILE* source = fopen(cfg_file, "r");
+
+	//create heap copy of file name because original might be in readonly memory
+	char* source_dir = strdup(cfg_filepath), *source_file = NULL;
+	#ifdef _WIN32
+	char path_separator = '\\';
+	#else
+	char path_separator = '/';
+	#endif
+
+	if(!source_dir){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return 1;
+	}
+
+	//change working directory to the one containing the configuration file so relative paths work as expected
+	source_file = strrchr(source_dir, path_separator);
+	if(source_file){
+		*source_file = 0;
+		source_file++;
+		if(chdir(source_dir)){
+			fprintf(stderr, "Failed to change to configuration file directory %s: %s\n", source_dir, strerror(errno));
+			goto bail;
+		}
+	}
+	else{
+		source_file = source_dir;
+	}
+
+	FILE* source = fopen(source_file, "r");
+
 	if(!source){
 		fprintf(stderr, "Failed to open configuration file for reading\n");
-		return 1;
+		goto bail;
 	}
 
 	for(status = getline(&line_raw, &line_alloc, source); status >= 0; status = getline(&line_raw, &line_alloc, source)){
@@ -459,6 +490,7 @@ int config_read(char* cfg_file){
 
 	rv = 0;
 bail:
+	free(source_dir);
 	fclose(source);
 	free(line_raw);
 	return rv;

@@ -491,7 +491,9 @@ int config_read(char* cfg_filepath){
 	rv = 0;
 bail:
 	free(source_dir);
-	fclose(source);
+	if(source){
+		fclose(source);
+	}
 	free(line_raw);
 	return rv;
 }

@@ -169,9 +169,12 @@ as arguments to the `make` invocation:
 Some backends have been marked as optional as they require rather large additional software to be installed,
 for example the `ola` backend. To create a build including these, run `make full`.
 
-To build for Windows, you still need to compile on a Linux machine.
-Install the crosscompiler package listed above and run `make windows`.
-This will build `midimonster.exe` as well as a set of backends as DLL files.
+Backends may also be built selectively by runnning `make <backendfile>` in the `backends/` directory,
+for example
+
+```
+make jack.so
+```
 
 For system-wide install or packaging builds, the following steps are recommended:
 
@@ -179,12 +182,17 @@ For system-wide install or packaging builds, the following steps are recommended
 export PREFIX=/usr
 export PLUGINS=$PREFIX/lib/midimonster
 export DEFAULT_CFG=/etc/midimonster.cfg
-make
+make clean
+make full
 make install
 ```
 
 Depending on your configuration of `DESTDIR`, the `make install` step may require root privileges to
 install the binaries to the appropriate destinations.
+
+To build for Windows, you still need to compile on a Linux machine. Install the `mingw-w64` crosscompiler package
+and run `make windows` in the project directory. This will build `midimonster.exe` as well as a set of backends
+as DLL files.
 
 ## Development
 

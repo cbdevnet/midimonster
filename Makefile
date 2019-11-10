@@ -2,6 +2,7 @@
 OBJS = config.o backend.o plugin.o
 
 PREFIX ?= /usr
+PLUGIN_INSTALL = "$(PREFIX)/lib/midimonster"
 SYSTEM := $(shell uname -s)
 
 CFLAGS ?= -g -Wall -Wpedantic
@@ -25,6 +26,7 @@ midimonster: CFLAGS += -DDEFAULT_CFG=\"$(DEFAULT_CFG)\"
 endif
 ifdef PLUGINS
 midimonster: CFLAGS += -DPLUGINS=\"$(PLUGINS)\"
+PLUGIN_INSTALL = $(PLUGINS)
 endif
 
 all: midimonster backends
@@ -63,7 +65,7 @@ run:
 
 install:
 		install -d "$(DESTDIR)$(PREFIX)/bin"
-		install -d "$(DESTDIR)$(PREFIX)/lib/midimonster"
+		install -d "$(DESTDIR)$(PLUGIN_INSTALL)"
 		install -m 0755 midimonster "$(DESTDIR)$(PREFIX)/bin"
 		install -m 0755 backends/*.so "$(DESTDIR)$(PREFIX)/lib/midimonster"
 

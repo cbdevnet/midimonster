@@ -169,7 +169,7 @@ as arguments to the `make` invocation:
 Some backends have been marked as optional as they require rather large additional software to be installed,
 for example the `ola` backend. To create a build including these, run `make full`.
 
-Backends may also be built selectively by runnning `make <backendfile>` in the `backends/` directory,
+Backends may also be built selectively by running `make <backendfile>` in the `backends/` directory,
 for example
 
 ```

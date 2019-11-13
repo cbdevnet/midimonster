@@ -198,10 +198,10 @@ To build for Windows, you still need to compile on a Linux machine (virtual mach
 
 In a fresh Debian installation, you will need to install the following packages (using `apt-get install` as root):
 
-	* `build-essential`
-	* `pkg-config`
-	* `git`
-	* `mingw-w64`
+* `build-essential`
+* `pkg-config`
+* `git`
+* `mingw-w64`
 
 Clone the repository and run `make windows` in the project directory.
 This will build `midimonster.exe` as well as a set of backends as DLL files, which you can then copy

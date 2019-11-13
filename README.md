@@ -176,6 +176,8 @@ for example
 make jack.so
 ```
 
+#### Building for packaging or installation
+
 For system-wide install or packaging builds, the following steps are recommended:
 
 ```
@@ -190,9 +192,22 @@ make install
 Depending on your configuration of `DESTDIR`, the `make install` step may require root privileges to
 install the binaries to the appropriate destinations.
 
-To build for Windows, you still need to compile on a Linux machine. Install the `mingw-w64` crosscompiler package
-and run `make windows` in the project directory. This will build `midimonster.exe` as well as a set of backends
-as DLL files.
+#### Building for Windows
+
+To build for Windows, you still need to compile on a Linux machine (virtual machines work well for this).
+
+In a fresh Debian installation, you will need to install the following packages (using `apt-get install` as root):
+	* `build-essential`
+	* `pkg-config`
+	* `git`
+	* `mingw-w64`
+
+Clone the repository and run `make windows` in the project directory.
+This will build `midimonster.exe` as well as a set of backends as DLL files, which you can then copy
+to the Windows machine.
+
+Note that some backends have limitations when building on Windows (refer to the backend documentation
+for detailed information).
 
 ## Development
 

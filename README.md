@@ -197,6 +197,7 @@ install the binaries to the appropriate destinations.
 To build for Windows, you still need to compile on a Linux machine (virtual machines work well for this).
 
 In a fresh Debian installation, you will need to install the following packages (using `apt-get install` as root):
+
 	* `build-essential`
 	* `pkg-config`
 	* `git`

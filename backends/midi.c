@@ -259,14 +259,20 @@ static int midi_handle(size_t num, managed_fd* fds){
 		ident.label = 0;
 		switch(ev->type){
 			case SND_SEQ_EVENT_NOTEON:
-			case SND_SEQ_EVENT_NOTEOFF:
-			case SND_SEQ_EVENT_NOTE:
 				ident.fields.type = note;
 				ident.fields.channel = ev->data.note.channel;
 				ident.fields.control = ev->data.note.note;
 				val.normalised = (double)ev->data.note.velocity / 127.0;
 				event_type = "note";
 				break;
+			case SND_SEQ_EVENT_NOTEOFF:
+				ident.fields.type = note;
+				ident.fields.channel = ev->data.note.channel;
+				ident.fields.control = ev->data.note.note;
+				val.normalised = (double)0;
+				event_type = "note";
+				break;
+			case SND_SEQ_EVENT_NOTE:
 			case SND_SEQ_EVENT_KEYPRESS:
 				ident.fields.type = pressure;
 				ident.fields.channel = ev->data.note.channel;

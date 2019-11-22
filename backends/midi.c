@@ -265,6 +265,9 @@ static int midi_handle(size_t num, managed_fd* fds){
 				ident.fields.channel = ev->data.note.channel;
 				ident.fields.control = ev->data.note.note;
 				val.normalised = (double)ev->data.note.velocity / 127.0;
+				if(ev->type == SND_SEQ_EVENT_NOTEOFF){
+   					val.normalised = 0;
+				}
 				event_type = "note";
 				break;
 			case SND_SEQ_EVENT_KEYPRESS:

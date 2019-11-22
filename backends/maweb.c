@@ -835,10 +835,10 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 		}
 		chan->out = v[n].normalised;
 
-		//i/o value space separation
-		chan->in = v[n].normalised;
+		//i/o value space separation & feedback filtering for faders
 		if(chan->type == exec_fader){
 			chan->input_blocked = 1;
+			chan->in = v[n].normalised;
 		}
 
 		switch(chan->type){

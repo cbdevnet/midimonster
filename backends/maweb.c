@@ -837,7 +837,9 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 		//i/o value space separation
 		chan->in = v[n].normalised;
-		chan->input_blocked = 1;
+		if(chan->type == exec_fader){
+			chan->input_blocked = 1;
+		}
 
 		switch(chan->type){
 			case exec_fader:

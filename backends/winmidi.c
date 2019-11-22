@@ -277,17 +277,19 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 			//pretty-print channel-wide events
 			if(backend_config.event[u].channel.fields.type == pitchbend
 					|| backend_config.event[u].channel.fields.type == aftertouch){
-				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s\n",
-						backend_config.event[u].inst->name,
-						backend_config.event[u].channel.fields.channel,
-						winmidi_type_name(backend_config.event[u].channel.fields.type));
-			}
-			else{
-				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s%d\n",
+				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s, value %f\n",
 						backend_config.event[u].inst->name,
 						backend_config.event[u].channel.fields.channel,
 						winmidi_type_name(backend_config.event[u].channel.fields.type),
-						backend_config.event[u].channel.fields.control);
+						backend_config.event[u].value);
+			}
+			else{
+				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s%d, value %f\n",
+						backend_config.event[u].inst->name,
+						backend_config.event[u].channel.fields.channel,
+						winmidi_type_name(backend_config.event[u].channel.fields.type),
+						backend_config.event[u].channel.fields.control,
+						backend_config.event[u].value);
 			}
 		}
 		chan = mm_channel(backend_config.event[u].inst, backend_config.event[u].channel.label, 0);
@@ -434,7 +436,7 @@ static int winmidi_match_input(char* prefix){
 			printf("\tID %d: %s\n", n, input_caps.szPname);
 		}
 		else if(!strncmp(input_caps.szPname, prefix, strlen(prefix))){
-			fprintf(stderr, "winmidi selected input device %s for name %s\n", input_caps.szPname, prefix);
+			fprintf(stderr, "winmidi selected input device %s (ID %" PRIsize_t ") for name %s\n", input_caps.szPname, n, prefix);
 			return n;
 		}
 	}
@@ -467,7 +469,7 @@ static int winmidi_match_output(char* prefix){
 			printf("\tID %d: %s\n", n, output_caps.szPname);
 		}
 		else if(!strncmp(output_caps.szPname, prefix, strlen(prefix))){
-			fprintf(stderr, "winmidi selected output device %s for name %s\n", output_caps.szPname, prefix);
+			fprintf(stderr, "winmidi selected output device %s (ID %" PRIsize_t " for name %s\n", output_caps.szPname, n, prefix);
 			return n;
 		}
 	}

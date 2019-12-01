@@ -53,7 +53,7 @@ Currently, three types of MA controls can be assigned, with each having some sub
 * For the dot2, executors are also arranged in pages, but the controls are non-obviously numbered.
 	* For the faders, they are numerically right-to-left from the Core Fader section (Faders 6 to 1) over the F-Wing 1 (Faders 13 to 6) to
 	F-Wing 2 (Faders 21 to 14).
-	* Above the fader sections are two rows of 21 `button` executors, numbered 122 through 101 (upper row) and 222 through 201 (lower row),
+	* Above the fader sections are two rows of 21 `button` executors, numbered 122 through 101 (lower row) and 222 through 201 (upper row),
 		in the same order as the faders are.
 	* Fader executors have two buttons below them (`upper` and `lower`).
 	* The button executor section consists of six rows of 16 buttons, divided into two button wings. Buttons on the wings

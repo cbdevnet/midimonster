@@ -2,7 +2,7 @@
 OBJS = config.o backend.o plugin.o
 
 PREFIX ?= /usr
-PLUGIN_INSTALL = "$(PREFIX)/lib/midimonster"
+PLUGIN_INSTALL = $(PREFIX)/lib/midimonster
 SYSTEM := $(shell uname -s)
 
 CFLAGS ?= -g -Wall -Wpedantic
@@ -65,9 +65,14 @@ run:
 
 install:
 		install -d "$(DESTDIR)$(PREFIX)/bin"
-		install -d "$(DESTDIR)$(PLUGIN_INSTALL)"
 		install -m 0755 midimonster "$(DESTDIR)$(PREFIX)/bin"
-		install -m 0755 backends/*.so "$(DESTDIR)$(PREFIX)/lib/midimonster"
+		install -d "$(DESTDIR)$(PLUGIN_INSTALL)"
+		install -m 0755 backends/*.so "$(DESTDIR)$(PLUGIN_INSTALL)"
+		install -d "$(DESTDIR)$(PREFIX)/share/midimonster"
+		install -m 0644 configs/* "$(DESTDIR)$(PREFIX)/share/midimonster"
+ifdef DEFAULT_CFG
+		install -m 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
+endif
 
 sanitize: export CC = clang
 sanitize: export CFLAGS += -g -Wall -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer

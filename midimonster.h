@@ -29,6 +29,11 @@
 	#define DBG(message)
 #endif
 
+/* Stop compilation if the build system reports an error */
+#ifdef BUILD_ERROR
+	#error The build system reported an error, compilation stopped. Refer to the invocation for this compilation unit for more information.
+#endif
+
 /* Pull in additional defines for non-linux platforms */
 #include "portability.h"
 

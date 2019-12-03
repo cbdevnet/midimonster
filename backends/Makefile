@@ -43,12 +43,12 @@ winmidi.dll: LDLIBS += -lwinmm -lws2_32
 
 jack.so: LDLIBS = -ljack -lpthread
 midi.so: LDLIBS = -lasound
-evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev)
-evdev.so: LDLIBS = $(shell pkg-config --libs libevdev)
+evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev || echo "-DBUILD_ERROR=\"Missing pkg-config data for libevdev\"")
+evdev.so: LDLIBS = $(shell pkg-config --libs libevdev || echo "-DBUILD_ERROR=\"Missing pkg-config data for libevdev\"")
 ola.so: LDLIBS = -lola
 ola.so: CPPFLAGS += -Wno-write-strings
-lua.so: CFLAGS += $(shell pkg-config --cflags lua5.3)
-lua.so: LDLIBS += $(shell pkg-config --libs lua5.3)
+lua.so: CFLAGS += $(shell pkg-config --cflags lua53 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
+lua.so: LDLIBS += $(shell pkg-config --libs lua53 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
 
 %.so :: %.c %.h $(BACKEND_LIB)
 	$(CC) $(CFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)

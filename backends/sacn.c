@@ -31,7 +31,7 @@ static struct /*_sacn_global_config*/ {
 	.last_announce = 0
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend sacn = {
 		.name = BACKEND_NAME,
 		.conf = sacn_configure,

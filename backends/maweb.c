@@ -72,7 +72,7 @@ static maweb_command_key cmdline_keys[] = {
 	{"GO_MINUS_SMALL", 50}, {"PAUSE_SMALL", 51}, {"GO_PLUS_SMALL", 52}
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend maweb = {
 		.name = BACKEND_NAME,
 		.conf = maweb_configure,

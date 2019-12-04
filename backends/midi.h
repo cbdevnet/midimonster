@@ -1,6 +1,6 @@
 #include "midimonster.h"
 
-int init();
+MM_PLUGIN_API int init();
 static int midi_configure(char* option, char* value);
 static int midi_configure_instance(instance* instance, char* option, char* value);
 static instance* midi_instance();

@@ -1,6 +1,6 @@
 #include "midimonster.h"
 
-int init();
+MM_PLUGIN_API int init();
 static int sacn_configure(char* option, char* value);
 static int sacn_configure_instance(instance* instance, char* option, char* value);
 static instance* sacn_instance();

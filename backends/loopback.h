@@ -1,6 +1,6 @@
 #include "midimonster.h"
 
-int init();
+MM_PLUGIN_API int init();
 static int loopback_configure(char* option, char* value);
 static int loopback_configure_instance(instance* inst, char* option, char* value);
 static instance* loopback_instance();

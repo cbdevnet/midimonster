@@ -11,7 +11,7 @@
 static ola::io::SelectServer* ola_select = NULL;
 static ola::OlaCallbackClient* ola_client = NULL;
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend ola = {
 		.name = BACKEND_NAME,
 		.conf = ola_configure,

@@ -8,7 +8,7 @@
  * disabled by building with -DEVDEV_NO_UINPUT
  */
 
-int init();
+MM_PLUGIN_API int init();
 static int evdev_configure(char* option, char* value);
 static int evdev_configure_instance(instance* instance, char* option, char* value);
 static instance* evdev_instance();

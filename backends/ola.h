@@ -4,7 +4,7 @@ extern "C" {
 	#undef min
 	#undef max
 
-	int init();
+	MM_PLUGIN_API int init();
 	static int ola_configure(char* option, char* value);
 	static int ola_configure_instance(instance* instance, char* option, char* value);
 	static instance* ola_instance();

@@ -23,7 +23,7 @@ static struct {
 
 //TODO receive feedback socket until EAGAIN
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend winmidi = {
 		.name = BACKEND_NAME,
 		.conf = winmidi_configure,

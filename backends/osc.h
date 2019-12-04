@@ -7,7 +7,7 @@
 #define OSC_RECV_BUF 8192
 #define OSC_XMIT_BUF 8192
 
-int init();
+MM_PLUGIN_API int init();
 static int osc_configure(char* option, char* value);
 static int osc_configure_instance(instance* inst, char* option, char* value);
 static instance* osc_instance();

@@ -2,7 +2,7 @@
 #include <jack/jack.h>
 #include <pthread.h>
 
-int init();
+MM_PLUGIN_API int init();
 static int mmjack_configure(char* option, char* value);
 static int mmjack_configure_instance(instance* inst, char* option, char* value);
 static instance* mmjack_instance();

@@ -4,6 +4,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define DEBUG
+
 #include "jack.h"
 #include <jack/midiport.h>
 #include <jack/metadata.h>
@@ -27,7 +29,7 @@ static struct /*_mmjack_backend_cfg*/ {
 	.jack_shutdown = 0
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend mmjack = {
 		.name = BACKEND_NAME,
 		.conf = mmjack_configure,

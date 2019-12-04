@@ -41,7 +41,7 @@ static int artnet_listener(char* host, char* port){
 	return 0;
 }
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend artnet = {
 		.name = BACKEND_NAME,
 		.conf = artnet_configure,

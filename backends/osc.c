@@ -19,7 +19,7 @@ static struct {
 	.detect = 0
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend osc = {
 		.name = BACKEND_NAME,
 		.conf = osc_configure,

@@ -24,7 +24,7 @@ static struct {
 	.detect = 0
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend evdev = {
 		.name = BACKEND_NAME,
 		.conf = evdev_configure,

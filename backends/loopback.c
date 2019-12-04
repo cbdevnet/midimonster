@@ -3,7 +3,7 @@
 
 #define BACKEND_NAME "loopback"
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend loopback = {
 		.name = BACKEND_NAME,
 		.conf = loopback_configure,

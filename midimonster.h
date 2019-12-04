@@ -5,11 +5,21 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+/* API call attributes and visibilities */
 #ifndef MM_API
 	#ifdef _WIN32
 		#define MM_API __attribute__((dllimport))
 	#else
 		#define MM_API
+	#endif
+#endif
+
+/* Some build systems may apply the -fvisibility=hidden parameter from the core build to the backends, so mark the init function visible */
+#ifndef MM_PLUGIN_API
+	#ifdef _WIN32
+		#define MM_PLUGIN_API __attribute__((dllexport))
+	#else
+		#define MM_PLUGIN_API __attribute__((visibility ("default")))
 	#endif
 #endif
 

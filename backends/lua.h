@@ -9,7 +9,7 @@
 	#define MMBACKEND_LUA_TIMERFD
 #endif
 
-int init();
+MM_PLUGIN_API int init();
 static int lua_configure(char* option, char* value);
 static int lua_configure_instance(instance* inst, char* option, char* value);
 static instance* lua_instance();

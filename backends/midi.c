@@ -23,7 +23,7 @@ static struct {
 	.detect = 0
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend midi = {
 		.name = BACKEND_NAME,
 		.conf = midi_configure,

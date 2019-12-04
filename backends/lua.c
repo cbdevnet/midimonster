@@ -19,7 +19,7 @@ static int timer_fd = -1;
 static uint64_t last_timestamp;
 #endif
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend lua = {
 		#ifndef MMBACKEND_LUA_TIMERFD
 		.interval = lua_interval,

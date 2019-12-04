@@ -1,6 +1,6 @@
 #include "midimonster.h"
 
-int init();
+MM_PLUGIN_API int init();
 static int maweb_configure(char* option, char* value);
 static int maweb_configure_instance(instance* inst, char* option, char* value);
 static instance* maweb_instance();

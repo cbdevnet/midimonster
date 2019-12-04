@@ -1,6 +1,6 @@
 #include "midimonster.h"
 
-int init();
+MM_PLUGIN_API int init();
 static int winmidi_configure(char* option, char* value);
 static int winmidi_configure_instance(instance* inst, char* option, char* value);
 static instance* winmidi_instance();

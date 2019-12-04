@@ -4,8 +4,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define DEBUG
-
 #include "jack.h"
 #include <jack/midiport.h>
 #include <jack/metadata.h>

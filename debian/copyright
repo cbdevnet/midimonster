@@ -1,0 +1,7 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: midimonster
+Source: https://github.com/cbdevnet/midimonster
+
+Files: *
+Copyright: 2017-2019 cbdev/Fabian J. Stumpf <cb@cbcdn.com>
+License: BSD-2-clause

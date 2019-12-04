@@ -1,0 +1,8 @@
+#!/usr/bin/make -f
+#export DH_VERBOSE = 1
+export PREFIX=/usr
+export PLUGINS=${PREFIX}/lib/midimonster
+export DEFAULT_CFG=/etc/midimonster/midimonster.cfg
+
+%:
+	dh $@

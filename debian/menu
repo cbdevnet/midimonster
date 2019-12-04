@@ -1,0 +1,2 @@
+?package(midimonster):needs="text" section="Applications/Sound"\
+  title="midimonster" command="/usr/bin/midimonster"

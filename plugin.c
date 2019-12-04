@@ -141,10 +141,6 @@ load_done:
 			continue;
 		}
 
-		if(!(file_stat.st_mode & S_IXUSR)){
-			continue;
-		}
-
 		if(plugin_attach(path, entry->d_name)){
 			goto load_done;
 		}

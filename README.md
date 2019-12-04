@@ -183,7 +183,7 @@ For system-wide install or packaging builds, the following steps are recommended
 ```
 export PREFIX=/usr
 export PLUGINS=$PREFIX/lib/midimonster
-export DEFAULT_CFG=/etc/midimonster.cfg
+export DEFAULT_CFG=/etc/midimonster/midimonster.cfg
 make clean
 make full
 make install

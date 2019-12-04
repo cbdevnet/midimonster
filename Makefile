@@ -71,7 +71,7 @@ install:
 		install -d "$(DESTDIR)$(PREFIX)/share/midimonster"
 		install -m 0644 configs/* "$(DESTDIR)$(PREFIX)/share/midimonster"
 ifdef DEFAULT_CFG
-		install -m 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
+		install -Dm 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
 endif
 
 sanitize: export CC = clang

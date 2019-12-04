@@ -52,6 +52,7 @@ int init(){
 	return 0;
 }
 
+#ifndef MMBACKEND_LUA_TIMERFD
 static uint32_t lua_interval(){
 	size_t n = 0;
 	uint64_t next_timer = 1000;
@@ -66,6 +67,7 @@ static uint32_t lua_interval(){
 	}
 	return 1000;
 }
+#endif
 
 static int lua_update_timerfd(){
 	uint64_t interval = 0, gcd, residual;

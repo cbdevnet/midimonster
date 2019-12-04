@@ -18,7 +18,9 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int lua_handle(size_t num, managed_fd* fds);
 static int lua_start();
 static int lua_shutdown();
+#ifndef MMBACKEND_LUA_TIMERFD
 static uint32_t lua_interval();
+#endif
 
 typedef struct /*_lua_instance_data*/ {
 	size_t channels;

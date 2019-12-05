@@ -198,7 +198,7 @@ static instance* sacn_instance(){
 	return inst;
 }
 
-static channel* sacn_channel(instance* inst, char* spec){
+static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
 	char* spec_next = spec;
 

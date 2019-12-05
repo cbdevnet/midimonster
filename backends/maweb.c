@@ -229,7 +229,7 @@ static instance* maweb_instance(){
 	return inst;
 }
 
-static channel* maweb_channel(instance* inst, char* spec){
+static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
 	maweb_channel_data chan = {
 		0

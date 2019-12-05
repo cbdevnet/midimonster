@@ -330,7 +330,7 @@ static instance* lua_instance(){
 	return inst;
 }
 
-static channel* lua_channel(instance* inst, char* spec){
+static channel* lua_channel(instance* inst, char* spec, uint8_t flags){
 	size_t u;
 	lua_instance_data* data = (lua_instance_data*) inst->impl;
 

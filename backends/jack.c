@@ -409,7 +409,7 @@ static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){
 	return 0;
 }
 
-static channel* mmjack_channel(instance* inst, char* spec){
+static channel* mmjack_channel(instance* inst, char* spec, uint8_t flags){
 	mmjack_instance_data* data = (mmjack_instance_data*) inst->impl;
 	mmjack_channel_ident ident = {
 		.label = 0

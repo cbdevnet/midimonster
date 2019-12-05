@@ -249,7 +249,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 	return 1;
 }
 
-static channel* evdev_channel(instance* inst, char* spec){
+static channel* evdev_channel(instance* inst, char* spec, uint8_t flags){
 #ifndef EVDEV_NO_UINPUT
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 #endif

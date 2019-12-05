@@ -8,7 +8,7 @@ extern "C" {
 	static int ola_configure(char* option, char* value);
 	static int ola_configure_instance(instance* instance, char* option, char* value);
 	static instance* ola_instance();
-	static channel* ola_channel(instance* instance, char* spec);
+	static channel* ola_channel(instance* instance, char* spec, uint8_t flags);
 	static int ola_set(instance* inst, size_t num, channel** c, channel_value* v);
 	static int ola_handle(size_t num, managed_fd* fds);
 	static int ola_start();

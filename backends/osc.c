@@ -577,7 +577,7 @@ static instance* osc_instance(){
 	return inst;
 }
 
-static channel* osc_map_channel(instance* inst, char* spec){
+static channel* osc_map_channel(instance* inst, char* spec, uint8_t flags){
 	size_t u, p;
 	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	osc_channel_ident ident = {

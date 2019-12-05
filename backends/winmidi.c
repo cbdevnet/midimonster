@@ -110,7 +110,7 @@ static instance* winmidi_instance(){
 	return i;
 }
 
-static channel* winmidi_channel(instance* inst, char* spec){
+static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){
 	char* next_token = NULL;
 	winmidi_channel_ident ident = {
 		.label = 0

@@ -156,7 +156,7 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static channel* artnet_channel(instance* inst, char* spec){
+static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 	char* spec_next = spec;
 	unsigned chan_a = strtoul(spec, &spec_next, 10);

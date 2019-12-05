@@ -87,8 +87,11 @@ struct _managed_fd;
  * 		Parse instance configuration from the user-supplied configuration
  * 		file. Returning a non-zero value fails config parsing.
  * 	* mmbackend_channel
- * 		Parse a channel-spec to be mapped to/from. Returning NULL signals an
- * 		out-of-memory condition and terminates the program.
+ * 		Parse a channel-spec to be mapped to/from. The `falgs` parameter supplies
+ * 		additional information to the parser, such as whether the channel is being
+ * 		queried for use as input (to the MIDIMonster core) and/or output
+ * 		(from the MIDIMonster core) channel (on a per-query basis).
+ * 		Returning NULL signals an out-of-memory condition and terminates the program.
  * 	* mmbackend_start
  * 		Called after all instances have been created and all mappings
  * 		have been set up. Only backends for which instances have been configured
@@ -121,7 +124,7 @@ struct _managed_fd;
  */
 typedef int (*mmbackend_handle_event)(struct _backend_instance* inst, size_t channels, struct _backend_channel** c, struct _channel_value* v);
 typedef struct _backend_instance* (*mmbackend_create_instance)();
-typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_instance* instance, char* spec);
+typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_instance* instance, char* spec, uint8_t flags);
 typedef void (*mmbackend_free_channel)(struct _backend_channel* c);
 typedef int (*mmbackend_configure)(char* option, char* value);
 typedef int (*mmbackend_configure_instance)(struct _backend_instance* instance, char* option, char* value);
@@ -129,6 +132,12 @@ typedef int (*mmbackend_process_fd)(size_t nfds, struct _managed_fd* fds);
 typedef int (*mmbackend_start)();
 typedef uint32_t (*mmbackend_interval)();
 typedef int (*mmbackend_shutdown)();
+
+/* Bit masks for the `flags` parameter to mmbackend_parse_channel */
+typedef enum {
+	mmchannel_input = 0x1,
+	mmchannel_output = 0x2
+} mmbe_channel_flags;
 
 /* Channel event value, .normalised is used by backends to determine channel values */
 typedef struct _channel_value {

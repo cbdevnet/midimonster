@@ -68,7 +68,7 @@ static int ola_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static channel* ola_channel(instance* inst, char* spec){
+static channel* ola_channel(instance* inst, char* spec, uint8_t flags){
 	ola_instance_data* data = (ola_instance_data*) inst->impl;
 	char* spec_next = spec;
 	unsigned chan_a = strtoul(spec, &spec_next, 10);

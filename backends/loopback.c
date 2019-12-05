@@ -49,7 +49,7 @@ static instance* loopback_instance(){
 	return i;
 }
 
-static channel* loopback_channel(instance* inst, char* spec){
+static channel* loopback_channel(instance* inst, char* spec, uint8_t flags){
 	size_t u;
 	loopback_instance_data* data = (loopback_instance_data*) inst->impl;
 

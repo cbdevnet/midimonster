@@ -6,7 +6,7 @@ MM_PLUGIN_API int init();
 static int mmjack_configure(char* option, char* value);
 static int mmjack_configure_instance(instance* inst, char* option, char* value);
 static instance* mmjack_instance();
-static channel* mmjack_channel(instance* inst, char* spec);
+static channel* mmjack_channel(instance* inst, char* spec, uint8_t flags);
 static int mmjack_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int mmjack_handle(size_t num, managed_fd* fds);
 static int mmjack_start();

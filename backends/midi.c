@@ -110,7 +110,7 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static channel* midi_channel(instance* inst, char* spec){
+static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 	midi_channel_ident ident = {
 		.label = 0
 	};

@@ -224,7 +224,7 @@ static void event_free(){
 }
 
 static int usage(char* fn){
-	fprintf(stderr, "MIDIMonster v0.2\n");
+	fprintf(stderr, "MIDIMonster v0.3\n");
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "\t%s <configfile>\n", fn);
 	return EXIT_FAILURE;

@@ -19,11 +19,11 @@ typedef struct /*_winmidi_instance_data*/ {
 
 enum /*_winmidi_channel_type*/ {
 	none = 0,
-	note,
-	cc,
-	pressure,
-	aftertouch,
-	pitchbend
+	note = 0x90,
+	cc = 0xB0,
+	pressure = 0xA0,
+	aftertouch = 0xD0,
+	pitchbend = 0xE0
 };
 
 typedef union {

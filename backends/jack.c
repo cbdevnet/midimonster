@@ -98,19 +98,19 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 				//ident.fields.port set on output in mmjack_handle_midi
 				ident.fields.sub_channel = event.buffer[0] & 0x0F;
 				ident.fields.sub_type = event.buffer[0] & 0xF0;
+				ident.fields.sub_control = event.buffer[1];
+				value = event.buffer[2];
 				if(ident.fields.sub_type == 0x80){
 					ident.fields.sub_type = midi_note;
 					value = 0;
 				}
 				else if(ident.fields.sub_type == midi_pitchbend){
+					ident.fields.sub_control = 0;
 					value = event.buffer[1] | (event.buffer[2] << 7);
 				}
 				else if(ident.fields.sub_type == midi_aftertouch){
+					ident.fields.sub_control = 0;
 					value = event.buffer[1];
-				}
-				else{
-					ident.fields.sub_control = event.buffer[1];
-					value = event.buffer[2];
 				}
 				//append midi data
 				mmjack_midiqueue_append(port, ident, value);

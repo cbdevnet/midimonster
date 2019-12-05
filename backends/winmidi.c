@@ -203,35 +203,17 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	for(u = 0; u < num; u++){
 		ident.label = c[u]->ident;
 
-		switch(ident.fields.type){
-			case note:
-				output.components.status = 0x90 | ident.fields.channel;
-				output.components.data1 = ident.fields.control;
-				output.components.data2 = v[u].normalised * 127.0;
-				break;
-			case cc:
-				output.components.status = 0xB0 | ident.fields.channel;
-				output.components.data1 = ident.fields.control;
-				output.components.data2 = v[u].normalised * 127.0;
-				break;
-			case pressure:
-				output.components.status = 0xA0 | ident.fields.channel;
-				output.components.data1 = ident.fields.control;
-				output.components.data2 = v[u].normalised * 127.0;
-				break;
-			case aftertouch:
-				output.components.status = 0xD0 | ident.fields.channel;
-				output.components.data1 = v[u].normalised * 127.0;
-				output.components.data2 = 0;
-				break;
-			case pitchbend:
-				output.components.status = 0xE0 | ident.fields.channel;
-				output.components.data1 = ((int)(v[u].normalised * 16384.0)) & 0x7F;
-				output.components.data2 = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
-				break;
-			default:
-				fprintf(stderr, "Unknown winmidi channel type %d\n", ident.fields.type);
-				continue;
+		//build output message
+		output.components.status = ident.fields.type | ident.fields.channel;
+		output.components.data1 = ident.fields.control;
+		output.components.data2 = v[u].normalised * 127.0;
+		if(ident.fields.type == pitchbend){
+			output.components.data1 = ((int)(v[u].normalised * 16384.0)) & 0x7F;
+			output.components.data2 = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
+		}
+		else if(ident.fields.type == aftertouch){
+			output.components.data1 = v[u].normalised * 127.0;
+			output.components.data2 = 0;
 		}
 
 		midiOutShortMsg(data->device_out, output.dword);
@@ -330,40 +312,21 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 			//param1 has the message
 			input.dword = param1;
 			ident.fields.channel = input.components.status & 0x0F;
-			switch(input.components.status & 0xF0){
-				case 0x80:
-					ident.fields.type = note;
-					ident.fields.control = input.components.data1;
-					val.normalised = 0.0;
-					break;
-				case 0x90:
-					ident.fields.type = note;
-					ident.fields.control = input.components.data1;
-					val.normalised = (double) input.components.data2 / 127.0;
-					break;
-				case 0xA0:
-					ident.fields.type = pressure;
-					ident.fields.control = input.components.data1;
-					val.normalised = (double) input.components.data2 / 127.0;
-					break;
-				case 0xB0:
-					ident.fields.type = cc;
-					ident.fields.control = input.components.data1;
-					val.normalised = (double) input.components.data2 / 127.0;
-					break;
-				case 0xD0:
-					ident.fields.type = aftertouch;
-					ident.fields.control = 0;
-					val.normalised = (double) input.components.data1 / 127.0;
-					break;
-				case 0xE0:
-					ident.fields.type = pitchbend;
-					ident.fields.control = 0;
-					val.normalised = (double)((input.components.data2 << 7) | input.components.data1) / 16384.0;
-					break;
-				default:
-					fprintf(stderr, "winmidi unhandled status byte %02X\n", input.components.status);
-					return;
+			ident.fields.type = input.components.status & 0xF0;
+			ident.fields.control = input.components.data1;
+			val.normalised = (double) input.components.data2 / 127.0;
+			
+			if(ident.fields.type == 0x80){
+				ident.fields.type = note;
+				val.normalised = 0;
+			}
+			else if(ident.fields.type == pitchbend){
+				ident.fields.control = 0;
+				val.normalised = (double)((input.components.data2 << 7) | input.components.data1) / 16384.0;
+			}
+			else if(ident.fields.type == aftertouch){
+				ident.fields.control = 0;
+				val.normalised = (double) input.components.data1 / 127.0;
 			}
 			break;
 		case MIM_LONGDATA:

@@ -166,7 +166,7 @@ as arguments to the `make` invocation:
 | `install`	| `PREFIX`		| `/usr`			| Install prefix for binaries	|
 | `install`	| `DESTDIR`		| empty				| Destination directory for packaging builds	|
 | `install`	| `DEFAULT_CFG`		| empty				| Install path for default configuration file	|
-| `install`	| `PLUGINS`		| `$(PREFIX)/lib/midimonster`	| Destination directory for packaging builds	|
+| `install`	| `PLUGINS`		| `$(PREFIX)/lib/midimonster`	| Install path for backend shared objects	|
 | `install`	| `EXAMPLES`		| `$(PREFIX)/share/midimonster`	| Install path for example configurations	|
 
 Note that the same variables may have different default values depending on the target. This implies that

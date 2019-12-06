@@ -182,6 +182,14 @@ for example
 ```
 make jack.so
 ```
+#### Buiding with Installer
+
+For easy installation, the following steps are required:
+
+```
+wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
+./installer.sh
+```
 
 #### Building for packaging or installation
 

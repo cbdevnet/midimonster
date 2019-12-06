@@ -8,7 +8,7 @@ script_path="`cd $0; pwd`"      # Script dir
 tmp_path=$(mktemp -d)           # Repo download path
 
 Iversion="v0.2"                 # (fallback version if )
-makeargs=full                   # Build args
+makeargs=all                    # Build args
 
 VAR_DESTDIR=""                  # Unused
 VAR_PREFIX="/usr"
@@ -25,7 +25,7 @@ for t in ${deps[@]}; do
     if [ $(dpkg-query -W -f='${Status}' $t 2>/dev/null | grep -c "ok installed") -eq 0 ];
     then
         echo "Installing "$t"";
-        apt-get install $t -Y;
+        apt-get install $t -y;
         echo "Done.";
     else
         echo ""$t" already installed!"

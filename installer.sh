@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ################################################ SETUP ################################################
-deps=(libasound2-dev libevdev-dev liblua5.3-dev libola-dev libjack-jackd2-dev pkg-config libssl-dev gcc make wget git)
+deps=(libasound2-dev libevdev-dev liblua5.3-dev libjack-jackd2-dev pkg-config libssl-dev gcc make wget git)
 user=$(whoami)                  # for bypassing user check replace "$(whoami)" with "root".
 
 script_path="`cd $0; pwd`"      # Script dir
@@ -25,7 +25,7 @@ for t in ${deps[@]}; do
     if [ $(dpkg-query -W -f='${Status}' $t 2>/dev/null | grep -c "ok installed") -eq 0 ];
     then
         echo "Installing "$t"";
-        apt-get install $t -y;
+        apt-get install $t;
         echo "Done.";
     else
         echo ""$t" already installed!"

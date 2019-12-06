@@ -159,12 +159,13 @@ For Linux and OSX, just running `make` in the source directory should do the tri
 The build process accepts the following parameters, either from the environment or
 as arguments to the `make` invocation:
 
-| Target	| Parameter		| Default value			| Description			|
-|---------------|-----------------------|-------------------------------|-------------------------------|
-| build targets	| `DEFAULT_CFG`		| `monster.cfg`			| Default configuration file	|
-| build targets	| `PLUGINS`		| Linux/OSX: `./backends/`, Windows: `backends\` | Backend plugin library path	|
-| `install`	| `DESTDIR`		| empty				| Destination directory for packaging builds	|
-| `install`	| `PREFIX`		| `/usr`			| Install prefix for binaries	|
+| Target			| Parameter		| Default value			| Description			|
+|-------------------------------|-----------------------|-------------------------------|-------------------------------|
+| build targets, `install`	| `DEFAULT_CFG`		| `monster.cfg`			| Default configuration file	|
+| build targets, `install`	| `PLUGINS`		| Linux/OSX: `./backends/`, Windows: `backends\` | Backend plugin library path	|
+| `install`			| `DESTDIR`		| empty				| Destination directory for packaging builds	|
+| `install`			| `PREFIX`		| `/usr`			| Install prefix for binaries	|
+| `install`			| `EXAMPLES`		| `$(PREFIX)/share/midimonster`	| Install path for example configurations	|
 
 Some backends have been marked as optional as they require rather large additional software to be installed,
 for example the `ola` backend. To create a build including these, run `make full`.

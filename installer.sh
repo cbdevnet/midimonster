@@ -40,6 +40,7 @@ INSTALL-PREP () {
     git clone https://github.com/cbdevnet/midimonster.git "$tmp_path" # Gets Midimonster
     Iversion=(git describe --abbrev=0)                            # Get last tag(stable version)
     echo "Starting Git checkout to "$Iversion""
+    git init $tmp_path
     git checkout $Iversion $tmp_path
 
     echo ""

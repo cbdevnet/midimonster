@@ -188,6 +188,7 @@ For easy installation on Linux, the [installer script](installer.sh) can be used
 
 ```
 wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
+chmod +x ./installer.sh
 ./installer.sh
 ```
 

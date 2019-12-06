@@ -184,7 +184,7 @@ make jack.so
 ```
 #### Buiding with Installer
 
-For easy installation, the following steps are required:
+For easy installation on Linux, the [installer script](installer.sh) can be used:
 
 ```
 wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./

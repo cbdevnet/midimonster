@@ -188,6 +188,7 @@ For easy installation, the following steps are required:
 
 ```
 wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
+chmod +x ./installer.sh
 ./installer.sh
 ```
 

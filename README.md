@@ -159,13 +159,19 @@ For Linux and OSX, just running `make` in the source directory should do the tri
 The build process accepts the following parameters, either from the environment or
 as arguments to the `make` invocation:
 
-| Target			| Parameter		| Default value			| Description			|
-|-------------------------------|-----------------------|-------------------------------|-------------------------------|
-| build targets, `install`	| `DEFAULT_CFG`		| `monster.cfg`			| Default configuration file	|
-| build targets, `install`	| `PLUGINS`		| Linux/OSX: `./backends/`, Windows: `backends\` | Backend plugin library path	|
-| `install`			| `DESTDIR`		| empty				| Destination directory for packaging builds	|
-| `install`			| `PREFIX`		| `/usr`			| Install prefix for binaries	|
-| `install`			| `EXAMPLES`		| `$(PREFIX)/share/midimonster`	| Install path for example configurations	|
+| Target	| Parameter		| Default value			| Description			|
+|---------------|-----------------------|-------------------------------|-------------------------------|
+| build targets	| `DEFAULT_CFG`		| `monster.cfg`			| Default configuration file	|
+| build targets	| `PLUGINS`		| Linux/OSX: `./backends/`, Windows: `backends\` | Backend plugin library path	|
+| `install`	| `PREFIX`		| `/usr`			| Install prefix for binaries	|
+| `install`	| `DESTDIR`		| empty				| Destination directory for packaging builds	|
+| `install`	| `DEFAULT_CFG`		| empty				| Install path for default configuration file	|
+| `install`	| `PLUGINS`		| `$(PREFIX)/lib/midimonster`	| Destination directory for packaging builds	|
+| `install`	| `EXAMPLES`		| `$(PREFIX)/share/midimonster`	| Install path for example configurations	|
+
+Note that the same variables may have different default values depending on the target. This implies that
+builds that are destined to be installed require those variables to be set to the same value for the
+build and `install` targets.
 
 Some backends have been marked as optional as they require rather large additional software to be installed,
 for example the `ola` backend. To create a build including these, run `make full`.

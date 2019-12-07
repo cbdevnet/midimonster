@@ -7,7 +7,6 @@ user=$(whoami)                  # for bypassing user check replace "$(whoami)" w
 script_path="`cd $0; pwd`"      # Script dir
 tmp_path=$(mktemp -d)           # Repo download path
 
-Iversion="v0.2"                 # (fallback version if )
 makeargs=all                    # Build args
 
 VAR_DESTDIR=""                  # Unused
@@ -36,13 +35,24 @@ echo ""
 }
 
 INSTALL-PREP () {
-    echo "Starting Git!"
-    git clone https://github.com/cbdevnet/midimonster.git "$tmp_path" # Gets Midimonster
-    Iversion=(git describe --abbrev=0)                            # Get last tag(stable version)
-    echo "Starting Git checkout to "$Iversion""
+(#### Subshell make things like cd $tmp_path easier to revert
+    echo "Starting download..."
+    git clone https://github.com/cbdevnet/midimonster.git "$tmp_path" # Gets Midimonster   
+    echo ""
+    echo ""
+    echo "Initializing repository..."
+    cd $tmp_path
     git init $tmp_path
-    git checkout $Iversion $tmp_path
+    echo ""
+    echo "Finding latest stable version..."
+    Iversion=$(git describe --abbrev=0)                            # Get last tag(stable version)
+    echo "Starting Git checkout to "$Iversion"..."
+    git checkout -f -q $Iversion
+    echo "Done."
+ )
 
+    echo ""
+    echo ""
     echo ""
 
     read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX
@@ -93,14 +103,10 @@ CLEAN () {
 
 
 ################################################ Main #################################################
-
 trap ERROR SIGINT SIGTERM SIGKILL
 clear
 
-if [ $user != "root" ]; then                        # Check if $user = root!
-        echo "Installer must be run as root"
-        ERROR
-fi
+if [ $user != "root" ]; then echo "Installer must be run as root"; ERROR; fi    # Check if $user = root!
 
 if [ $(wget -q --spider http://github.com) $? -eq 0 ]; then "INSTALL-DEPS"; else echo You need connection to the internet; ERROR ; fi
 

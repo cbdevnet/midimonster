@@ -97,10 +97,7 @@ CLEAN () {
 trap ERROR SIGINT SIGTERM SIGKILL
 clear
 
-if [ $user != "root" ]; then                        # Check if $user = root!
-        echo "Installer must be run as root"
-        ERROR
-fi
+if [ $user != "root" ]; then echo "Installer must be run as root"; ERROR; fi    # Check if $user = root!
 
 if [ $(wget -q --spider http://github.com) $? -eq 0 ]; then "INSTALL-DEPS"; else echo You need connection to the internet; ERROR ; fi
 

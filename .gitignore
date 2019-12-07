@@ -1,4 +1,7 @@
 midimonster
+midimonster.exe
+libmmapi.a
 *.swp
 *.o
 *.so
+*.dll

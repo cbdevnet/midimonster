@@ -18,16 +18,13 @@
 
 #define BACKEND_NAME "evdev"
 
-typedef union {
-	struct {
-		uint32_t pad;
-		uint16_t type;
-		uint16_t code;
-	} fields;
-	uint64_t label;
-} evdev_channel_ident;
+static struct {
+	uint8_t detect;
+} evdev_config = {
+	.detect = 0
+};
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend evdev = {
 		.name = BACKEND_NAME,
 		.conf = evdev_configure,
@@ -40,6 +37,11 @@ int init(){
 		.shutdown = evdev_shutdown
 	};
 
+	if(sizeof(evdev_channel_ident) != sizeof(uint64_t)){
+		fprintf(stderr, "evdev channel identification union out of bounds\n");
+		return 1;
+	}
+
 	if(mm_backend_register(evdev)){
 		fprintf(stderr, "Failed to register evdev backend\n");
 		return 1;
@@ -49,7 +51,15 @@ int init(){
 }
 
 static int evdev_configure(char* option, char* value) {
-	fprintf(stderr, "The evdev backend does not take any global configuration\n");
+	if(!strcmp(option, "detect")){
+		evdev_config.detect = 1;
+		if(!strcmp(value, "off")){
+			evdev_config.detect = 0;
+		}
+		return 0;
+	}
+
+	fprintf(stderr, "Unknown configuration option %s for evdev backend\n", option);
 	return 1;
 }
 
@@ -176,23 +186,48 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			return 1;
 		}
 		free(next_token);
+		return 0;
 	}
 	else if(!strcmp(option, "exclusive")){
 		if(data->input_fd >= 0 && libevdev_grab(data->input_ev, LIBEVDEV_GRAB)){
 			fprintf(stderr, "Failed to obtain exclusive device access on %s\n", inst->name);
 		}
 		data->exclusive = 1;
+		return 0;
+	}
+	else if(!strncmp(option, "relaxis.", 8)){
+		data->relative_axis = realloc(data->relative_axis, (data->relative_axes + 1) * sizeof(evdev_relaxis_config));
+		if(!data->relative_axis){
+			fprintf(stderr, "Failed to allocate memory\n");
+			return 1;
+		}
+		data->relative_axis[data->relative_axes].inverted = 0;
+		data->relative_axis[data->relative_axes].code = libevdev_event_code_from_name(EV_REL, option + 8);
+		data->relative_axis[data->relative_axes].max = strtoll(value, &next_token, 0);
+		if(data->relative_axis[data->relative_axes].max < 0){
+			data->relative_axis[data->relative_axes].max *= -1;
+			data->relative_axis[data->relative_axes].inverted = 1;
+		}
+		data->relative_axis[data->relative_axes].current = strtoul(next_token, NULL, 0);
+		if(data->relative_axis[data->relative_axes].code < 0){
+			fprintf(stderr, "Failed to configure relative axis extents for %s.%s\n", inst->name, option + 8);
+			return 1;
+		}
+		data->relative_axes++;
+		return 0;
 	}
 #ifndef EVDEV_NO_UINPUT
 	else if(!strcmp(option, "output")){
 		data->output_enabled = 1;
 		libevdev_set_name(data->output_proto, value);
+		return 0;
 	}
 	else if(!strcmp(option, "id")){
 		next_token = value;
 		libevdev_set_id_vendor(data->output_proto, strtol(next_token, &next_token, 0));
 		libevdev_set_id_product(data->output_proto, strtol(next_token, &next_token, 0));
 		libevdev_set_id_version(data->output_proto, strtol(next_token, &next_token, 0));
+		return 0;
 	}
 	else if(!strncmp(option, "axis.", 5)){
 		//value minimum maximum fuzz flat resolution
@@ -207,16 +242,14 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			fprintf(stderr, "Failed to enable absolute axis %s for output\n", option + 5);
 			return 1;
 		}
+		return 0;
 	}
 #endif
-	else{
-		fprintf(stderr, "Unknown configuration parameter %s for evdev backend\n", option);
-		return 1;
-	}
-	return 0;
+	fprintf(stderr, "Unknown instance configuration parameter %s for evdev instance %s\n", option, inst->name);
+	return 1;
 }
 
-static channel* evdev_channel(instance* inst, char* spec){
+static channel* evdev_channel(instance* inst, char* spec, uint8_t flags){
 #ifndef EVDEV_NO_UINPUT
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 #endif
@@ -273,21 +306,35 @@ static int evdev_push_event(instance* inst, evdev_instance_data* data, struct in
 		.fields.code = event.code
 	};
 	channel* chan = mm_channel(inst, ident.label, 0);
+	size_t axis;
 
 	if(chan){
 		val.raw.u64 = event.value;
 		switch(event.type){
 			case EV_REL:
-				val.normalised = 0.5 + ((event.value < 0) ? 0.5 : -0.5);
+				for(axis = 0; axis < data->relative_axes; axis++){
+					if(data->relative_axis[axis].code == event.code){
+						if(data->relative_axis[axis].inverted){
+							event.value *= -1;
+						}
+						data->relative_axis[axis].current = clamp(data->relative_axis[axis].current + event.value, data->relative_axis[axis].max, 0);
+						val.normalised = (double) data->relative_axis[axis].current / (double) data->relative_axis[axis].max;
+						break;
+					}
+				}
+				if(axis == data->relative_axes){
+					val.normalised = 0.5 + ((event.value < 0) ? 0.5 : -0.5);
+					break;
+				}
 				break;
 			case EV_ABS:
 				range = libevdev_get_abs_maximum(data->input_ev, event.code) - libevdev_get_abs_minimum(data->input_ev, event.code);
-				val.normalised = (event.value - libevdev_get_abs_minimum(data->input_ev, event.code)) / (double) range;
+				val.normalised = clamp((event.value - libevdev_get_abs_minimum(data->input_ev, event.code)) / (double) range, 1.0, 0.0);
 				break;
 			case EV_KEY:
 			case EV_SW:
 			default:
-				val.normalised = 1.0 * event.value;
+				val.normalised = clamp(1.0 * event.value, 1.0, 0.0);
 				break;
 		}
 
@@ -295,6 +342,10 @@ static int evdev_push_event(instance* inst, evdev_instance_data* data, struct in
 			fprintf(stderr, "Failed to push evdev channel event to core\n");
 			return 1;
 		}
+	}
+
+	if(evdev_config.detect){
+		fprintf(stderr, "Incoming evdev data for channel %s.%s.%s\n", inst->name, libevdev_event_type_get_name(event.type), libevdev_event_code_get_name(event.type, event.code));
 	}
 
 	return 0;
@@ -325,6 +376,11 @@ static int evdev_handle(size_t num, managed_fd* fds){
 			read_flags = LIBEVDEV_READ_FLAG_NORMAL;
 			if(read_status == LIBEVDEV_READ_STATUS_SYNC){
 				read_flags = LIBEVDEV_READ_FLAG_SYNC;
+			}
+
+			//exclude synchronization events
+			if(ev.type == EV_SYN){
+				continue;
 			}
 
 			//handle event
@@ -376,6 +432,10 @@ static int evdev_start(){
 			fds++;
 		}
 
+		if(data->input_fd <= 0 && !data->output_ev){
+			fprintf(stderr, "Instance %s has neither input nor output device set up\n", inst[u]->name);
+		}
+
 	}
 
 	fprintf(stderr, "evdev backend registered %zu descriptors to core\n", fds);
@@ -385,7 +445,7 @@ static int evdev_start(){
 
 static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) {
 #ifndef EVDEV_NO_UINPUT
-	size_t evt = 0;
+	size_t evt = 0, axis = 0;
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 	evdev_channel_ident ident = {
 		.label = 0
@@ -407,7 +467,20 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 
 		switch(ident.fields.type){
 			case EV_REL:
-				value = (v[evt].normalised < 0.5) ? -1 : ((v[evt].normalised > 0.5) ? 1 : 0);
+				for(axis = 0; axis < data->relative_axes; axis++){
+					if(data->relative_axis[axis].code == ident.fields.code){
+						value = (v[evt].normalised * data->relative_axis[axis].max) - data->relative_axis[axis].current;
+						data->relative_axis[axis].current = v[evt].normalised * data->relative_axis[axis].max;
+
+						if(data->relative_axis[axis].inverted){
+							value *= -1;
+						}
+						break;
+					}
+				}
+				if(axis == data->relative_axes){
+					value = (v[evt].normalised < 0.5) ? -1 : ((v[evt].normalised > 0.5) ? 1 : 0);
+				}
 				break;
 			case EV_ABS:
 				range = libevdev_get_abs_maximum(data->output_proto, ident.fields.code) - libevdev_get_abs_minimum(data->output_proto, ident.fields.code);
@@ -464,9 +537,12 @@ static int evdev_shutdown(){
 
 		libevdev_free(data->output_proto);
 #endif
+		data->relative_axes = 0;
+		free(data->relative_axis);
 		free(data);
 	}
 
 	free(instances);
+	fprintf(stderr, "evdev backend shut down\n");
 	return 0;
 }

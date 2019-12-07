@@ -1,9 +1,8 @@
 #include <string.h>
-#include <unistd.h>
 #include <ctype.h>
-#include <netdb.h>
 #include <errno.h>
-#include <fcntl.h>
+
+#include "libmmbackend.h"
 #include "osc.h"
 
 /*
@@ -14,18 +13,29 @@
 #define osc_align(a) ((((a) / 4) + (((a) % 4) ? 1 : 0)) * 4)
 #define BACKEND_NAME "osc"
 
-int init(){
+static struct {
+	uint8_t detect;
+} osc_global_config = {
+	.detect = 0
+};
+
+MM_PLUGIN_API int init(){
 	backend osc = {
 		.name = BACKEND_NAME,
-		.conf = backend_configure,
-		.create = backend_instance,
-		.conf_instance = backend_configure_instance,
-		.channel = backend_channel,
-		.handle = backend_set,
-		.process = backend_handle,
-		.start = backend_start,
-		.shutdown = backend_shutdown
+		.conf = osc_configure,
+		.create = osc_instance,
+		.conf_instance = osc_configure_instance,
+		.channel = osc_map_channel,
+		.handle = osc_set,
+		.process = osc_handle,
+		.start = osc_start,
+		.shutdown = osc_shutdown
 	};
+
+	if(sizeof(osc_channel_ident) != sizeof(uint64_t)){
+		fprintf(stderr, "OSC channel identification union out of bounds\n");
+		return 1;
+	}
 
 	//register backend
 	if(mm_backend_register(osc)){
@@ -36,6 +46,7 @@ int init(){
 }
 
 static size_t osc_data_length(osc_parameter_type t){
+	//binary representation lengths for osc data types
 	switch(t){
 		case int32:
 		case float32:
@@ -50,6 +61,7 @@ static size_t osc_data_length(osc_parameter_type t){
 }
 
 static inline void osc_defaults(osc_parameter_type t, osc_parameter_value* max, osc_parameter_value* min){
+	//data type default ranges
 	memset(max, 0, sizeof(osc_parameter_value));
 	memset(min, 0, sizeof(osc_parameter_value));
 	switch(t){
@@ -72,6 +84,7 @@ static inline void osc_defaults(osc_parameter_type t, osc_parameter_value* max, 
 }
 
 static inline osc_parameter_value osc_parse(osc_parameter_type t, uint8_t* data){
+	//read value from binary representation
 	osc_parameter_value v = {0};
 	switch(t){
 		case int32:
@@ -89,6 +102,7 @@ static inline osc_parameter_value osc_parse(osc_parameter_type t, uint8_t* data)
 }
 
 static inline int osc_deparse(osc_parameter_type t, osc_parameter_value v, uint8_t* data){
+	//write value to binary representation
 	uint64_t u64 = 0;
 	uint32_t u32 = 0;
 	switch(t){
@@ -110,6 +124,7 @@ static inline int osc_deparse(osc_parameter_type t, osc_parameter_value v, uint8
 }
 
 static inline osc_parameter_value osc_parse_value_spec(osc_parameter_type t, char* value){
+	//read value from string
 	osc_parameter_value v = {0};
 	switch(t){
 		case int32:
@@ -131,6 +146,7 @@ static inline osc_parameter_value osc_parse_value_spec(osc_parameter_type t, cha
 }
 
 static inline channel_value osc_parameter_normalise(osc_parameter_type t, osc_parameter_value min, osc_parameter_value max, osc_parameter_value cur){
+	//normalise osc value wrt given min/max
 	channel_value v = {
 		.raw = {0},
 		.normalised = 0
@@ -168,18 +184,13 @@ static inline channel_value osc_parameter_normalise(osc_parameter_type t, osc_pa
 			fprintf(stderr, "Invalid OSC type passed to interpolation routine\n");
 	}
 
-	//fix overshoot
-	if(v.normalised > 1.0){
-		v.normalised = 1.0;
-	}
-	else if(v.normalised < 0.0){
-		v.normalised = 0.0;
-	}
-
+	//clamp to range
+	v.normalised = clamp(v.normalised, 1.0, 0.0);
 	return v;
 }
 
 static inline osc_parameter_value osc_parameter_denormalise(osc_parameter_type t, osc_parameter_value min, osc_parameter_value max, channel_value cur){
+	//convert normalised value to osc value wrt given min/max
 	osc_parameter_value v = {0};
 
 	union {
@@ -213,167 +224,282 @@ static inline osc_parameter_value osc_parameter_denormalise(osc_parameter_type t
 	return v;
 }
 
-static int osc_generate_event(channel* c, osc_channel* info, char* fmt, uint8_t* data, size_t data_len){
-	size_t p, off = 0;
-	if(!c || !info){
-		return 0;
-	}
-
-	osc_parameter_value min, max, cur;
-	channel_value evt;
-
-	if(!fmt || !data || data_len % 4 || !*fmt){
-		fprintf(stderr, "Invalid OSC packet, data length %zu\n", data_len);
-		return 1;
-	}
-
-	//find offset for this parameter
-	for(p = 0; p < info->param_index; p++){
-		off += osc_data_length(fmt[p]);
-	}
-
-	if(info->type != not_set){
-		max = info->max;
-		min = info->min;
-	}
-	else{
-		osc_defaults(fmt[info->param_index], &max, &min);
-	}
-
-	cur = osc_parse(fmt[info->param_index], data + off);
-	evt = osc_parameter_normalise(fmt[info->param_index], min, max, cur);
-
-	return mm_channel_event(c, evt);
-}
-
-static int osc_validate_path(char* path){
+static int osc_path_validate(char* path, uint8_t allow_patterns){
+	//validate osc path or pattern
+	char illegal_chars[] = " #,";
+	char pattern_chars[] = "?[]{}*";
+	size_t u, c;
+	uint8_t square_open = 0, curly_open = 0;
+	
 	if(path[0] != '/'){
 		fprintf(stderr, "%s is not a valid OSC path: Missing root /\n", path);
 		return 1;
 	}
-	return 0;
-}
 
-static int osc_separate_hostspec(char* in, char** host, char** port){
-	size_t u;
+	for(u = 0; u < strlen(path); u++){
+		for(c = 0; c < sizeof(illegal_chars); c++){
+			if(path[u] == illegal_chars[c]){
+				fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, illegal_chars[c], u);
+				return 1;
+			}
+		}
 
-	if(!in || !host || !port){
+		if(!isgraph(path[u])){
+			fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
+			return 1;
+		}
+
+		if(!allow_patterns){
+			for(c = 0; c < sizeof(pattern_chars); c++){
+				if(path[u] == pattern_chars[c]){
+					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
+					return 1;
+				}
+			}
+		}
+
+		switch(path[u]){
+			case '{':
+				if(square_open || curly_open){
+					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
+					return 1;
+				}
+				curly_open = 1;
+				break;
+			case '[':
+				if(square_open || curly_open){
+					fprintf(stderr, "%s is not a valid OSC path: Illegal '%c' at %" PRIsize_t "\n", path, pattern_chars[c], u);
+					return 1;
+				}
+				square_open = 1;
+				break;
+			case '}':
+				curly_open = 0;
+				break;
+			case ']':
+				square_open = 0;
+				break;
+			case '/':
+				if(square_open || curly_open){
+					fprintf(stderr, "%s is not a valid OSC path: Pattern across part boundaries\n", path);
+					return 1;
+				}
+		}
+	}
+
+	if(square_open || curly_open){
+		fprintf(stderr, "%s is not a valid OSC path: Unterminated pattern expression\n", path);
 		return 1;
 	}
-
-	for(u = 0; in[u] && !isspace(in[u]); u++){
-	}
-
-	//guess
-	*host = in;
-
-	if(in[u]){
-		in[u] = 0;
-		*port = in + u + 1;
-	}
-	else{
-		//no port given
-		*port = NULL;
-	}
 	return 0;
 }
 
-static int osc_listener(char* host, char* port){
-	int fd = -1, status, yes = 1, flags;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM,
-		.ai_flags = AI_PASSIVE
-	};
-	struct addrinfo* info;
-	struct addrinfo* addr_it;
+static int osc_path_match(char* pattern, char* path){
+	size_t u, p = 0, match_begin, match_end;
+	uint8_t match_any = 0, inverted, match;
 
-	status = getaddrinfo(host, port, &hints, &info);
-	if(status){
-		fprintf(stderr, "Failed to get socket info for %s port %s: %s\n", host, port, gai_strerror(status));
-		return -1;
-	}
+	for(u = 0; u < strlen(path); u++){
+		switch(pattern[p]){
+			case '/':
+				if(match_any){
+					for(; path[u] && path[u] != '/'; u++){
+					}
+				}
+				if(path[u] != '/'){
+					return 0;
+				}
+				match_any = 0;
+				p++;
+				break;
+			case '?':
+				match_any = 0;
+				p++;
+				break;
+			case '*':
+				match_any = 1;
+				p++;
+				break;
+			case '[':
+				inverted = (pattern[p + 1] == '!') ? 1 : 0;
+				match_end = match_begin = inverted ? p + 2 : p + 1;
+				match = 0;
+				for(; pattern[match_end] != ']'; match_end++){
+					if(pattern[match_end] == path[u]){
+						match = 1;
+						break;
+					}
 
-	for(addr_it = info; addr_it != NULL; addr_it = addr_it->ai_next){
-		fd = socket(addr_it->ai_family, addr_it->ai_socktype, addr_it->ai_protocol);
-		if(fd < 0){
-			continue;
+					if(pattern[match_end + 1] == '-' && pattern[match_end + 2] != ']'){
+						if((pattern[match_end] > pattern[match_end + 2] 
+									&& path[u] >= pattern[match_end + 2]
+									&& path[u] <= pattern[match_end])
+								|| (pattern[match_end] <= pattern[match_end + 2]
+									&& path[u] >= pattern[match_end]
+									&& path[u] <= pattern[match_end + 2])){
+							match = 1;
+							break;
+						}
+						match_end += 2;
+					}
+
+					if(pattern[match_end + 1] == ']' && match_any && !match
+							&& path[u + 1] && path[u + 1] != '/'){
+						match_end = match_begin - 1;
+						u++;
+					}
+				}
+
+				if(match == inverted){
+					return 0;
+				}
+
+				match_any = 0;
+				//advance to end of pattern
+				for(; pattern[p] != ']'; p++){
+				}
+				p++;
+				break;
+			case '{':
+				for(match_begin = p + 1; pattern[match_begin] != '}'; match_begin++){
+					//find end
+					for(match_end = match_begin; pattern[match_end] != ',' && pattern[match_end] != '}'; match_end++){
+					}
+
+					if(!strncmp(path + u, pattern + match_begin, match_end - match_begin)){
+						//advance pattern
+						for(; pattern[p] != '}'; p++){
+						}
+						p++;
+						//advance path
+						u += match_end - match_begin - 1;
+						break;
+					}
+
+					if(pattern[match_end] == '}'){
+						//retry with next if in match_any
+						if(match_any && path[u + 1] && path[u + 1] != '/'){
+							u++;
+							match_begin = p;
+							continue;
+						}
+						return 0;
+					}
+					match_begin = match_end;
+				}
+				match_any = 0;
+				break;
+			case 0:
+				if(match_any){
+					for(; path[u] && path[u] != '/'; u++){
+					}
+				}
+				if(path[u]){
+					return 0;
+				}
+				break;
+			default:
+				if(match_any){
+					for(; path[u] && path[u] != '/' && path[u] != pattern[p]; u++){
+					}
+				}
+				if(pattern[p] != path[u]){
+					return 0;
+				}
+				p++;
+				break;
 		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_REUSEADDR on socket\n");
-		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_BROADCAST on socket\n");
-		}
-
-		yes = 0;
-		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to unset IP_MULTICAST_LOOP option: %s\n", strerror(errno));
-		}
-
-		status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
-		if(status < 0){
-			close(fd);
-			continue;
-		}
-
-		break;
 	}
-
-	freeaddrinfo(info);
-
-	if(!addr_it){
-		fprintf(stderr, "Failed to create listening socket for %s port %s\n", host, port);
-		return -1;
-	}
-
-	//set nonblocking
-	flags = fcntl(fd, F_GETFL, 0);
-	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		close(fd);
-		fprintf(stderr, "Failed to set OSC descriptor nonblocking\n");
-		return -1;
-	}
-
-	return fd;
-}
-
-static int osc_parse_addr(char* host, char* port, struct sockaddr_storage* addr, socklen_t* len){
-	struct addrinfo* head;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM
-	};
-
-	int error = getaddrinfo(host, port, &hints, &head);
-	if(error || !head){
-		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(error));
-		return 1;
-	}
-
-	memcpy(addr, head->ai_addr, head->ai_addrlen);
-	*len = head->ai_addrlen;
-
-	freeaddrinfo(head);
-	return 0;
-}
-
-static int backend_configure(char* option, char* value){
-	fprintf(stderr, "The OSC backend does not take any global configuration\n");
 	return 1;
 }
 
-static int backend_configure_instance(instance* inst, char* option, char* value){
-	osc_instance* data = (osc_instance*) inst->impl;
-	char* host = NULL, *port = NULL, *token = NULL, *format = NULL;
-	size_t u, p;
+static int osc_configure(char* option, char* value){
+	if(!strcmp(option, "detect")){
+		osc_global_config.detect = 1;
+		if(!strcmp(value, "off")){
+			osc_global_config.detect = 0;
+		}
+		return 0;
+	}
+
+	fprintf(stderr, "Unknown configuration parameter %s for OSC backend\n", option);
+	return 1;
+}
+
+static int osc_register_pattern(osc_instance_data* data, char* pattern_path, char* configuration){
+	size_t u, pattern;
+	char* format = NULL, *token = NULL;
+
+	if(osc_path_validate(pattern_path, 1)){
+		fprintf(stderr, "Not a valid OSC pattern: %s\n", pattern_path);
+		return 1;
+	}
+
+	//tokenize configuration
+	format = strtok(configuration, " ");
+	if(!format || strlen(format) < 1){
+		fprintf(stderr, "Not a valid format specification for OSC pattern %s\n", pattern_path);
+		return 1;
+	}
+
+	//create pattern
+	data->pattern = realloc(data->pattern, (data->patterns + 1) * sizeof(osc_channel));
+	if(!data->pattern){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return 1;
+	}
+	pattern = data->patterns;
+
+	data->pattern[pattern].params = strlen(format);
+	data->pattern[pattern].path = strdup(pattern_path);
+	data->pattern[pattern].type = calloc(strlen(format), sizeof(osc_parameter_type));
+	data->pattern[pattern].max = calloc(strlen(format), sizeof(osc_parameter_value));
+	data->pattern[pattern].min = calloc(strlen(format), sizeof(osc_parameter_value));
+
+	if(!data->pattern[pattern].path
+			|| !data->pattern[pattern].type
+			|| !data->pattern[pattern].max
+			|| !data->pattern[pattern].min){
+		//this should fail config parsing and thus call the shutdown function,
+		//which should properly free the rest of the data
+		fprintf(stderr, "Failed to allocate memory\n");
+		return 1;
+	}
+
+	//check format validity and store min/max values
+	for(u = 0; u < strlen(format); u++){
+		if(!osc_data_length(format[u])){
+			fprintf(stderr, "Invalid format specifier %c for pattern %s\n", format[u], pattern_path);
+			return 1;
+		}
+
+		data->pattern[pattern].type[u] = format[u];
+
+		//parse min/max values
+		token = strtok(NULL, " ");
+		if(!token){
+			fprintf(stderr, "Missing minimum specification for parameter %" PRIsize_t " of OSC pattern %s\n", u, pattern_path);
+			return 1;
+		}
+		data->pattern[pattern].min[u] = osc_parse_value_spec(format[u], token);
+
+		token = strtok(NULL, " ");
+		if(!token){
+			fprintf(stderr, "Missing maximum specification for parameter %" PRIsize_t " of OSC pattern %s\n", u, pattern_path);
+			return 1;
+		}
+		data->pattern[pattern].max[u] = osc_parse_value_spec(format[u], token);
+	}
+
+	data->patterns++;
+	return 0;
+}
+
+static int osc_configure_instance(instance* inst, char* option, char* value){
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
+	char* host = NULL, *port = NULL;
 
 	if(!strcmp(option, "root")){
-		if(osc_validate_path(value)){
+		if(osc_path_validate(value, 0)){
 			fprintf(stderr, "Not a valid OSC root: %s\n", value);
 			return 1;
 		}
@@ -390,12 +516,13 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
-		if(osc_separate_hostspec(value, &host, &port)){
+		mmbackend_parse_hostspec(value, &host, &port);
+		if(!host || !port){
 			fprintf(stderr, "Invalid bind address for instance %s\n", inst->name);
 			return 1;
 		}
 
-		data->fd = osc_listener(host, port);
+		data->fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
 		if(data->fd < 0){
 			fprintf(stderr, "Failed to bind for instance %s\n", inst->name);
 			return 1;
@@ -413,101 +540,33 @@ static int backend_configure_instance(instance* inst, char* option, char* value)
 			return 0;
 		}
 
-		if(osc_separate_hostspec(value, &host, &port)){
+		mmbackend_parse_hostspec(value, &host, &port);
+		if(!host || !port){
 			fprintf(stderr, "Invalid destination address for instance %s\n", inst->name);
 			return 1;
 		}
 
-		if(osc_parse_addr(host, port, &data->dest, &data->dest_len)){
+		if(mmbackend_parse_sockaddr(host, port, &data->dest, &data->dest_len)){
 			fprintf(stderr, "Failed to parse destination address for instance %s\n", inst->name);
 			return 1;
 		}
 		return 0;
 	}
 	else if(*option == '/'){
-		//pre-configure channel
-		if(osc_validate_path(option)){
-			fprintf(stderr, "Not a valid OSC path: %s\n", option);
-			return 1;
-		}
-
-		for(u = 0; u < data->channels; u++){
-			if(!strcmp(option, data->channel[u].path)){
-				fprintf(stderr, "OSC channel %s already configured\n", option);
-				return 1;
-			}
-		}
-
-		//tokenize configuration
-		format = strtok(value, " ");
-		if(!format || strlen(format) < 1){
-			fprintf(stderr, "Not a valid format for OSC path %s\n", option);
-			return 1;
-		}
-
-		//check format validity, create subchannels
-		for(p = 0; p < strlen(format); p++){
-			if(!osc_data_length(format[p])){
-				fprintf(stderr, "Invalid format specifier %c for path %s, ignoring\n", format[p], option);
-				continue;
-			}
-
-			//register new sub-channel
-			data->channel = realloc(data->channel, (data->channels + 1) * sizeof(osc_channel));
-			if(!data->channel){
-				fprintf(stderr, "Failed to allocate memory\n");
-				return 1;
-			}
-
-			memset(data->channel + data->channels, 0, sizeof(osc_channel));
-			data->channel[data->channels].params = strlen(format);
-			data->channel[data->channels].param_index = p;
-			data->channel[data->channels].type = format[p];
-			data->channel[data->channels].path = strdup(option);
-
-			if(!data->channel[data->channels].path){
-				fprintf(stderr, "Failed to allocate memory\n");
-				return 1;
-			}
-
-			//parse min/max values
-			token = strtok(NULL, " ");
-			if(!token){
-				fprintf(stderr, "Missing minimum specification for parameter %zu of %s\n", p, option);
-				return 1;
-			}
-			data->channel[data->channels].min = osc_parse_value_spec(format[p], token);
-
-			token = strtok(NULL, " ");
-			if(!token){
-				fprintf(stderr, "Missing maximum specification for parameter %zu of %s\n", p, option);
-				return 1;
-			}
-			data->channel[data->channels].max = osc_parse_value_spec(format[p], token);
-
-			//allocate channel from core
-			if(!mm_channel(inst, data->channels, 1)){
-				fprintf(stderr, "Failed to register core channel\n");
-				return 1;
-			}
-
-			//increase channel count
-			data->channels++;
-		}
-		return 0;
+		return osc_register_pattern(data, option, value);
 	}
 
-	fprintf(stderr, "Unknown configuration parameter %s for OSC backend\n", option);
+	fprintf(stderr, "Unknown configuration parameter %s for OSC instance %s\n", option, inst->name);
 	return 1;
 }
 
-static instance* backend_instance(){
+static instance* osc_instance(){
 	instance* inst = mm_instance();
 	if(!inst){
 		return NULL;
 	}
 
-	osc_instance* data = calloc(1, sizeof(osc_instance));
+	osc_instance_data* data = calloc(1, sizeof(osc_instance_data));
 	if(!data){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return NULL;
@@ -518,32 +577,39 @@ static instance* backend_instance(){
 	return inst;
 }
 
-static channel* backend_channel(instance* inst, char* spec){
-	size_t u;
-	osc_instance* data = (osc_instance*) inst->impl;
-	size_t param_index = 0;
+static channel* osc_map_channel(instance* inst, char* spec, uint8_t flags){
+	size_t u, p;
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
+	osc_channel_ident ident = {
+		.label = 0
+	};
 
 	//check spec for correctness
-	if(osc_validate_path(spec)){
+	if(osc_path_validate(spec, 0)){
 		return NULL;
 	}
 
 	//parse parameter offset
 	if(strrchr(spec, ':')){
-		param_index = strtoul(strrchr(spec, ':') + 1, NULL, 10);
+		ident.fields.parameter = strtoul(strrchr(spec, ':') + 1, NULL, 10);
 		*(strrchr(spec, ':')) = 0;
 	}
 
 	//find matching channel
 	for(u = 0; u < data->channels; u++){
-		if(!strcmp(spec, data->channel[u].path) && data->channel[u].param_index == param_index){
-			//fprintf(stderr, "Reusing previously created channel %s parameter %zu\n", data->channel[u].path, data->channel[u].param_index);
+		if(!strcmp(spec, data->channel[u].path)){
 			break;
 		}
 	}
 
 	//allocate new channel
 	if(u == data->channels){
+		for(p = 0; p < data->patterns; p++){
+			if(osc_path_match(data->pattern[p].path, spec)){
+				break;
+			}
+		}
+
 		data->channel = realloc(data->channel, (u + 1) * sizeof(osc_channel));
 		if(!data->channel){
 			fprintf(stderr, "Failed to allocate memory\n");
@@ -551,52 +617,39 @@ static channel* backend_channel(instance* inst, char* spec){
 		}
 
 		memset(data->channel + u, 0, sizeof(osc_channel));
-		data->channel[u].param_index = param_index;
 		data->channel[u].path = strdup(spec);
+		if(p != data->patterns){
+			fprintf(stderr, "Matched pattern %s for %s\n", data->pattern[p].path, spec);
+			data->channel[u].params = data->pattern[p].params;
+			//just reuse the pointers from the pattern
+			data->channel[u].type = data->pattern[p].type;
+			data->channel[u].max = data->pattern[p].max;
+			data->channel[u].min = data->pattern[p].min;
 
-		if(!data->channel[u].path){
+			//these are per channel
+			data->channel[u].in = calloc(data->channel[u].params, sizeof(osc_parameter_value));
+			data->channel[u].out = calloc(data->channel[u].params, sizeof(osc_parameter_value));
+		}
+		else if(data->patterns){
+			fprintf(stderr, "No pattern match found for %s\n", spec);
+		}
+
+		if(!data->channel[u].path
+				|| (data->channel[u].params && (!data->channel[u].in || !data->channel[u].out))){
 			fprintf(stderr, "Failed to allocate memory\n");
 			return NULL;
 		}
 		data->channels++;
 	}
 
-	return mm_channel(inst, u, 1);
+	ident.fields.channel = u;
+	return mm_channel(inst, ident.label, 1);
 }
 
-static int backend_set(instance* inst, size_t num, channel** c, channel_value* v){
-	uint8_t xmit_buf[OSC_XMIT_BUF], *format = NULL;
-	size_t evt = 0, off, members, p;
-	if(!num){
-		return 0;
-	}
-
-	osc_instance* data = (osc_instance*) inst->impl;
-	if(!data->dest_len){
-		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%zu channels)\n", inst->name, num);
-		return 0;
-	}
-
-	for(evt = 0; evt < num; evt++){
-		off = c[evt]->ident;
-
-		//sanity check
-		if(off >= data->channels){
-			fprintf(stderr, "OSC channel identifier out of range\n");
-			return 1;
-		}
-
-		//if the format is unknown, don't output
-		if(data->channel[off].type == not_set || data->channel[off].params == 0){
-			fprintf(stderr, "OSC channel %s.%s requires format specification for output\n", inst->name, data->channel[off].path);
-			continue;
-		}
-
-		//update current value
-		data->channel[off].current = osc_parameter_denormalise(data->channel[off].type, data->channel[off].min, data->channel[off].max, v[evt]);
-		//mark channel
-		data->channel[off].mark = 1;
-	}
+static int osc_output_channel(instance* inst, size_t channel){
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
+	uint8_t xmit_buf[OSC_XMIT_BUF] = "", *format = NULL;
+	size_t offset = 0, p;
 
 	//fix destination rport if required
 	if(data->forced_rport){
@@ -605,78 +658,170 @@ static int backend_set(instance* inst, size_t num, channel** c, channel_value* v
 		sockadd->sin_port = htobe16(data->forced_rport);
 	}
 
-	//find all marked channels
-	for(evt = 0; evt < data->channels; evt++){
-		//zero output buffer
-		memset(xmit_buf, 0, sizeof(xmit_buf));
-		if(data->channel[evt].mark){
-			//determine minimum packet size
-			if(osc_align((data->root ? strlen(data->root) : 0) + strlen(data->channel[evt].path) + 1) + osc_align(data->channel[evt].params + 2)  >= sizeof(xmit_buf)){
-				fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s\n", inst->name, data->channel[evt].path);
-				return 1;
-			}
+	//determine minimum packet size
+	if(osc_align((data->root ? strlen(data->root) : 0) + strlen(data->channel[channel].path) + 1) + osc_align(data->channel[channel].params + 2)  >= sizeof(xmit_buf)){
+		fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s\n", inst->name, data->channel[channel].path);
+		return 1;
+	}
 
-			off = 0;
-			//copy osc target path
-			if(data->root){
-				memcpy(xmit_buf, data->root, strlen(data->root));
-				off += strlen(data->root);
-			}
-			memcpy(xmit_buf + off, data->channel[evt].path, strlen(data->channel[evt].path));
-			off += strlen(data->channel[evt].path) + 1;
-			off = osc_align(off);
+	//copy osc target path
+	if(data->root){
+		memcpy(xmit_buf, data->root, strlen(data->root));
+		offset += strlen(data->root);
+	}
+	
+	memcpy(xmit_buf + offset, data->channel[channel].path, strlen(data->channel[channel].path));
+	offset += strlen(data->channel[channel].path) + 1;
+	offset = osc_align(offset);
 
-			//get format string offset, initialize
-			format = xmit_buf + off;
-			off += osc_align(data->channel[evt].params + 2);
-			*format = ',';
-			format++;
+	//get format string offset, initialize
+	format = xmit_buf + offset;
+	offset += osc_align(data->channel[channel].params + 2);
+	*format = ',';
+	format++;
 
-			//gather subchannels, unmark
-			members = 0;
-			for(p = 0; p < data->channels && members < data->channel[evt].params; p++){
-				if(!strcmp(data->channel[evt].path, data->channel[p].path)){
-					//unmark channel
-					data->channel[p].mark = 0;
+	for(p = 0; p < data->channel[channel].params; p++){
+		//write format specifier
+		format[p] = data->channel[channel].type[p];
 
-					//sanity check
-					if(data->channel[p].param_index >= data->channel[evt].params){
-						fprintf(stderr, "OSC channel %s.%s has multiple parameter offset definitions\n", inst->name, data->channel[evt].path);
-						return 1;
-					}
-
-					//write format specifier
-					format[data->channel[p].param_index] = data->channel[p].type;
-
-					//write data
-					//FIXME this currently depends on all channels being registered in the correct order, since it just appends data
-					if(off + osc_data_length(data->channel[p].type) >= sizeof(xmit_buf)){
-						fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s at parameter %zu\n", inst->name, data->channel[evt].path, members);
-						return 1;
-					}
-
-					osc_deparse(data->channel[p].type, data->channel[p].current, xmit_buf + off);
-					off += osc_data_length(data->channel[p].type);
-					members++;
-				}
-			}
-
-			//output packet
-			if(sendto(data->fd, xmit_buf, off, 0, (struct sockaddr*) &(data->dest), data->dest_len) < 0){
-				fprintf(stderr, "Failed to transmit OSC packet: %s\n", strerror(errno));
-			}
+		//write data
+		if(offset + osc_data_length(data->channel[channel].type[p]) >= sizeof(xmit_buf)){
+			fprintf(stderr, "Insufficient buffer size for OSC transmitting channel %s.%s at parameter %" PRIsize_t "\n", inst->name, data->channel[channel].path, p);
+			return 1;
 		}
+
+		osc_deparse(data->channel[channel].type[p],
+				data->channel[channel].out[p],
+				xmit_buf + offset);
+		offset += osc_data_length(data->channel[channel].type[p]);
+	}
+
+	//output packet
+	if(sendto(data->fd, xmit_buf, offset, 0, (struct sockaddr*) &(data->dest), data->dest_len) < 0){
+		fprintf(stderr, "Failed to transmit OSC packet: %s\n", strerror(errno));
 	}
 	return 0;
 }
 
-static int backend_handle(size_t num, managed_fd* fds){
+static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
+	size_t evt = 0, mark = 0;
+	int rv = 0;
+	osc_channel_ident ident = {
+		.label = 0
+	};
+	osc_parameter_value current;
+
+	if(!num){
+		return 0;
+	}
+
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
+	if(!data->dest_len){
+		fprintf(stderr, "OSC instance %s does not have a destination, output is disabled (%" PRIsize_t " channels)\n", inst->name, num);
+		return 0;
+	}
+
+	for(evt = 0; evt < num; evt++){
+		ident.label = c[evt]->ident;
+
+		//sanity check
+		if(ident.fields.channel >= data->channels
+				|| ident.fields.parameter >= data->channel[ident.fields.channel].params){
+			fprintf(stderr, "OSC channel identifier out of range\n");
+			return 1;
+		}
+
+		//if the format is unknown, don't output
+		if(!data->channel[ident.fields.channel].params){
+			fprintf(stderr, "OSC channel %s.%s requires format specification for output\n", inst->name, data->channel[ident.fields.channel].path);
+			continue;
+		}
+
+		//only output on change
+		current = osc_parameter_denormalise(data->channel[ident.fields.channel].type[ident.fields.parameter],
+				data->channel[ident.fields.channel].min[ident.fields.parameter],
+				data->channel[ident.fields.channel].max[ident.fields.parameter],
+				v[evt]);
+		if(memcmp(&current, &data->channel[ident.fields.channel].out[ident.fields.parameter], sizeof(current))){
+			//update current value
+			data->channel[ident.fields.channel].out[ident.fields.parameter] = current;
+			//mark channel
+			data->channel[ident.fields.channel].mark = 1;
+			mark = 1;
+		}
+	}
+	
+	if(mark){
+		//output all marked channels
+		for(evt = 0; !rv && evt < num; evt++){
+			ident.label = c[evt]->ident;
+			if(data->channel[ident.fields.channel].mark){
+				rv |= osc_output_channel(inst, ident.fields.channel);
+				data->channel[ident.fields.channel].mark = 0;
+			}
+		}
+	}
+	return rv;
+}
+
+static int osc_process_packet(instance* inst, char* local_path, char* format, uint8_t* payload, size_t payload_len){
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
+	size_t c, p, offset = 0;
+	osc_parameter_value min, max, cur;
+	channel_value evt;
+	osc_channel_ident ident = {
+		.label = 0
+	};
+	channel* chan = NULL;
+
+	if(payload_len % 4){
+		fprintf(stderr, "Invalid OSC packet, data length %" PRIsize_t "\n", payload_len);
+		return 0;
+	}
+
+	for(c = 0; c < data->channels; c++){
+		if(!strcmp(local_path, data->channel[c].path)){
+			ident.fields.channel = c;
+			//unconfigured input should work without errors (using default limits)
+			if(data->channel[c].params && strlen(format) != data->channel[c].params){
+				fprintf(stderr, "OSC message %s.%s had format %s, internal representation has %" PRIsize_t " parameters\n", inst->name, local_path, format, data->channel[c].params);
+				continue;
+			}
+
+			for(p = 0; p < strlen(format); p++){
+				ident.fields.parameter = p;
+				if(data->channel[c].params){
+					max = data->channel[c].max[p];
+					min = data->channel[c].min[p];
+				}
+				else{
+					osc_defaults(format[p], &max, &min);
+				}
+				cur = osc_parse(format[p], payload + offset);
+				if(!data->channel[c].params || memcmp(&cur, &data->channel[c].in, sizeof(cur))){
+					evt = osc_parameter_normalise(format[p], min, max, cur);
+					chan = mm_channel(inst, ident.label, 0);
+					if(chan){
+						mm_channel_event(chan, evt);
+					}
+				}
+
+				//skip to next parameter data
+				offset += osc_data_length(format[p]);
+				//TODO check offset against payload length
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int osc_handle(size_t num, managed_fd* fds){
 	size_t fd;
 	char recv_buf[OSC_RECV_BUF];
 	instance* inst = NULL;
-	osc_instance* data = NULL;
+	osc_instance_data* data = NULL;
 	ssize_t bytes_read = 0;
-	size_t c;
 	char* osc_fmt = NULL;
 	char* osc_local = NULL;
 	uint8_t* osc_data = NULL;
@@ -688,7 +833,7 @@ static int backend_handle(size_t num, managed_fd* fds){
 			continue;
 		}
 
-		data = (osc_instance*) inst->impl;
+		data = (osc_instance_data*) inst->impl;
 
 		do{
 			if(data->learn){
@@ -698,15 +843,16 @@ static int backend_handle(size_t num, managed_fd* fds){
 			else{
 				bytes_read = recv(fds[fd].fd, recv_buf, sizeof(recv_buf), 0);
 			}
+
+			if(bytes_read <= 0){
+				break;
+			}
+
 			if(data->root && strncmp(recv_buf, data->root, min(bytes_read, strlen(data->root)))){
 				//ignore packet for different root
 				continue;
 			}
 			osc_local = recv_buf + (data->root ? strlen(data->root) : 0);
-
-			if(bytes_read < 0){
-				break;
-			}
 
 			osc_fmt = recv_buf + osc_align(strlen(recv_buf) + 1);
 			if(*osc_fmt != ','){
@@ -716,24 +862,23 @@ static int backend_handle(size_t num, managed_fd* fds){
 			}
 			osc_fmt++;
 
-			osc_data = (uint8_t*) osc_fmt + (osc_align(strlen(osc_fmt) + 2) - 1);
-			//FIXME check supplied data length
+			if(osc_global_config.detect){
+				fprintf(stderr, "Incoming OSC data: Path %s.%s Format %s\n", inst->name, osc_local, osc_fmt);
+			}
 
-			for(c = 0; c < data->channels; c++){
-				//FIXME implement proper OSC path match
-				//prefix match
-				if(!strcmp(osc_local, data->channel[c].path)){
-					if(strlen(osc_fmt) > data->channel[c].param_index){
-						//fprintf(stderr, "Taking parameter %zu of %s (%s), %zd bytes, data offset %zu\n", data->channel[c].param_index, recv_buf, osc_fmt, bytes_read, (osc_data - (uint8_t*)recv_buf));
-						if(osc_generate_event(mm_channel(inst, c, 0), data->channel + c, osc_fmt, osc_data, bytes_read - (osc_data - (uint8_t*) recv_buf))){
-							fprintf(stderr, "Failed to generate OSC channel event\n");
-						}
-					}
-				}
+			//FIXME check supplied data length
+			osc_data = (uint8_t*) osc_fmt + (osc_align(strlen(osc_fmt) + 2) - 1);
+
+			if(osc_process_packet(inst, osc_local, osc_fmt, osc_data, bytes_read - (osc_data - (uint8_t*) recv_buf))){
+				return 1;
 			}
 		} while(bytes_read > 0);
 
+		#ifdef _WIN32
+		if(bytes_read < 0 && WSAGetLastError() != WSAEWOULDBLOCK){
+		#else
 		if(bytes_read < 0 && errno != EAGAIN){
+		#endif
 			fprintf(stderr, "OSC failed to receive data for instance %s: %s\n", inst->name, strerror(errno));
 		}
 
@@ -746,10 +891,10 @@ static int backend_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int backend_start(){
+static int osc_start(){
 	size_t n, u, fds = 0;
 	instance** inst = NULL;
-	osc_instance* data = NULL;
+	osc_instance_data* data = NULL;
 
 	//fetch all instances
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
@@ -764,7 +909,7 @@ static int backend_start(){
 
 	//update instance identifiers
 	for(u = 0; u < n; u++){
-		data = (osc_instance*) inst[u]->impl;
+		data = (osc_instance_data*) inst[u]->impl;
 
 		if(data->fd >= 0){
 			inst[u]->ident = data->fd;
@@ -780,16 +925,16 @@ static int backend_start(){
 		}
 	}
 
-	fprintf(stderr, "OSC backend registered %zu descriptors to core\n", fds);
+	fprintf(stderr, "OSC backend registered %" PRIsize_t " descriptors to core\n", fds);
 
 	free(inst);
 	return 0;
 }
 
-static int backend_shutdown(){
+static int osc_shutdown(){
 	size_t n, u, c;
 	instance** inst = NULL;
-	osc_instance* data = NULL;
+	osc_instance_data* data = NULL;
 
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
 		fprintf(stderr, "Failed to fetch instance list\n");
@@ -797,20 +942,32 @@ static int backend_shutdown(){
 	}
 
 	for(u = 0; u < n; u++){
-		data = (osc_instance*) inst[u]->impl;
+		data = (osc_instance_data*) inst[u]->impl;
 		for(c = 0; c < data->channels; c++){
 			free(data->channel[c].path);
+			free(data->channel[c].in);
+			free(data->channel[c].out);
 		}
 		free(data->channel);
+		for(c = 0; c < data->patterns; c++){
+			free(data->pattern[c].path);
+			free(data->pattern[c].type);
+			free(data->pattern[c].min);
+			free(data->pattern[c].max);
+		}
+		free(data->pattern);
+
 		free(data->root);
 		if(data->fd >= 0){
 			close(data->fd);
 		}
 		data->fd = -1;
 		data->channels = 0;
+		data->patterns = 0;
 		free(inst[u]->impl);
 	}
 
 	free(inst);
+	fprintf(stderr, "OSC backend shut down\n");
 	return 0;
 }

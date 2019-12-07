@@ -3,17 +3,17 @@
 
 #define BACKEND_NAME "loopback"
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend loopback = {
 		.name = BACKEND_NAME,
-		.conf = backend_configure,
-		.create = backend_instance,
-		.conf_instance = backend_configure_instance,
-		.channel = backend_channel,
-		.handle = backend_set,
-		.process = backend_handle,
-		.start = backend_start,
-		.shutdown = backend_shutdown
+		.conf = loopback_configure,
+		.create = loopback_instance,
+		.conf_instance = loopback_configure_instance,
+		.channel = loopback_channel,
+		.handle = loopback_set,
+		.process = loopback_handle,
+		.start = loopback_start,
+		.shutdown = loopback_shutdown
 	};
 
 	//register backend
@@ -24,23 +24,23 @@ int init(){
 	return 0;
 }
 
-static int backend_configure(char* option, char* value){
+static int loopback_configure(char* option, char* value){
 	//intentionally ignored
 	return 0;
 }
 
-static int backend_configure_instance(instance* inst, char* option, char* value){
+static int loopback_configure_instance(instance* inst, char* option, char* value){
 	//intentionally ignored
 	return 0;
 }
 
-static instance* backend_instance(){
+static instance* loopback_instance(){
 	instance* i = mm_instance();
 	if(!i){
 		return NULL;
 	}
 
-	i->impl = calloc(1, sizeof(loopback_instance));
+	i->impl = calloc(1, sizeof(loopback_instance_data));
 	if(!i->impl){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return NULL;
@@ -49,9 +49,9 @@ static instance* backend_instance(){
 	return i;
 }
 
-static channel* backend_channel(instance* inst, char* spec){
+static channel* loopback_channel(instance* inst, char* spec, uint8_t flags){
 	size_t u;
-	loopback_instance* data = (loopback_instance*) inst->impl;
+	loopback_instance_data* data = (loopback_instance_data*) inst->impl;
 
 	//find matching channel
 	for(u = 0; u < data->n; u++){
@@ -79,7 +79,7 @@ static channel* backend_channel(instance* inst, char* spec){
 	return mm_channel(inst, u, 1);
 }
 
-static int backend_set(instance* inst, size_t num, channel** c, channel_value* v){
+static int loopback_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t n;
 	for(n = 0; n < num; n++){
 		mm_channel_event(c[n], v[n]);
@@ -87,19 +87,19 @@ static int backend_set(instance* inst, size_t num, channel** c, channel_value* v
 	return 0;
 }
 
-static int backend_handle(size_t num, managed_fd* fds){
+static int loopback_handle(size_t num, managed_fd* fds){
 	//no events generated here
 	return 0;
 }
 
-static int backend_start(){
+static int loopback_start(){
 	return 0;
 }
 
-static int backend_shutdown(){
+static int loopback_shutdown(){
 	size_t n, u, p;
 	instance** inst = NULL;
-	loopback_instance* data = NULL;
+	loopback_instance_data* data = NULL;
 
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
 		fprintf(stderr, "Failed to fetch instance list\n");
@@ -107,7 +107,7 @@ static int backend_shutdown(){
 	}
 
 	for(u = 0; u < n; u++){
-		data = (loopback_instance*) inst[u]->impl;
+		data = (loopback_instance_data*) inst[u]->impl;
 		for(p = 0; p < data->n; p++){
 			free(data->name[p]);
 		}
@@ -116,5 +116,7 @@ static int backend_shutdown(){
 	}
 
 	free(inst);
+
+	fprintf(stderr, "Loopback backend shut down\n");
 	return 0;
 }

@@ -1,14 +1,18 @@
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <ctype.h>
+#ifndef _WIN32
+#include <netdb.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#endif
 
+#include "libmmbackend.h"
 #include "sacn.h"
+
 //upper limit imposed by using the fd index as 16-bit part of the instance id
 #define MAX_FDS 4096
 #define BACKEND_NAME "sacn"
@@ -27,7 +31,7 @@ static struct /*_sacn_global_config*/ {
 	.last_announce = 0
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend sacn = {
 		.name = BACKEND_NAME,
 		.conf = sacn_configure,
@@ -40,6 +44,11 @@ int init(){
 		.shutdown = sacn_shutdown
 	};
 
+	if(sizeof(sacn_instance_id) != sizeof(uint64_t)){
+		fprintf(stderr, "sACN instance identification union out of bounds\n");
+		return 1;
+	}
+
 	//register the backend
 	if(mm_backend_register(sacn)){
 		fprintf(stderr, "Failed to register sACN backend\n");
@@ -50,68 +59,14 @@ int init(){
 }
 
 static int sacn_listener(char* host, char* port, uint8_t fd_flags){
-	int fd = -1, status, yes = 1, flags;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM,
-		.ai_flags = AI_PASSIVE
-	};
-	struct addrinfo* info;
-	struct addrinfo* addr_it;
-
+	int fd = -1;
 	if(global_cfg.fds >= MAX_FDS){
 		fprintf(stderr, "sACN backend descriptor limit reached\n");
 		return -1;
 	}
 
-	status = getaddrinfo(host, port, &hints, &info);
-	if(status){
-		fprintf(stderr, "Failed to get socket info for %s port %s: %s\n", host, port, gai_strerror(status));
-		return -1;
-	}
-
-	for(addr_it = info; addr_it != NULL; addr_it = addr_it->ai_next){
-		fd = socket(addr_it->ai_family, addr_it->ai_socktype, addr_it->ai_protocol);
-		if(fd < 0){
-			continue;
-		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_REUSEADDR on socket\n");
-		}
-
-		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to set SO_BROADCAST on socket\n");
-		}
-
-		yes = 0;
-		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to unset IP_MULTICAST_LOOP option: %s\n", strerror(errno));
-		}
-
-		status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
-		if(status < 0){
-			close(fd);
-			continue;
-		}
-
-		break;
-	}
-
-	freeaddrinfo(info);
-
-	if(!addr_it){
-		fprintf(stderr, "Failed to create listening socket for %s port %s\n", host, port);
-		return -1;
-	}
-
-	//set nonblocking
-	flags = fcntl(fd, F_GETFL, 0);
-	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		fprintf(stderr, "Failed to set sACN descriptor nonblocking\n");
-		close(fd);
+	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
+	if(fd < 0){
 		return -1;
 	}
 
@@ -123,62 +78,13 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 		return -1;
 	}
 
-	fprintf(stderr, "sACN backend interface %zu bound to %s port %s\n", global_cfg.fds, host, port);
+	fprintf(stderr, "sACN backend interface %" PRIsize_t " bound to %s port %s\n", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].flags = fd_flags;
 	global_cfg.fd[global_cfg.fds].universes = 0;
 	global_cfg.fd[global_cfg.fds].universe = NULL;
 	global_cfg.fd[global_cfg.fds].last_frame = NULL;
 	global_cfg.fds++;
-	return 0;
-}
-
-static int sacn_parse_addr(char* host, char* port, struct sockaddr_storage* addr, socklen_t* len){
-	struct addrinfo* head;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_DGRAM
-	};
-
-	int error = getaddrinfo(host, port, &hints, &head);
-	if(error || !head){
-		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(error));
-		return 1;
-	}
-
-	memcpy(addr, head->ai_addr, head->ai_addrlen);
-	*len = head->ai_addrlen;
-
-	freeaddrinfo(head);
-	return 0;
-}
-
-static int sacn_parse_hostspec(char* in, char** host, char** port, uint8_t* flags){
-	size_t u;
-
-	if(!in || !host || !port){
-		return 1;
-	}
-
-	for(u = 0; in[u] && !isspace(in[u]); u++){
-	}
-
-	//guess
-	*host = in;
-
-	if(in[u]){
-		in[u] = 0;
-		*port = in + u + 1;
-	}
-	else{
-		//no port given
-		*port = SACN_PORT;
-	}
-
-	if(flags){
-		//TODO parse hostspec trailing data for options
-		*flags = 0;
-	}
 	return 0;
 }
 
@@ -204,8 +110,13 @@ static int sacn_configure(char* option, char* value){
 		}
 	}
 	else if(!strcmp(option, "bind")){
-		if(sacn_parse_hostspec(value, &host, &port, &flags)){
-			fprintf(stderr, "Not a valid sACN bind address: %s\n", value);
+		mmbackend_parse_hostspec(value, &host, &port);
+		if(!port){
+			port = SACN_PORT;
+		}
+
+		if(!host){
+			fprintf(stderr, "No valid sACN bind address provided\n");
 			return 1;
 		}
 
@@ -243,12 +154,17 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 	else if(!strcmp(option, "destination")){
-		if(sacn_parse_hostspec(value, &host, &port, NULL)){
-			fprintf(stderr, "Not a valid sACN destination for instance %s: %s\n", inst->name, value);
+		mmbackend_parse_hostspec(value, &host, &port);
+		if(!port){
+			port = SACN_PORT;
+		}
+
+		if(!host){
+			fprintf(stderr, "No valid sACN destination for instance %s\n", inst->name);
 			return 1;
 		}
 
-		return sacn_parse_addr(host, port, &data->dest_addr, &data->dest_len);
+		return mmbackend_parse_sockaddr(host, port, &data->dest_addr, &data->dest_len);
 	}
 	else if(!strcmp(option, "from")){
 		next = value;
@@ -282,7 +198,7 @@ static instance* sacn_instance(){
 	return inst;
 }
 
-static channel* sacn_channel(instance* inst, char* spec){
+static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
 	char* spec_next = spec;
 
@@ -362,7 +278,7 @@ static int sacn_transmit(instance* inst){
 	memcpy(pdu.data.source_name, global_cfg.source_name, sizeof(pdu.data.source_name));
 	memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
 
-	if(sendto(global_cfg.fd[data->fd_index].fd, &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+	if(sendto(global_cfg.fd[data->fd_index].fd, (uint8_t*) &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
 		fprintf(stderr, "Failed to output sACN frame for instance %s: %s\n", inst->name, strerror(errno));
 	}
 
@@ -384,7 +300,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	}
 
 	if(!data->xmit_prio){
-		fprintf(stderr, "sACN instance %s not enabled for output (%zu channel events)\n", inst->name, num);
+		fprintf(stderr, "sACN instance %s not enabled for output (%" PRIsize_t " channel events)\n", inst->name, num);
 		return 0;
 	}
 
@@ -469,7 +385,7 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 			}
 
 			if(!chan){
-				fprintf(stderr, "Active channel %zu on %s not known to core", u, inst->name);
+				fprintf(stderr, "Active channel %" PRIsize_t " on %s not known to core", u, inst->name);
 				return 1;
 			}
 
@@ -536,8 +452,8 @@ static void sacn_discovery(size_t fd){
 		pdu.data.page = page;
 		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
-		if(sendto(global_cfg.fd[fd].fd, &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
-			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %zu: %s\n", fd, strerror(errno));
+		if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
+			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %" PRIsize_t ": %s\n", fd, strerror(errno));
 		}
 	}
 }
@@ -603,7 +519,11 @@ static int sacn_handle(size_t num, managed_fd* fds){
 			}
 		} while(bytes_read > 0);
 
+		#ifdef _WIN32
+		if(bytes_read < 0 && WSAGetLastError() != WSAEWOULDBLOCK){
+		#else
 		if(bytes_read < 0 && errno != EAGAIN){
+		#endif
 			fprintf(stderr, "sACN failed to receive data: %s\n", strerror(errno));
 		}
 
@@ -668,7 +588,7 @@ static int sacn_start(){
 
 		if(!data->unicast_input){
 			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
-			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mcast_req, sizeof(mcast_req))){
+			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
 				fprintf(stderr, "Failed to join Multicast group for sACN universe %u on instance %s: %s\n", data->uni, inst[u]->name, strerror(errno));
 			}
 		}
@@ -695,7 +615,7 @@ static int sacn_start(){
 		}
 	}
 
-	fprintf(stderr, "sACN backend registering %zu descriptors to core\n", global_cfg.fds);
+	fprintf(stderr, "sACN backend registering %" PRIsize_t " descriptors to core\n", global_cfg.fds);
 	for(u = 0; u < global_cfg.fds; u++){
 		//allocate memory for storing last frame transmission timestamp
 		global_cfg.fd[u].last_frame = calloc(global_cfg.fd[u].universes, sizeof(uint64_t));

@@ -1,4 +1,9 @@
 #include <string.h>
+#ifndef _WIN32
+#define MM_API __attribute__((visibility ("default")))
+#else
+#define MM_API __attribute__((dllexport))
+#endif
 #include "midimonster.h"
 #include "backend.h"
 
@@ -26,7 +31,7 @@ int backends_handle(size_t nfds, managed_fd* fds){
 			}
 		}
 
-		DBGPF("Notifying backend %s of %zu waiting FDs\n", backends[u].name, n);
+		DBGPF("Notifying backend %s of %lu waiting FDs\n", backends[u].name, n);
 		rv |= backends[u].process(n, fds);
 		if(rv){
 			fprintf(stderr, "Backend %s failed to handle input\n", backends[u].name);
@@ -59,28 +64,28 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 			}
 		}
 
-		DBGPF("Calling handler for instance %s with %zu events\n", instances[u]->name, n);
+		DBGPF("Calling handler for instance %s with %lu events\n", instances[u]->name, n);
 		rv |= instances[u]->backend->handle(instances[u], n, c, v);
 	}
 
 	return 0;
 }
 
-channel* mm_channel(instance* i, uint64_t ident, uint8_t create){
+MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
-		if(channels[u]->instance == i && channels[u]->ident == ident){
-			DBGPF("Requested channel %zu on instance %s already exists, reusing\n", ident, i->name);
+		if(channels[u]->instance == inst && channels[u]->ident == ident){
+			DBGPF("Requested channel %lu on instance %s already exists, reusing\n", ident, inst->name);
 			return channels[u];
 		}
 	}
 
 	if(!create){
-		DBGPF("Requested unknown channel %zu on instance %s\n", ident, i->name);
+		DBGPF("Requested unknown channel %lu on instance %s\n", ident, inst->name);
 		return NULL;
 	}
 
-	DBGPF("Creating previously unknown channel %zu on instance %s\n", ident, i->name);
+	DBGPF("Creating previously unknown channel %lu on instance %s\n", ident, inst->name);
 	channel** new_chan = realloc(channels, (nchannels + 1) * sizeof(channel*));
 	if(!new_chan){
 		fprintf(stderr, "Failed to allocate memory\n");
@@ -95,12 +100,12 @@ channel* mm_channel(instance* i, uint64_t ident, uint8_t create){
 		return NULL;
 	}
 
-	channels[nchannels]->instance = i;
+	channels[nchannels]->instance = inst;
 	channels[nchannels]->ident = ident;
 	return channels[nchannels++];
 }
 
-instance* mm_instance(){
+MM_API instance* mm_instance(){
 	instance** new_inst = realloc(instances, (ninstances + 1) * sizeof(instance*));
 	if(!new_inst){
 		//TODO free
@@ -118,7 +123,7 @@ instance* mm_instance(){
 	return instances[ninstances++];
 }
 
-instance* mm_instance_find(char* name, uint64_t ident){
+MM_API instance* mm_instance_find(char* name, uint64_t ident){
 	size_t u;
 	backend* b = backend_match(name);
 	if(!b){
@@ -134,7 +139,7 @@ instance* mm_instance_find(char* name, uint64_t ident){
 	return NULL;
 }
 
-int mm_backend_instances(char* name, size_t* ninst, instance*** inst){
+MM_API int mm_backend_instances(char* name, size_t* ninst, instance*** inst){
 	backend* b = backend_match(name);
 	size_t n = 0, u;
 	//count number of affected instances
@@ -177,7 +182,7 @@ void instances_free(){
 void channels_free(){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
-		DBGPF("Destroying channel %zu on instance %s\n", channels[u]->ident, channels[u]->instance->name);
+		DBGPF("Destroying channel %lu on instance %s\n", channels[u]->ident, channels[u]->instance->name);
 		if(channels[u]->impl){
 			channels[u]->instance->backend->channel_free(channels[u]);
 		}
@@ -227,12 +232,12 @@ struct timeval backend_timeout(){
 
 	struct timeval tv = {
 		secs,
-		msecs
+		msecs * 1000
 	};
 	return tv;
 }
 
-int mm_backend_register(backend b){
+MM_API int mm_backend_register(backend b){
 	if(!backend_match(b.name)){
 		backends = realloc(backends, (nbackends + 1) * sizeof(backend));
 		if(!backends){
@@ -251,8 +256,16 @@ int mm_backend_register(backend b){
 
 int backends_start(){
 	int rv = 0, current;
-	size_t u;
+	size_t u, p;
 	for(u = 0; u < nbackends; u++){
+		//only start backends that have instances
+		for(p = 0; p < ninstances && instances[p]->backend != backends + u; p++){
+		}
+		if(p == ninstances){
+			fprintf(stderr, "Skipping start of backend %s\n", backends[u].name);
+			continue;
+		}
+
 		current = backends[u].start();
 		if(current){
 			fprintf(stderr, "Failed to start backend %s\n", backends[u].name);

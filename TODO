@@ -1,5 +1,15 @@
+winmidi
+rename
+release
+
 MIDI NRPN
+keepalive channels per backend?
+mm_backend_start might get some arguments so they don't have to fetch them all the time
+mm_channel_resolver might get additional info about the mapping direction
 Note source in channel value struct
 Optimize core channel search (store backend offset)
-Function generator
-Printing backend
+
+mm_managed_fd.impl is not freed currently
+
+rtpmidi mode=peer
+	mode=initiator

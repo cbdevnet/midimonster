@@ -1,0 +1,201 @@
+language: c
+# Use the latest Travis images since they are more up to date than the stable release.
+group: edge
+
+before_script:
+ - export -f travis_fold
+
+script:
+ - "bash -ex .travis-ci.sh"
+
+addons:
+  apt:
+    packages: &base_build
+     # This is the absolute minimum for configure to pass
+     # Non C++ based tasks use it so they can run make builtfiles
+     - ccache
+    packages: &core_build
+     # This is all the bits we need to enable all options
+     - *base_build
+     - libasound2-dev
+     - libevdev-dev
+     - libola-dev
+     - libjack-jackd2-dev
+     - liblua5.3-dev
+     - libssl-dev
+    packages: &core_build_gpp_latest
+     - *core_build
+     - gcc-8
+     - g++-8
+    packages: &core_build_clang_latest
+     - *core_build
+     - clang-6.0
+    packages: &core_build_windows
+     - *core_build
+     - mingw-w64
+
+
+matrix:
+  fast_finish: true
+  include:
+    - os: osx
+      osx_image: xcode10.2
+      compiler: clang
+      env:
+      - TASK='compile'
+    - os: osx
+      osx_image: xcode10.2
+      compiler: gcc
+      env:
+      - TASK='compile'
+    - os: osx
+      osx_image: xcode10.2
+      compiler: clang
+      env:
+      - TASK='sanitize'
+    - os: linux
+      dist: xenial
+      compiler: clang
+      env: TASK='compile'
+      addons:
+        apt:
+          packages:
+           - *core_build_clang_latest
+          sources:
+           - ubuntu-toolchain-r-test
+           - llvm-toolchain-xenial-6.0
+    - os: linux
+      dist: xenial
+      compiler: gcc
+      env: TASK='compile'
+      addons:
+        apt:
+          packages:
+           - *core_build_gpp_latest
+          sources:
+           - ubuntu-toolchain-r-test
+    - os: linux
+      dist: xenial
+      compiler: mingw32-gcc
+      env: 
+        - TASK='windows'
+        - CC='x86_64-w64-mingw32-gcc'
+      addons:
+        apt:
+          packages:
+           - *core_build_windows
+          sources:
+           - ubuntu-toolchain-r-test
+    - os: linux
+      dist: xenial
+      compiler: clang
+      env: TASK='sanitize'
+      addons:
+        apt:
+          packages:
+           - *core_build_clang_latest
+          sources:
+           - ubuntu-toolchain-r-test
+           - llvm-toolchain-xenial-6.0
+    - os: linux
+      dist: xenial
+      compiler: gcc
+      env: TASK='coverity'
+      addons:
+        apt:
+          packages:
+           # Coverity doesn't work with g++-5 or g++-6 yet
+           - *core_build
+           - gcc-4.9
+          sources:
+           - ubuntu-toolchain-r-test
+    - os: linux
+      dist: xenial
+      env: TASK='spellintian'
+      addons:
+        apt:
+          packages:
+           - *core_build
+           - moreutils
+    - os: linux
+      dist: xenial
+      env: TASK='spellintian-duplicates'
+      addons:
+        apt:
+          packages:
+           - *core_build
+           - moreutils
+    - os: linux
+      dist: xenial
+      env: TASK='codespell'
+      addons:
+        apt:
+          packages:
+           - *core_build
+           - moreutils
+  allow_failures:
+    - os: linux
+      dist: xenial
+      compiler: gcc
+      env: TASK='coverity'
+    - os: linux
+      dist: xenial
+      env: TASK='spellintian-duplicates'
+    - os: linux
+      dist: xenial
+      env: TASK='codespell'
+
+env:
+  global:
+   # No colours in terminal (to reduce log file size)
+   - TERM=dumb
+   # Parallel make build
+   - MAKEFLAGS="-j 2"
+   # -- BEGIN Coverity Scan ENV
+   - COVERITY_SCAN_BUILD_COMMAND_PREPEND="cov-configure --comptype gcc --compiler gcc-4.9 --template"
+   # The build command with all of the arguments that you would apply to a manual `cov-build`
+   # Usually this is the same as STANDARD_BUILD_COMMAND, excluding the automated test arguments
+   - COVERITY_SCAN_BUILD_COMMAND="make"
+   # Name of the project
+   - COVERITY_SCAN_PROJECT_NAME="$TRAVIS_REPO_SLUG"
+   # Email address for notifications related to this build
+   # - COVERITY_SCAN_NOTIFICATION_EMAIL=""
+   # Regular expression selects on which branches to run analysis
+   # Be aware of quotas. Do not run on every branch/commit
+   - COVERITY_SCAN_BRANCH_PATTERN=".*"
+   # COVERITY_SCAN_TOKEN via "travis encrypt" using the repo's public key
+   # - secure: ""
+   # -- END Coverity Scan ENV
+
+cache:
+  apt: true
+  directories:
+    - $HOME/.ccache # ccache cache
+
+before_cache:
+  - ccache -s # see how many hits ccache got
+
+install:
+  - if [ "$TASK" = "codespell" ]; then pip install --user git+https://github.com/codespell-project/codespell.git; fi
+
+before_install:
+ - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
+ - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install ccache ola lua openssl jack; fi
+# OpenSSL is not a proper install due to some Apple bull, so provide additional locations via the environment...
+# Additionally, newer versions of this "recipe" seem to use the name 'openssl@1.1' instead of plain 'openssl' and there seems to be
+# no way to programmatically get the link and include paths. Genius! Hardcoding the new version for the time being...
+ - export CFLAGS="$CFLAGS -I/usr/local/opt/openssl@1.1/include"
+ - export LDFLAGS="$LDFLAGS -L/usr/local/opt/openssl@1.1/lib" 
+ - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then PATH=/usr/local/opt/ccache/libexec:$PATH; fi # Use ccache on Mac too
+#Coverity doesn't work with g++ 5 or 6, so only upgrade to g++ 4.9 for that
+ - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) -a "$CC" = "gcc" ]; then export CC="ccache gcc-8"; export CXX="ccache g++-8"; fi
+#Use the latest clang if we're compiling with clang
+ - if [ "$TRAVIS_OS_NAME" == "linux" -a "$CC" = "clang" ]; then export CC="clang-6.0"; export CXX="clang-6.0"; fi
+#Report the compiler versions
+ - $CC --version
+#OS X uses something other than $CXX variable
+ - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) ]; then $CXX --version; fi
+ - if [ "$TASK" == "spellintian" -o "$TASK" == "spellintian-duplicates" ]; then wget "http://archive.ubuntu.com/ubuntu/pool/main/l/lintian/lintian_2.5.104_all.deb"; sudo dpkg -i lintian_*.deb; sudo apt-get install -f -y; fi # Install a later lintian
+
+after_script:
+  - if [ "$TASK" = "coverity" ]; then tail -n 10000 ${TRAVIS_BUILD_DIR}/cov-int/build-log.txt; cat ${TRAVIS_BUILD_DIR}/cov-int/scm_log.txt; fi

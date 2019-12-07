@@ -182,7 +182,7 @@ for example
 ```
 make jack.so
 ```
-#### Buiding with Installer
+#### Using the installer
 
 For easy installation on Linux, the [installer script](installer.sh) can be used:
 
@@ -207,6 +207,9 @@ make install
 
 Depending on your configuration of `DESTDIR`, the `make install` step may require root privileges to
 install the binaries to the appropriate destinations.
+
+To create Debian packages, use the debianization and `git-buildpackage` configuration on the `debian/master`
+branch. Simply running `gbp buildpackage` should build a package for the last tagged release.
 
 #### Building for Windows
 

@@ -41,10 +41,7 @@ INSTALL-PREP () {
     Iversion=(git describe --abbrev=0)                            # Get last tag(stable version)
     echo "Starting Git checkout to "$Iversion""
     git init $tmp_path
-    (
-        cd $tmp_path
-        git checkout $Iversion $tmp_path
-    )
+    (cd $tmp_path; git checkout $Iversion)
     echo ""
 
     read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX

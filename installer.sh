@@ -7,7 +7,7 @@ user=$(whoami)                  # for bypassing user check replace "$(whoami)" w
 script_path="`cd $0; pwd`"      # Script dir
 tmp_path=$(mktemp -d)           # Repo download path
 
-Iversion="v0.2"                 # (fallback version if )
+Iversion="TEST!"                 # (fallback version if )
 makeargs=all                    # Build args
 
 VAR_DESTDIR=""                  # Unused
@@ -38,10 +38,35 @@ echo ""
 INSTALL-PREP () {
     echo "Starting Git!"
     git clone https://github.com/cbdevnet/midimonster.git "$tmp_path" # Gets Midimonster
-    Iversion=(git describe --abbrev=0)                            # Get last tag(stable version)
-    echo "Starting Git checkout to "$Iversion""
+    
+(
+    echo ""
+    echo ""
+    cd $tmp_path
+    echo "IVer.: $Iversion"
+
+    echo "Start GIT INIT"
     git init $tmp_path
-    (cd $tmp_path; git checkout $Iversion)
+    
+    echo "IVer.: $Iversion VOR GIT DESCRIBE!"
+    echo ""
+
+
+    echo "Starting git describe.."
+    Iversion=$(git describe --abbrev=0)                            # Get last tag(stable version)
+    echo "IVer.: $Iversion NACH GIT DESCRIBE!"
+    
+    echo ""
+
+    
+    echo "Starting Git checkout to "$Iversion""
+    git checkout $Iversion
+ )   
+    echo ""
+    echo "Done. (Iver.: $Iversion)"
+    
+    
+    
     echo ""
 
     read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX

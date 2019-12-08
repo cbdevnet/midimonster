@@ -14,31 +14,27 @@ static int rtpmidi_shutdown();
 #define RTPMIDI_DEFAULT_PORTBASE "9001"
 #define RTPMIDI_RECV_BUF 4096
 #define RTPMIDI_MDNS_PORT "5353"
+#define RTPMIDI_HEADER_MAGIC htobe16(0x80E1)
 
-typedef enum /*_rtpmidi_peer_mode*/ {
-	peer_learned,
-	peer_invited,
-	peer_invited_by,
-	peer_sync,
-	peer_connect
-} rtpmidi_peer_mode;
+typedef enum /*_rtpmidi_instance_mode*/ {
+	direct,
+	apple
+} rtpmidi_instance_mode;
 
 typedef struct /*_rtpmidi_peer*/ {
-	rtpmidi_peer_mode mode;
 	struct sockaddr_storage dest;
 	socklen_t dest_len;
 	uint32_t ssrc;
 } rtpmidi_peer;
 
-typedef struct /*_rtpmidi_fd*/ {
-	int data;
-	int control;
-} rtpmidi_fd;
-
 typedef struct /*_rtmidi_instance_data*/ {
+	rtpmidi_instance_mode mode;
+
 	int fd;
-	size_t npeers;
-	rtpmidi_peer* peers;
+	int control_fd;
+
+	size_t peers;
+	rtpmidi_peer* peer;
 	uint32_t ssrc;
 
 	//apple-midi config
@@ -46,7 +42,7 @@ typedef struct /*_rtmidi_instance_data*/ {
 	char* invite_peers;
 	char* invite_accept;
 
-	//generic mode config
+	//direct mode config
 	uint8_t learn_peers;
 } rtpmidi_instance_data;
 

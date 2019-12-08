@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+#include "libmmbackend.h"
 #include "rtpmidi.h"
 
 #define BACKEND_NAME "rtpmidi"
@@ -65,7 +66,9 @@ static int rtpmidi_configure(char* option, char* value){
 			return 1;
 		}
 
-		if(mmbackend_parse_hostspec(value, &host, &port)){
+		mmbackend_parse_hostspec(value, &host, &port);
+
+		if(!host){
 			fprintf(stderr, "Not a valid mDNS bind address: %s\n", value);
 			return 1;
 		}
@@ -164,13 +167,5 @@ static int rtpmidi_shutdown(){
 		close(cfg.mdns_fd);
 	}
 
-	for(u = 0; u < cfg.nfds; u++){
-		if(cfg.fds[u].data >= 0){
-			close(cfg.fds[u].data);
-		}
-		if(cfg.fds[u].control >= 0){
-			close(cfg.fds[u].control);
-		}
-	}
 	return 0;
 }

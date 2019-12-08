@@ -5,7 +5,7 @@ int init();
 static int rtpmidi_configure(char* option, char* value);
 static int rtpmidi_configure_instance(instance* instance, char* option, char* value);
 static instance* rtpmidi_instance();
-static channel* rtpmidi_channel(instance* instance, char* spec);
+static channel* rtpmidi_channel(instance* instance, char* spec, uint8_t flags);
 static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int rtpmidi_handle(size_t num, managed_fd* fds);
 static int rtpmidi_start();
@@ -13,11 +13,7 @@ static int rtpmidi_shutdown();
 
 #define RTPMIDI_DEFAULT_PORTBASE "9001"
 #define RTPMIDI_RECV_BUF 4096
-
-#define RTPMIDI_COMMAND_LEN
-#define RTPMIDI_COMMAND_DATA_OFFSET
-#define RTPMIDI_HAS_JOURNAL
-#define RTPMIDI_IS_PHANTOM
+#define RTPMIDI_MDNS_PORT "5353"
 
 typedef enum /*_rtpmidi_peer_mode*/ {
 	peer_learned,
@@ -40,7 +36,7 @@ typedef struct /*_rtpmidi_fd*/ {
 } rtpmidi_fd;
 
 typedef struct /*_rtmidi_instance_data*/ {
-	size_t fd_index;
+	int fd;
 	size_t npeers;
 	rtpmidi_peer* peers;
 	uint32_t ssrc;

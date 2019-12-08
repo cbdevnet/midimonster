@@ -16,10 +16,30 @@ static int rtpmidi_shutdown();
 #define RTPMIDI_MDNS_PORT "5353"
 #define RTPMIDI_HEADER_MAGIC htobe16(0x80E1)
 
+enum /*_rtpmidi_channel_type*/ {
+	none = 0,
+	note = 0x90,
+	cc = 0xB0,
+	pressure = 0xA0,
+	aftertouch = 0xD0,
+	pitchbend = 0xE0
+};
+
 typedef enum /*_rtpmidi_instance_mode*/ {
+	unconfigured = 0,
 	direct,
 	apple
 } rtpmidi_instance_mode;
+
+typedef union {
+	struct {
+		uint8_t pad[5];
+		uint8_t type;
+		uint8_t channel;
+		uint8_t control;
+	} fields;
+	uint64_t label;
+} rtpmidi_channel_ident;
 
 typedef struct /*_rtpmidi_peer*/ {
 	struct sockaddr_storage dest;

@@ -111,16 +111,13 @@ static int sacn_configure(char* option, char* value){
 	}
 	else if(!strcmp(option, "bind")){
 		mmbackend_parse_hostspec(value, &host, &port);
-		if(!port){
-			port = SACN_PORT;
-		}
 
 		if(!host){
 			fprintf(stderr, "No valid sACN bind address provided\n");
 			return 1;
 		}
 
-		if(sacn_listener(host, port, flags)){
+		if(sacn_listener(host, port ? port : SACN_PORT, flags)){
 			fprintf(stderr, "Failed to bind sACN descriptor: %s\n", value);
 			return 1;
 		}
@@ -155,16 +152,13 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 	}
 	else if(!strcmp(option, "destination")){
 		mmbackend_parse_hostspec(value, &host, &port);
-		if(!port){
-			port = SACN_PORT;
-		}
 
 		if(!host){
 			fprintf(stderr, "No valid sACN destination for instance %s\n", inst->name);
 			return 1;
 		}
 
-		return mmbackend_parse_sockaddr(host, port, &data->dest_addr, &data->dest_len);
+		return mmbackend_parse_sockaddr(host, port ? port : SACN_PORT, &data->dest_addr, &data->dest_len);
 	}
 	else if(!strcmp(option, "from")){
 		next = value;

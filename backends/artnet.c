@@ -77,16 +77,12 @@ static int artnet_configure(char* option, char* value){
 	else if(!strcmp(option, "bind")){
 		mmbackend_parse_hostspec(value, &host, &port);
 
-		if(!port){
-			port = ARTNET_PORT;
-		}
-
 		if(!host){
 			fprintf(stderr, "Not valid ArtNet bind address given\n");
 			return 1;
 		}
 
-		if(artnet_listener(host, port)){
+		if(artnet_listener(host, (port ? port : ARTNET_PORT))){
 			fprintf(stderr, "Failed to bind ArtNet descriptor: %s\n", value);
 			return 1;
 		}
@@ -140,16 +136,12 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 	else if(!strcmp(option, "dest") || !strcmp(option, "destination")){
 		mmbackend_parse_hostspec(value, &host, &port);
 
-		if(!port){
-			port = ARTNET_PORT;
-		}
-
 		if(!host){
 			fprintf(stderr, "Not a valid ArtNet destination for instance %s\n", inst->name);
 			return 1;
 		}
 
-		return mmbackend_parse_sockaddr(host, port, &data->dest_addr, &data->dest_len);
+		return mmbackend_parse_sockaddr(host, port ? port : ARTNET_PORT, &data->dest_addr, &data->dest_len);
 	}
 
 	fprintf(stderr, "Unknown ArtNet option %s for instance %s\n", option, inst->name);

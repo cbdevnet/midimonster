@@ -1,6 +1,3 @@
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netdb.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -96,8 +93,40 @@ static int rtpmidi_configure(char* option, char* value){
 	return 1;
 }
 
+static int rtpmidi_bind_instance(rtpmidi_instance_data* data, char* host, char* port){
+	struct sockaddr_storage sock_addr = {
+		0
+	};
+	socklen_t sock_len = sizeof(sock_addr);
+	char control_port[32];
+
+	//bind to random port if none supplied
+	data->fd = mmbackend_socket(host, port ? port : "0", SOCK_DGRAM, 1, 0);
+	if(data->fd < 0){
+		return 1;
+	}
+
+	//bind control port
+	if(data->mode == apple){
+		if(getsockname(data->fd, (struct sockaddr*) &sock_addr, &sock_len)){
+			fprintf(stderr, "Failed to fetch data port information: %s\n", strerror(errno));
+			return 1;
+		}
+
+		snprintf(control_port, sizeof(control_port), "%d", be16toh(((struct sockaddr_in*)&sock_addr)->sin_port) - 1);
+		data->control_fd = mmbackend_socket(host, control_port, SOCK_DGRAM, 1, 0);
+		if(data->control_fd < 0){
+			fprintf(stderr, "Failed to bind control port %s\n", control_port);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static int rtpmidi_configure_instance(instance* inst, char* option, char* value){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	char* host = NULL, *port = NULL;
 
 	if(!strcmp(option, "mode")){
 		if(!strcmp(value, "direct")){
@@ -119,7 +148,19 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
-		//TODO set the bind host
+		if(data->mode == unconfigured){
+			fprintf(stderr, "Please specify mode for instance %s before setting bind host\n", inst->name);
+			return 1;
+		}
+
+		mmbackend_parse_hostspec(value, &host, &port);
+
+		if(!host){
+			fprintf(stderr, "Could not parse bind host specification %s for instance %s\n", value, inst->name);
+			return 1;
+		}
+
+		return rtpmidi_bind_instance(data, host, port);
 	}
 	else if(!strcmp(option, "learn")){
 		if(data->mode != direct){
@@ -198,6 +239,8 @@ static instance* rtpmidi_instance(){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return NULL;
 	}
+	data->fd = -1;
+	data->control_fd = -1;
 
 	inst->impl = data;
 	return inst;
@@ -281,15 +324,29 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 }
 
 static int rtpmidi_start(){
-	size_t n, u;
+	size_t n, u, fds = 0;
 	int rv = 1;
 	instance** inst = NULL;
 	rtpmidi_instance_data* data = NULL;
 
-	//TODO if mdns name defined and no socket, bind default values
+	//if mdns name defined and no socket, bind default values
+	if(cfg.mdns_name && cfg.mdns_fd < 0){
+		cfg.mdns_fd = mmbackend_socket("::", RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1);
+		if(cfg.mdns_fd < 0){
+			return 1;
+		}
+	}
 
-	if(cfg.mdns_fd < 0){
-		fprintf(stderr, "No mDNS discovery interface bound, AppleMIDI session support disabled\n");
+	//register mdns fd to core
+	if(cfg.mdns_fd >= 0){
+		if(mm_manage_fd(cfg.mdns_fd, BACKEND_NAME, 1, NULL)){
+			fprintf(stderr, "rtpmidi failed to register mDNS socket with core\n");
+			goto bail;
+		}
+		fds++;
+	}
+	else{
+		fprintf(stderr, "No mDNS discovery interface bound, AppleMIDI session discovery disabled\n");
 	}
 
 	//fetch all defined instances
@@ -310,8 +367,22 @@ static int rtpmidi_start(){
 		if(!data->ssrc){
 			data->ssrc = rand() << 16 | rand();
 		}
+
+		//if not bound, bind to default
+		if(data->fd < 0 && rtpmidi_bind_instance(data, "::", NULL)){
+			fprintf(stderr, "Failed to bind default sockets for rtpmidi instance %s\n", inst[u]->name);
+			goto bail;
+		}
+
+		//register fds to core
+		if(mm_manage_fd(data->fd, BACKEND_NAME, 1, NULL) || (data->control_fd >= 0 && mm_manage_fd(data->control_fd, BACKEND_NAME, 1, NULL))){
+			fprintf(stderr, "rtpmidi failed to register instance socket with core\n");
+			goto bail;
+		}
+		fds += (data->control_fd >= 0) ? 2 : 1;
 	}
 
+	fprintf(stderr, "rtpmidi backend registered %" PRIsize_t " descriptors to core\n", fds);
 	rv = 0;
 bail:
 	free(inst);

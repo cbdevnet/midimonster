@@ -23,7 +23,7 @@ stream, which may lead to inconsistencies during playback.
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
 | `detect`      | `on`                  | `off`                 | Output channel specifications for any events coming in on configured instances to help with configuration |
-| `mdns-bind`	| `10.1.2.1 5353`	| `0.0.0.0 5353`	| Bind host for the mDNS discovery server |
+| `mdns-bind`	| `10.1.2.1 5353`	| `:: 5353`		| Bind host for the mDNS discovery server |
 | `mdns-name`	| `computer1`		| none			| mDNS hostname to announce, also used as AppleMIDI peer name |
 
 #### Instance configuration
@@ -39,7 +39,7 @@ Common instance configuration parameters
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `bind`	| `10.1.2.1 9001`	| `0.0.0.0 <random>`	| Local network address to bind to | 
+| `bind`	| `10.1.2.1 9001`	| `:: <random>`		| Local network address to bind to | 
 | `learn`	| `true`		| `false`		| Accept new peers for data exchange at runtime |
 | `peer`	| `10.1.2.3 9001`	| none			| MIDI session peer, may be specified multiple times |
 
@@ -47,12 +47,12 @@ Common instance configuration parameters
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `bind`	| `10.1.2.1 9001`	| `0.0.0.0 <random>`	| Local network address to bind to (note that AppleMIDI requires two consecutive port numbers to be allocated) |
+| `bind`	| `10.1.2.1 9001`	| `:: <random>`		| Local network address to bind to (note that AppleMIDI requires two consecutive port numbers to be allocated) |
 | `session`	| `Just Jamming`	| `MIDIMonster`		| Session name to announce via mDNS |
 | `invite`	| `pad,piano`		| none			| Devices to send invitations to when discovered (the special value `*` invites all discovered peers). Setting this option makes the instance a session initiator |
 | `join`	| `Just Jamming`	| none			| Sessions for which to accept invitations (the special value `*` accepts all invitations). Setting this option makes the instance a session participant |
 
-Note that AppleMIDI session establishment requires mDNS functionality, thus the `mdns-name` global parameter
+Note that AppleMIDI session discovery requires mDNS functionality, thus the `mdns-name` global parameter
 (and, depending on your setup, the `mdns-bind` parameter) need to be configured properly.
 
 #### Channel specification

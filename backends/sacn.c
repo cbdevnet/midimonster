@@ -171,6 +171,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 	}
 	else if(!strcmp(option, "unicast")){
 		data->unicast_input = strtoul(value, NULL, 10);
+		return 0;
 	}
 
 	fprintf(stderr, "Unknown configuration option %s for sACN backend\n", option);

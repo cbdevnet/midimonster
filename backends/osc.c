@@ -522,6 +522,7 @@ static int osc_configure_instance(instance* inst, char* option, char* value){
 			return 1;
 		}
 
+		//this requests a socket with SO_BROADCAST set, whether this is useful functionality for OSC is up for debate
 		data->fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
 		if(data->fd < 0){
 			fprintf(stderr, "Failed to bind for instance %s\n", inst->name);

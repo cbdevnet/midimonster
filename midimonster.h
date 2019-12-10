@@ -5,6 +5,11 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+/* Core version unless set by the build process */
+#ifndef MIDIMONSTER_VERSION
+	#define MIDIMONSTER_VERSION "v0.3-dist"
+#endif
+
 /* API call attributes and visibilities */
 #ifndef MM_API
 	#ifdef _WIN32

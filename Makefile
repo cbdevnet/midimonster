@@ -5,13 +5,19 @@ PREFIX ?= /usr
 PLUGIN_INSTALL = $(PREFIX)/lib/midimonster
 EXAMPLES ?= $(PREFIX)/share/midimonster
 SYSTEM := $(shell uname -s)
+GITVERSION = $(shell git describe)
 
+# Default compilation CFLAGS
 CFLAGS ?= -g -Wall -Wpedantic
+#CFLAGS += -DDEBUG
 # Hide all non-API symbols for export
 CFLAGS += -fvisibility=hidden
 
-#CFLAGS += -DDEBUG
 midimonster: LDLIBS = -ldl
+# Replace version string with current git-describe if possible
+ifneq "$(GITVERSION)" ""
+midimonster: CFLAGS += "-DMIDIMONSTER_VERSION=\"$(GITVERSION)\""
+endif
 
 # Work around strange linker passing convention differences in Linux and OSX
 ifeq ($(SYSTEM),Linux)

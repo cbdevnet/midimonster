@@ -92,7 +92,7 @@ static int loopback_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int loopback_start(){
+static int loopback_start(size_t n, instance** inst){
 	return 0;
 }
 

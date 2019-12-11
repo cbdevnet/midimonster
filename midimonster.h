@@ -134,7 +134,7 @@ typedef void (*mmbackend_free_channel)(struct _backend_channel* c);
 typedef int (*mmbackend_configure)(char* option, char* value);
 typedef int (*mmbackend_configure_instance)(struct _backend_instance* instance, char* option, char* value);
 typedef int (*mmbackend_process_fd)(size_t nfds, struct _managed_fd* fds);
-typedef int (*mmbackend_start)();
+typedef int (*mmbackend_start)(size_t ninstances, struct _backend_instance** inst);
 typedef uint32_t (*mmbackend_interval)();
 typedef int (*mmbackend_shutdown)();
 

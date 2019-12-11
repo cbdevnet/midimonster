@@ -220,9 +220,8 @@ static void ola_register_callback(const std::string &error) {
 	}
 }
 
-static int ola_start(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int ola_start(size_t n, instance** inst){
+	size_t u, p;
 	ola_instance_data* data = NULL;
 
 	ola_select = new ola::io::SelectServer();
@@ -255,12 +254,6 @@ static int ola_start(){
 		goto bail;
 	}
 
-	//this should not happen anymore (backends without instances are not started anymore)
-	if(!n){
-		free(inst);
-		return 0;
-	}
-
 	for(u = 0; u < n; u++){
 		data = (ola_instance_data*) inst[u]->impl;
 		inst[u]->ident = data->universe_id;
@@ -277,10 +270,8 @@ static int ola_start(){
 
 	//run the ola select implementation to run all commands
 	ola_select->RunOnce();
-	free(inst);
 	return 0;
 bail:
-	free(inst);
 	delete ola_client;
 	ola_client = NULL;
 	delete ola_select;

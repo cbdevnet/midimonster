@@ -1,5 +1,4 @@
 keepalive channels per backend?
-mm_backend_start might get some arguments so they don't have to fetch them all the time
 Note source in channel value struct
 Optimize core channel search (store backend offset)
 

@@ -338,24 +338,12 @@ static int midi_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int midi_start(){
-	size_t n = 0, p;
+static int midi_start(size_t n, instance** inst){
+	size_t p;
 	int nfds, rv = 1;
 	struct pollfd* pfds = NULL;
-	instance** inst = NULL;
 	midi_instance_data* data = NULL;
 	snd_seq_addr_t addr;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	//if there are no ports, do nothing
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	//connect to the sequencer
 	if(snd_seq_open(&sequencer, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
@@ -424,7 +412,6 @@ static int midi_start(){
 
 bail:
 	free(pfds);
-	free(inst);
 	return rv;
 }
 

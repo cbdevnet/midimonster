@@ -440,10 +440,9 @@ static int winmidi_match_output(char* prefix){
 	return -1;
 }
 
-static int winmidi_start(){
-	size_t n = 0, p;
+static int winmidi_start(size_t n, instance** inst){
+	size_t p;
 	int device, rv = -1;
-	instance** inst = NULL;
 	winmidi_instance_data* data = NULL;
 	struct sockaddr_storage sockadd = {
 		0
@@ -452,18 +451,6 @@ static int winmidi_start(){
 	int sockadd_len = sizeof(sockadd);
 	char* error = NULL;
 	DBGPF("winmidi main thread ID is %ld\n", GetCurrentThreadId());
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	//no instances, we're done
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	//output device list if requested
 	if(backend_config.list_devices){
@@ -552,7 +539,6 @@ static int winmidi_start(){
 
 	rv = 0;
 bail:
-	free(inst);
 	return rv;
 }
 

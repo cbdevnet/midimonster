@@ -7,7 +7,7 @@ static instance* sacn_instance();
 static channel* sacn_channel(instance* instance, char* spec, uint8_t flags);
 static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int sacn_handle(size_t num, managed_fd* fds);
-static int sacn_start();
+static int sacn_start(size_t n, instance** inst);
 static int sacn_shutdown();
 
 #define SACN_PORT "5568"

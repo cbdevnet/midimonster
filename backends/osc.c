@@ -892,21 +892,9 @@ static int osc_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int osc_start(){
-	size_t n, u, fds = 0;
-	instance** inst = NULL;
+static int osc_start(size_t n, instance** inst){
+	size_t u, fds = 0;
 	osc_instance_data* data = NULL;
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	//update instance identifiers
 	for(u = 0; u < n; u++){
@@ -916,7 +904,6 @@ static int osc_start(){
 			inst[u]->ident = data->fd;
 			if(mm_manage_fd(data->fd, BACKEND_NAME, 1, inst[u])){
 				fprintf(stderr, "Failed to register OSC descriptor for instance %s\n", inst[u]->name);
-				free(inst);
 				return 1;
 			}
 			fds++;
@@ -927,8 +914,6 @@ static int osc_start(){
 	}
 
 	fprintf(stderr, "OSC backend registered %" PRIsize_t " descriptors to core\n", fds);
-
-	free(inst);
 	return 0;
 }
 

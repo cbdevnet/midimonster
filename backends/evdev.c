@@ -393,20 +393,9 @@ static int evdev_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int evdev_start(){
-	size_t n, u, fds = 0;
-	instance** inst = NULL;
+static int evdev_start(size_t n, instance** inst){
+	size_t u, fds = 0;
 	evdev_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (evdev_instance_data*) inst[u]->impl;
@@ -415,7 +404,6 @@ static int evdev_start(){
 		if(data->output_enabled){
 			if(libevdev_uinput_create_from_device(data->output_proto, LIBEVDEV_UINPUT_OPEN_MANAGED, &data->output_ev)){
 				fprintf(stderr, "Failed to create evdev output device: %s\n", strerror(errno));
-				free(inst);
 				return 1;
 			}
 			fprintf(stderr, "Created device node %s for instance %s\n", libevdev_uinput_get_devnode(data->output_ev), inst[u]->name);
@@ -426,7 +414,6 @@ static int evdev_start(){
 		if(data->input_fd >= 0){
 			if(mm_manage_fd(data->input_fd, BACKEND_NAME, 1, inst[u])){
 				fprintf(stderr, "Failed to register event input descriptor for instance %s\n", inst[u]->name);
-				free(inst);
 				return 1;
 			}
 			fds++;
@@ -439,7 +426,6 @@ static int evdev_start(){
 	}
 
 	fprintf(stderr, "evdev backend registered %zu descriptors to core\n", fds);
-	free(inst);
 	return 0;
 }
 

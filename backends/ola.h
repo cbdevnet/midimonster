@@ -11,7 +11,7 @@ extern "C" {
 	static channel* ola_channel(instance* instance, char* spec, uint8_t flags);
 	static int ola_set(instance* inst, size_t num, channel** c, channel_value* v);
 	static int ola_handle(size_t num, managed_fd* fds);
-	static int ola_start();
+	static int ola_start(size_t n, instance** inst);
 	static int ola_shutdown();
 }
 

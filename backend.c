@@ -256,20 +256,34 @@ MM_API int mm_backend_register(backend b){
 
 int backends_start(){
 	int rv = 0, current;
-	size_t u, p;
+	size_t n, u, p;
+	instance** inst = NULL;
+
 	for(u = 0; u < nbackends; u++){
 		//only start backends that have instances
 		for(p = 0; p < ninstances && instances[p]->backend != backends + u; p++){
 		}
+
+		//backend has no instances, skip the start call
 		if(p == ninstances){
-			fprintf(stderr, "Skipping start of backend %s\n", backends[u].name);
 			continue;
 		}
+		
+		//fetch list of instances
+		if(mm_backend_instances(backends[u].name, &n, &inst)){
+			fprintf(stderr, "Failed to fetch instance list for initialization of backend %s\n", backends[u].name);
+			return 1;
+		}
 
-		current = backends[u].start();
+		//start the backend
+		current = backends[u].start(n, inst);
 		if(current){
 			fprintf(stderr, "Failed to start backend %s\n", backends[u].name);
 		}
+
+		//clean up
+		free(inst);
+		inst = NULL;
 		rv |= current;
 	}
 	return rv;

@@ -531,10 +531,9 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int sacn_start(){
-	size_t n, u, p;
+static int sacn_start(size_t n, instance** inst){
+	size_t u, p;
 	int rv = 1;
-	instance** inst = NULL;
 	sacn_instance_data* data = NULL;
 	sacn_instance_id id = {
 		.label = 0
@@ -543,17 +542,6 @@ static int sacn_start(){
 		.imr_interface = { INADDR_ANY }
 	};
 	struct sockaddr_in* dest_v4 = NULL;
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	if(!global_cfg.fds){
 		fprintf(stderr, "Failed to start sACN backend: no descriptors bound\n");
@@ -625,7 +613,6 @@ static int sacn_start(){
 
 	rv = 0;
 bail:
-	free(inst);
 	return rv;
 }
 

@@ -71,14 +71,14 @@ run:
 	valgrind --leak-check=full --show-leak-kinds=all ./midimonster
 
 install:
-		install -d "$(DESTDIR)$(PREFIX)/bin"
-		install -m 0755 midimonster "$(DESTDIR)$(PREFIX)/bin"
-		install -d "$(DESTDIR)$(PLUGIN_INSTALL)"
-		install -m 0755 backends/*.so "$(DESTDIR)$(PLUGIN_INSTALL)"
-		install -d "$(DESTDIR)$(EXAMPLES)"
-		install -m 0644 configs/* "$(DESTDIR)$(EXAMPLES)"
+	install -d "$(DESTDIR)$(PREFIX)/bin"
+	install -m 0755 midimonster "$(DESTDIR)$(PREFIX)/bin"
+	install -d "$(DESTDIR)$(PLUGIN_INSTALL)"
+	install -m 0755 backends/*.so "$(DESTDIR)$(PLUGIN_INSTALL)"
+	install -d "$(DESTDIR)$(EXAMPLES)"
+	install -m 0644 configs/* "$(DESTDIR)$(EXAMPLES)"
 ifdef DEFAULT_CFG
-		install -Dm 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
+	install -Dm 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
 endif
 
 sanitize: export CC = clang

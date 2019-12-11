@@ -10,10 +10,9 @@ static instance* rtpmidi_instance();
 static channel* rtpmidi_channel(instance* instance, char* spec, uint8_t flags);
 static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int rtpmidi_handle(size_t num, managed_fd* fds);
-static int rtpmidi_start();
-static int rtpmidi_shutdown();
+static int rtpmidi_start(size_t n, instance** inst);
+static int rtpmidi_shutdown(size_t n, instance** inst);
 
-#define RTPMIDI_DEFAULT_PORTBASE "9001"
 #define RTPMIDI_RECV_BUF 4096
 #define RTPMIDI_MDNS_PORT "5353"
 #define RTPMIDI_HEADER_MAGIC htobe16(0x80E1)

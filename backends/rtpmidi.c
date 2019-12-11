@@ -323,10 +323,9 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 	return 1;
 }
 
-static int rtpmidi_start(){
-	size_t n, u, fds = 0;
+static int rtpmidi_start(size_t n, instance** inst){
+	size_t u, fds = 0;
 	int rv = 1;
-	instance** inst = NULL;
 	rtpmidi_instance_data* data = NULL;
 
 	//if mdns name defined and no socket, bind default values
@@ -347,12 +346,6 @@ static int rtpmidi_start(){
 	}
 	else{
 		fprintf(stderr, "No mDNS discovery interface bound, AppleMIDI session discovery disabled\n");
-	}
-
-	//fetch all defined instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
 	}
 
 	for(u = 0; u < n; u++){
@@ -385,12 +378,39 @@ static int rtpmidi_start(){
 	fprintf(stderr, "rtpmidi backend registered %" PRIsize_t " descriptors to core\n", fds);
 	rv = 0;
 bail:
-	free(inst);
 	return rv;
 }
 
-static int rtpmidi_shutdown(){
-	//TODO cleanup instance data
+static int rtpmidi_shutdown(size_t n, instance** inst){
+	rtpmidi_instance_data* data = NULL;
+	size_t u;
+
+	for(u = 0; u < n; u++){
+		data = (rtpmidi_instance_data*) inst[u]->impl;
+		if(data->fd >= 0){
+			close(data->fd);
+		}
+
+		if(data->control_fd >= 0){
+			close(data->control_fd);
+		}
+
+		free(data->session_name);
+		data->session_name = NULL;
+
+		free(data->invite_peers);
+		data->invite_peers = NULL;
+
+		free(data->invite_accept);
+		data->invite_accept = NULL;
+
+		free(data->peer);
+		data->peer = NULL;
+		data->peers = 0;
+
+		free(inst[u]->impl);
+		inst[u]->impl = NULL;
+	}
 
 	free(cfg.mdns_name);
 	if(cfg.mdns_fd >= 0){

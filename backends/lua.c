@@ -428,16 +428,9 @@ static int lua_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int lua_start(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int lua_start(size_t n, instance** inst){
+	size_t u, p;
 	lua_instance_data* data = NULL;
-
-	//fetch all defined instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	//resolve channels to their handler functions
 	for(u = 0; u < n; u++){
@@ -457,8 +450,6 @@ static int lua_start(){
 		}
 	}
 
-	free(inst);
-
 	#ifdef MMBACKEND_LUA_TIMERFD
 	//register the timer with the core
 	fprintf(stderr, "Lua backend registering 1 descriptor to core\n");
@@ -469,16 +460,9 @@ static int lua_start(){
 	return 0;
 }
 
-static int lua_shutdown(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int lua_shutdown(size_t n, instance** inst){
+	size_t u, p;
 	lua_instance_data* data = NULL;
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (lua_instance_data*) inst[u]->impl;
@@ -495,7 +479,6 @@ static int lua_shutdown(){
 		free(inst[u]->impl);
 	}
 
-	free(inst);
 	//free module-global data
 	free(timer);
 	timer = NULL;

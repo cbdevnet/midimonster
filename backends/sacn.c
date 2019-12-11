@@ -171,6 +171,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 	}
 	else if(!strcmp(option, "unicast")){
 		data->unicast_input = strtoul(value, NULL, 10);
+		return 0;
 	}
 
 	fprintf(stderr, "Unknown configuration option %s for sACN backend\n", option);
@@ -530,10 +531,9 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int sacn_start(){
-	size_t n, u, p;
+static int sacn_start(size_t n, instance** inst){
+	size_t u, p;
 	int rv = 1;
-	instance** inst = NULL;
 	sacn_instance_data* data = NULL;
 	sacn_instance_id id = {
 		.label = 0
@@ -542,17 +542,6 @@ static int sacn_start(){
 		.imr_interface = { INADDR_ANY }
 	};
 	struct sockaddr_in* dest_v4 = NULL;
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	if(!global_cfg.fds){
 		fprintf(stderr, "Failed to start sACN backend: no descriptors bound\n");
@@ -624,23 +613,15 @@ static int sacn_start(){
 
 	rv = 0;
 bail:
-	free(inst);
 	return rv;
 }
 
-static int sacn_shutdown(){
-	size_t n, p;
-	instance** inst = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
+static int sacn_shutdown(size_t n, instance** inst){
+	size_t p;
 
 	for(p = 0; p < n; p++){
 		free(inst[p]->impl);
 	}
-	free(inst);
 
 	for(p = 0; p < global_cfg.fds; p++){
 		close(global_cfg.fd[p].fd);

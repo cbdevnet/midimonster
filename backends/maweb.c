@@ -989,16 +989,9 @@ static int maweb_handle(size_t num, managed_fd* fds){
 	return rv;
 }
 
-static int maweb_start(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int maweb_start(size_t n, instance** inst){
+	size_t u, p;
 	maweb_instance_data* data = NULL;
-
-	//fetch all defined instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		//sort channels
@@ -1017,11 +1010,6 @@ static int maweb_start(){
 		}
 	}
 
-	free(inst);
-	if(!n){
-		return 0;
-	}
-
 	fprintf(stderr, "maweb backend registering %" PRIsize_t " descriptors to core\n", n);
 
 	//initialize timeouts
@@ -1029,16 +1017,9 @@ static int maweb_start(){
 	return 0;
 }
 
-static int maweb_shutdown(){
-	size_t n, u;
-	instance** inst = NULL;
+static int maweb_shutdown(size_t n, instance** inst){
+	size_t u;
 	maweb_instance_data* data = NULL;
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (maweb_instance_data*) inst[u]->impl;
@@ -1064,8 +1045,6 @@ static int maweb_shutdown(){
 		data->channel = NULL;
 		data->channels = 0;
 	}
-
-	free(inst);
 
 	fprintf(stderr, "maweb backend shut down\n");
 	return 0;

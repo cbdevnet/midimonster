@@ -593,10 +593,9 @@ static int mmjack_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int mmjack_start(){
+static int mmjack_start(size_t n, instance** inst){
 	int rv = 1, feedback_fd[2];
-	size_t n, u, p;
-	instance** inst = NULL;
+	size_t u, p;
 	pthread_mutexattr_t mutex_attr;
 	mmjack_instance_data* data = NULL;
 	jack_status_t error;
@@ -615,12 +614,6 @@ static int mmjack_start(){
 	if(pthread_mutexattr_init(&mutex_attr)
 			|| pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ADAPTIVE_NP)){
 		fprintf(stderr, "Failed to initialize mutex attributes\n");
-		goto bail;
-	}
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
 		goto bail;
 	}
 
@@ -689,19 +682,12 @@ static int mmjack_start(){
 	rv = 0;
 bail:
 	pthread_mutexattr_destroy(&mutex_attr);
-	free(inst);
 	return rv;
 }
 
-static int mmjack_shutdown(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int mmjack_shutdown(size_t n, instance** inst){
+	size_t u, p;
 	mmjack_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (mmjack_instance_data*) inst[u]->impl;
@@ -740,8 +726,6 @@ static int mmjack_shutdown(){
 		close(data->fd);
 		data->fd = -1;
 	}
-
-	free(inst);
 
 	fprintf(stderr, "jack backend shut down\n");
 	return 0;

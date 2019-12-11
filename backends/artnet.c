@@ -381,28 +381,15 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int artnet_start(){
-	size_t n, u, p;
+static int artnet_start(size_t n, instance** inst){
+	size_t u, p;
 	int rv = 1;
-	instance** inst = NULL;
 	artnet_instance_data* data = NULL;
 	artnet_instance_id id = {
 		.label = 0
 	};
 
-	//fetch all defined instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	if(!n){
-		free(inst);
-		return 0;
-	}
-
 	if(!artnet_fds){
-		free(inst);
 		fprintf(stderr, "Failed to start ArtNet backend: no descriptors bound\n");
 		return 1;
 	}
@@ -448,22 +435,15 @@ static int artnet_start(){
 
 	rv = 0;
 bail:
-	free(inst);
 	return rv;
 }
 
-static int artnet_shutdown(){
-	size_t n, p;
-	instance** inst = NULL;
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
+static int artnet_shutdown(size_t n, instance** inst){
+	size_t p;
 
 	for(p = 0; p < n; p++){
 		free(inst[p]->impl);
 	}
-	free(inst);
 
 	for(p = 0; p < artnet_fds; p++){
 		close(artnet_fd[p].fd);

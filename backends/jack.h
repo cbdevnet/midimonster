@@ -9,8 +9,8 @@ static instance* mmjack_instance();
 static channel* mmjack_channel(instance* inst, char* spec, uint8_t flags);
 static int mmjack_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int mmjack_handle(size_t num, managed_fd* fds);
-static int mmjack_start();
-static int mmjack_shutdown();
+static int mmjack_start(size_t n, instance** inst);
+static int mmjack_shutdown(size_t n, instance** inst);
 
 #define JACK_DEFAULT_CLIENT_NAME "MIDIMonster"
 #define JACK_DEFAULT_SERVER_NAME "default"

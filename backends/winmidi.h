@@ -7,8 +7,8 @@ static instance* winmidi_instance();
 static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags);
 static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int winmidi_handle(size_t num, managed_fd* fds);
-static int winmidi_start();
-static int winmidi_shutdown();
+static int winmidi_start(size_t n, instance** inst);
+static int winmidi_shutdown(size_t n, instance** inst);
 
 typedef struct /*_winmidi_instance_data*/ {
 	char* read;

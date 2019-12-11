@@ -92,19 +92,13 @@ static int loopback_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int loopback_start(){
+static int loopback_start(size_t n, instance** inst){
 	return 0;
 }
 
-static int loopback_shutdown(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int loopback_shutdown(size_t n, instance** inst){
+	size_t u, p;
 	loopback_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (loopback_instance_data*) inst[u]->impl;
@@ -114,8 +108,6 @@ static int loopback_shutdown(){
 		free(data->name);
 		free(inst[u]->impl);
 	}
-
-	free(inst);
 
 	fprintf(stderr, "Loopback backend shut down\n");
 	return 0;

@@ -522,6 +522,7 @@ static int osc_configure_instance(instance* inst, char* option, char* value){
 			return 1;
 		}
 
+		//this requests a socket with SO_BROADCAST set, whether this is useful functionality for OSC is up for debate
 		data->fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
 		if(data->fd < 0){
 			fprintf(stderr, "Failed to bind for instance %s\n", inst->name);
@@ -891,21 +892,9 @@ static int osc_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int osc_start(){
-	size_t n, u, fds = 0;
-	instance** inst = NULL;
+static int osc_start(size_t n, instance** inst){
+	size_t u, fds = 0;
 	osc_instance_data* data = NULL;
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	//update instance identifiers
 	for(u = 0; u < n; u++){
@@ -915,7 +904,6 @@ static int osc_start(){
 			inst[u]->ident = data->fd;
 			if(mm_manage_fd(data->fd, BACKEND_NAME, 1, inst[u])){
 				fprintf(stderr, "Failed to register OSC descriptor for instance %s\n", inst[u]->name);
-				free(inst);
 				return 1;
 			}
 			fds++;
@@ -926,20 +914,12 @@ static int osc_start(){
 	}
 
 	fprintf(stderr, "OSC backend registered %" PRIsize_t " descriptors to core\n", fds);
-
-	free(inst);
 	return 0;
 }
 
-static int osc_shutdown(){
-	size_t n, u, c;
-	instance** inst = NULL;
+static int osc_shutdown(size_t n, instance** inst){
+	size_t u, c;
 	osc_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (osc_instance_data*) inst[u]->impl;
@@ -967,7 +947,6 @@ static int osc_shutdown(){
 		free(inst[u]->impl);
 	}
 
-	free(inst);
 	fprintf(stderr, "OSC backend shut down\n");
 	return 0;
 }

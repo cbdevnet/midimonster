@@ -19,7 +19,7 @@ static struct /*_rtpmidi_global*/ {
 	.detect = 0
 };
 
-int init(){
+MM_PLUGIN_API int init(){
 	backend rtpmidi = {
 		.name = BACKEND_NAME,
 		.conf = rtpmidi_configure,
@@ -124,9 +124,34 @@ static int rtpmidi_bind_instance(rtpmidi_instance_data* data, char* host, char* 
 	return 0;
 }
 
+static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storage sock_addr, socklen_t sock_len){
+	size_t u;
+
+	for(u = 0; u < data->peers; u++){
+		//check whether the peer is already in the list
+		if(sock_len == data->peer[u].dest_len && !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
+			return 0;
+		}
+	}
+
+	data->peer = realloc(data->peer, (data->peers + 1) * sizeof(rtpmidi_peer));
+	if(!data->peer){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return 1;
+	}
+
+	data->peer[data->peers].dest = sock_addr;
+	data->peer[data->peers].dest_len = sock_len;
+
+	data->peers++;
+	return 0;
+}
+
 static int rtpmidi_configure_instance(instance* inst, char* option, char* value){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
 	char* host = NULL, *port = NULL;
+	struct sockaddr_storage sock_addr;
+	socklen_t sock_len = sizeof(sock_addr);
 
 	if(!strcmp(option, "mode")){
 		if(!strcmp(value, "direct")){
@@ -174,13 +199,18 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 		return 0;
 	}
 	else if(!strcmp(option, "peer")){
-		if(data->mode != direct){
-			fprintf(stderr, "The rtpmidi 'peer' option is only valid for direct mode instances\n");
+		mmbackend_parse_hostspec(value, &host, &port);
+		if(!host || !port){
+			fprintf(stderr, "Invalid peer %s configured on rtpmidi instance %s\n", value, inst->name);
 			return 1;
 		}
 
-		//TODO add peer
-		return 0;
+		if(mmbackend_parse_sockaddr(host, port, &sock_addr, &sock_len)){
+			fprintf(stderr, "Failed to resolve peer %s configured on rtpmidi instance %s\n", value, inst->name);
+			return 1;
+		}
+
+		return rtpmidi_push_peer(data, sock_addr, sock_len);
 	}
 	else if(!strcmp(option, "session")){
 		if(data->mode != apple){
@@ -313,24 +343,34 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 }
 
 static int rtpmidi_handle(size_t num, managed_fd* fds){
-	//TODO handle discovery
+	size_t u;
+	int rv = 0;
+
+	//TODO handle mDNS discovery frames
 
 	if(!num){
 		return 0;
 	}
 
-	//TODO
-	return 1;
+	for(u = 0; u < num; u++){
+		if(!fds[u].impl){
+			//TODO handle mDNS discovery input
+		}
+		else{
+			//TODO handle rtp/control input
+		}
+	}
+
+	return rv;
 }
 
 static int rtpmidi_start(size_t n, instance** inst){
 	size_t u, fds = 0;
-	int rv = 1;
 	rtpmidi_instance_data* data = NULL;
 
 	//if mdns name defined and no socket, bind default values
 	if(cfg.mdns_name && cfg.mdns_fd < 0){
-		cfg.mdns_fd = mmbackend_socket("::", RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1);
+		cfg.mdns_fd = mmbackend_socket(RTPMIDI_DEFAULT_HOST, RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1);
 		if(cfg.mdns_fd < 0){
 			return 1;
 		}
@@ -340,7 +380,7 @@ static int rtpmidi_start(size_t n, instance** inst){
 	if(cfg.mdns_fd >= 0){
 		if(mm_manage_fd(cfg.mdns_fd, BACKEND_NAME, 1, NULL)){
 			fprintf(stderr, "rtpmidi failed to register mDNS socket with core\n");
-			goto bail;
+			return 1;
 		}
 		fds++;
 	}
@@ -353,7 +393,7 @@ static int rtpmidi_start(size_t n, instance** inst){
 		//check whether instances are explicitly configured to a mode
 		if(data->mode == unconfigured){
 			fprintf(stderr, "rtpmidi instance %s is missing a mode configuration\n", inst[u]->name);
-			goto bail;
+			return 1;
 		}
 
 		//generate random ssrc's
@@ -362,23 +402,21 @@ static int rtpmidi_start(size_t n, instance** inst){
 		}
 
 		//if not bound, bind to default
-		if(data->fd < 0 && rtpmidi_bind_instance(data, "::", NULL)){
+		if(data->fd < 0 && rtpmidi_bind_instance(data, RTPMIDI_DEFAULT_HOST, NULL)){
 			fprintf(stderr, "Failed to bind default sockets for rtpmidi instance %s\n", inst[u]->name);
-			goto bail;
+			return 1;
 		}
 
 		//register fds to core
-		if(mm_manage_fd(data->fd, BACKEND_NAME, 1, NULL) || (data->control_fd >= 0 && mm_manage_fd(data->control_fd, BACKEND_NAME, 1, NULL))){
+		if(mm_manage_fd(data->fd, BACKEND_NAME, 1, inst[u]) || (data->control_fd >= 0 && mm_manage_fd(data->control_fd, BACKEND_NAME, 1, inst[u]))){
 			fprintf(stderr, "rtpmidi failed to register instance socket with core\n");
-			goto bail;
+			return 1;
 		}
 		fds += (data->control_fd >= 0) ? 2 : 1;
 	}
 
 	fprintf(stderr, "rtpmidi backend registered %" PRIsize_t " descriptors to core\n", fds);
-	rv = 0;
-bail:
-	return rv;
+	return 0;
 }
 
 static int rtpmidi_shutdown(size_t n, instance** inst){

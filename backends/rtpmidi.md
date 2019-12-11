@@ -51,6 +51,7 @@ Common instance configuration parameters
 | `session`	| `Just Jamming`	| `MIDIMonster`		| Session name to announce via mDNS |
 | `invite`	| `pad,piano`		| none			| Devices to send invitations to when discovered (the special value `*` invites all discovered peers). Setting this option makes the instance a session initiator |
 | `join`	| `Just Jamming`	| none			| Sessions for which to accept invitations (the special value `*` accepts all invitations). Setting this option makes the instance a session participant |
+| `peer`	| `10.1.2.3 9001`	| none			| Configure a direct session peer, bypassing AppleMIDI discovery. May be specified multiple times |
 
 Note that AppleMIDI session discovery requires mDNS functionality, thus the `mdns-name` global parameter
 (and, depending on your setup, the `mdns-bind` parameter) need to be configured properly.

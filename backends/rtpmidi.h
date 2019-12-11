@@ -3,7 +3,7 @@
 #endif
 #include "midimonster.h"
 
-int init();
+MM_PLUGIN_API int init();
 static int rtpmidi_configure(char* option, char* value);
 static int rtpmidi_configure_instance(instance* instance, char* option, char* value);
 static instance* rtpmidi_instance();
@@ -14,6 +14,7 @@ static int rtpmidi_start(size_t n, instance** inst);
 static int rtpmidi_shutdown(size_t n, instance** inst);
 
 #define RTPMIDI_RECV_BUF 4096
+#define RTPMIDI_DEFAULT_HOST "::"
 #define RTPMIDI_MDNS_PORT "5353"
 #define RTPMIDI_HEADER_MAGIC htobe16(0x80E1)
 

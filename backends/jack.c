@@ -725,6 +725,8 @@ static int mmjack_shutdown(size_t n, instance** inst){
 		data->client_name = NULL;
 		close(data->fd);
 		data->fd = -1;
+
+		free(inst[u]->impl);
 	}
 
 	fprintf(stderr, "jack backend shut down\n");

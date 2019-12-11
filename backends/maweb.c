@@ -1044,6 +1044,8 @@ static int maweb_shutdown(size_t n, instance** inst){
 		free(data->channel);
 		data->channel = NULL;
 		data->channels = 0;
+
+		free(inst[u]->impl);
 	}
 
 	fprintf(stderr, "maweb backend shut down\n");

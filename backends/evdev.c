@@ -519,7 +519,7 @@ static int evdev_shutdown(size_t n, instance** inst){
 #endif
 		data->relative_axes = 0;
 		free(data->relative_axis);
-		free(data);
+		free(inst[u]->impl);
 	}
 
 	fprintf(stderr, "evdev backend shut down\n");

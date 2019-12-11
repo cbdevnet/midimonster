@@ -564,6 +564,8 @@ static int winmidi_shutdown(size_t n, instance** inst){
 			midiOutClose(data->device_out);
 			data->device_out = NULL;
 		}
+
+		free(inst[u]->impl);
 	}
 
 	closesocket(backend_config.socket_pair[0]);

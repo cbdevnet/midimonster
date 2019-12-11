@@ -136,7 +136,7 @@ typedef int (*mmbackend_configure_instance)(struct _backend_instance* instance, 
 typedef int (*mmbackend_process_fd)(size_t nfds, struct _managed_fd* fds);
 typedef int (*mmbackend_start)(size_t ninstances, struct _backend_instance** inst);
 typedef uint32_t (*mmbackend_interval)();
-typedef int (*mmbackend_shutdown)();
+typedef int (*mmbackend_shutdown)(size_t ninstances, struct _backend_instance** inst);
 
 /* Bit masks for the `flags` parameter to mmbackend_parse_channel */
 typedef enum {

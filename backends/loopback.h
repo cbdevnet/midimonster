@@ -8,7 +8,7 @@ static channel* loopback_channel(instance* inst, char* spec, uint8_t flags);
 static int loopback_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int loopback_handle(size_t num, managed_fd* fds);
 static int loopback_start(size_t n, instance** inst);
-static int loopback_shutdown();
+static int loopback_shutdown(size_t n, instance** inst);
 
 typedef struct /*_loopback_instance_data*/ {
 	size_t n;

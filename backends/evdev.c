@@ -498,18 +498,12 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 #endif
 }
 
-static int evdev_shutdown(){
+static int evdev_shutdown(size_t n, instance** inst){
 	evdev_instance_data* data = NULL;
-	instance** instances = NULL;
-	size_t n, u;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &instances)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
+	size_t u;
 
 	for(u = 0; u < n; u++){
-		data = (evdev_instance_data*) instances[u]->impl;
+		data = (evdev_instance_data*) inst[u]->impl;
 
 		if(data->input_fd >= 0){
 			libevdev_free(data->input_ev);
@@ -528,7 +522,6 @@ static int evdev_shutdown(){
 		free(data);
 	}
 
-	free(instances);
 	fprintf(stderr, "evdev backend shut down\n");
 	return 0;
 }

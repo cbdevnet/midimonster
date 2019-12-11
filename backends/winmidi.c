@@ -542,15 +542,9 @@ bail:
 	return rv;
 }
 
-static int winmidi_shutdown(){
-	size_t n, u;
-	instance** inst = NULL;
+static int winmidi_shutdown(size_t n, instance** inst){
+	size_t u;
 	winmidi_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (winmidi_instance_data*) inst[u]->impl;
@@ -572,7 +566,6 @@ static int winmidi_shutdown(){
 		}
 	}
 
-	free(inst);
 	closesocket(backend_config.socket_pair[0]);
 	closesocket(backend_config.socket_pair[1]);
 

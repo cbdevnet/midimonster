@@ -150,6 +150,12 @@ MM_API int mm_backend_instances(char* name, size_t* ninst, instance*** inst){
 	}
 
 	*ninst = n;
+
+	if(!n){
+		*inst = NULL;
+		return 0;
+	}
+
 	*inst = calloc(n, sizeof(instance*));
 	if(!*inst){
 		fprintf(stderr, "Failed to allocate memory\n");
@@ -290,10 +296,22 @@ int backends_start(){
 }
 
 int backends_stop(){
-	size_t u;
+	size_t u, n;
+	instance** inst = NULL;
+
 	for(u = 0; u < nbackends; u++){
-		backends[u].shutdown();
+		//fetch list of instances
+		if(mm_backend_instances(backends[u].name, &n, &inst)){
+			fprintf(stderr, "Failed to fetch instance list for shutdown of backend %s\n", backends[u].name);
+			n = 0;
+			inst = NULL;
+		}
+
+		backends[u].shutdown(n, inst);
+		free(inst);
+		inst = NULL;
 	}
+
 	free(backends);
 	nbackends = 0;
 	return 0;

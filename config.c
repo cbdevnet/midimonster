@@ -317,6 +317,7 @@ int config_read(char* cfg_filepath){
 	size_t line_alloc = 0;
 	ssize_t status;
 	map_type mapping_type = map_rtl;
+	FILE* source = NULL;
 	char* line_raw = NULL, *line, *separator;
 
 	//create heap copy of file name because original might be in readonly memory
@@ -346,7 +347,7 @@ int config_read(char* cfg_filepath){
 		source_file = source_dir;
 	}
 
-	FILE* source = fopen(source_file, "r");
+	source = fopen(source_file, "r");
 
 	if(!source){
 		fprintf(stderr, "Failed to open configuration file for reading\n");

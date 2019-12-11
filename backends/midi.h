@@ -8,7 +8,7 @@ static channel* midi_channel(instance* instance, char* spec, uint8_t flags);
 static int midi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int midi_handle(size_t num, managed_fd* fds);
 static int midi_start(size_t n, instance** inst);
-static int midi_shutdown();
+static int midi_shutdown(size_t n, instance** inst);
 
 typedef struct /*_midi_instance_data*/ {
 	int port;

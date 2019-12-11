@@ -685,15 +685,9 @@ bail:
 	return rv;
 }
 
-static int mmjack_shutdown(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int mmjack_shutdown(size_t n, instance** inst){
+	size_t u, p;
 	mmjack_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (mmjack_instance_data*) inst[u]->impl;
@@ -732,8 +726,6 @@ static int mmjack_shutdown(){
 		close(data->fd);
 		data->fd = -1;
 	}
-
-	free(inst);
 
 	fprintf(stderr, "jack backend shut down\n");
 	return 0;

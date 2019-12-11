@@ -438,18 +438,12 @@ bail:
 	return rv;
 }
 
-static int artnet_shutdown(){
-	size_t n, p;
-	instance** inst = NULL;
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
+static int artnet_shutdown(size_t n, instance** inst){
+	size_t p;
 
 	for(p = 0; p < n; p++){
 		free(inst[p]->impl);
 	}
-	free(inst);
 
 	for(p = 0; p < artnet_fds; p++){
 		close(artnet_fd[p].fd);

@@ -917,15 +917,9 @@ static int osc_start(size_t n, instance** inst){
 	return 0;
 }
 
-static int osc_shutdown(){
-	size_t n, u, c;
-	instance** inst = NULL;
+static int osc_shutdown(size_t n, instance** inst){
+	size_t u, c;
 	osc_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (osc_instance_data*) inst[u]->impl;
@@ -953,7 +947,6 @@ static int osc_shutdown(){
 		free(inst[u]->impl);
 	}
 
-	free(inst);
 	fprintf(stderr, "OSC backend shut down\n");
 	return 0;
 }

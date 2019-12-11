@@ -248,12 +248,6 @@ static int ola_start(size_t n, instance** inst){
 
 	ola_client->SetDmxCallback(ola::NewCallback(&ola_data_receive));
 
-	//fetch all defined instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		goto bail;
-	}
-
 	for(u = 0; u < n; u++){
 		data = (ola_instance_data*) inst[u]->impl;
 		inst[u]->ident = data->universe_id;
@@ -279,18 +273,12 @@ bail:
 	return 1;
 }
 
-static int ola_shutdown(){
-	size_t n, p;
-	instance** inst = NULL;
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
+static int ola_shutdown(size_t n, instance** inst){
+	size_t p;
 
 	for(p = 0; p < n; p++){
 		free(inst[p]->impl);
 	}
-	free(inst);
 
 	if(ola_client){
 		ola_client->Stop();

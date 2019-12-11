@@ -16,7 +16,7 @@ CFLAGS += -fvisibility=hidden
 midimonster: LDLIBS = -ldl
 # Replace version string with current git-describe if possible
 ifneq "$(GITVERSION)" ""
-midimonster: CFLAGS += "-DMIDIMONSTER_VERSION=\"$(GITVERSION)\""
+midimonster: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
 endif
 
 # Work around strange linker passing convention differences in Linux and OSX

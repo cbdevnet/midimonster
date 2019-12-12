@@ -17,6 +17,10 @@
 #define MAX_FDS 4096
 #define BACKEND_NAME "sacn"
 
+enum /*_sacn_fd_flags*/ {
+	mcast_loop = 1
+};
+
 static struct /*_sacn_global_config*/ {
 	uint8_t source_name[64];
 	uint8_t cid[16];
@@ -58,8 +62,8 @@ MM_PLUGIN_API int init(){
 	return 0;
 }
 
-static int sacn_listener(char* host, char* port, uint8_t fd_flags){
-	int fd = -1;
+static int sacn_listener(char* host, char* port, uint8_t flags){
+	int fd = -1, yes = 1;
 	if(global_cfg.fds >= MAX_FDS){
 		fprintf(stderr, "sACN backend descriptor limit reached\n");
 		return -1;
@@ -80,10 +84,17 @@ static int sacn_listener(char* host, char* port, uint8_t fd_flags){
 
 	fprintf(stderr, "sACN backend interface %" PRIsize_t " bound to %s port %s\n", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
-	global_cfg.fd[global_cfg.fds].flags = fd_flags;
 	global_cfg.fd[global_cfg.fds].universes = 0;
 	global_cfg.fd[global_cfg.fds].universe = NULL;
 	global_cfg.fd[global_cfg.fds].last_frame = NULL;
+
+	if(flags & mcast_loop){
+		//set IP_MCAST_LOOP to allow local applications to receive output
+		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
+			fprintf(stderr, "Failed to disable IP_MULTICAST_LOOP on socket: %s\n", strerror(errno));
+		}
+	}
+
 	global_cfg.fds++;
 	return 0;
 }
@@ -110,17 +121,22 @@ static int sacn_configure(char* option, char* value){
 		}
 	}
 	else if(!strcmp(option, "bind")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, &next);
 
 		if(!host){
 			fprintf(stderr, "No valid sACN bind address provided\n");
 			return 1;
 		}
 
+		if(next && !strncmp(next, "local", 5)){
+			flags = mcast_loop;
+		}
+
 		if(sacn_listener(host, port ? port : SACN_PORT, flags)){
 			fprintf(stderr, "Failed to bind sACN descriptor: %s\n", value);
 			return 1;
 		}
+
 		return 0;
 	}
 
@@ -151,7 +167,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 	else if(!strcmp(option, "destination")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, NULL);
 
 		if(!host){
 			fprintf(stderr, "No valid sACN destination for instance %s\n", inst->name);

@@ -496,7 +496,7 @@ static int osc_register_pattern(osc_instance_data* data, char* pattern_path, cha
 
 static int osc_configure_instance(instance* inst, char* option, char* value){
 	osc_instance_data* data = (osc_instance_data*) inst->impl;
-	char* host = NULL, *port = NULL;
+	char* host = NULL, *port = NULL, *fd_opts = NULL;
 
 	if(!strcmp(option, "root")){
 		if(osc_path_validate(value, 0)){
@@ -516,7 +516,7 @@ static int osc_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, &fd_opts);
 		if(!host || !port){
 			fprintf(stderr, "Invalid bind address for instance %s\n", inst->name);
 			return 1;
@@ -541,7 +541,7 @@ static int osc_configure_instance(instance* inst, char* option, char* value){
 			return 0;
 		}
 
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, NULL);
 		if(!host || !port){
 			fprintf(stderr, "Invalid destination address for instance %s\n", inst->name);
 			return 1;

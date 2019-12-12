@@ -145,10 +145,10 @@ static int maweb_configure(char* option, char* value){
 
 static int maweb_configure_instance(instance* inst, char* option, char* value){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
-	char* host = NULL, *port = NULL;
+	char* host = NULL, *port = NULL, *fd_opts = NULL;
 
 	if(!strcmp(option, "host")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, &fd_opts);
 		if(!host){
 			fprintf(stderr, "Invalid host specified for maweb instance %s\n", inst->name);
 			return 1;

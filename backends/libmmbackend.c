@@ -1,6 +1,6 @@
 #include "libmmbackend.h"
 
-void mmbackend_parse_hostspec(char* spec, char** host, char** port){
+void mmbackend_parse_hostspec(char* spec, char** host, char** port, char** options){
 	size_t u = 0;
 
 	if(!spec || !host || !port){
@@ -28,6 +28,19 @@ void mmbackend_parse_hostspec(char* spec, char** host, char** port){
 	if(spec[u]){
 		spec[u] = 0;
 		*port = spec + u + 1;
+	}
+
+	if(options){
+		*options = NULL;
+		if(*port){
+			//scan for space after port
+			for(u = 0; (*port)[u] && !isspace((*port)[u]); u++){
+			}
+			if(isspace((*port)[u])){
+				(*port)[u] = 0;
+				*options = (*port) + u + 1;
+			}
+		}
 	}
 }
 

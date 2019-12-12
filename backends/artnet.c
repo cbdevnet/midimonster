@@ -68,14 +68,14 @@ MM_PLUGIN_API int init(){
 }
 
 static int artnet_configure(char* option, char* value){
-	char* host = NULL, *port = NULL;
+	char* host = NULL, *port = NULL, *fd_opts = NULL;
 	if(!strcmp(option, "net")){
 		//configure default net
 		default_net = strtoul(value, NULL, 0);
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, &fd_opts);
 
 		if(!host){
 			fprintf(stderr, "Not valid ArtNet bind address given\n");
@@ -134,7 +134,7 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 	else if(!strcmp(option, "dest") || !strcmp(option, "destination")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, NULL);
 
 		if(!host){
 			fprintf(stderr, "Not a valid ArtNet destination for instance %s\n", inst->name);

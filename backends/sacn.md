@@ -14,7 +14,7 @@ containing all write-enabled universes.
 
 The `bind` configuration value can be extended by the keyword `local` to allow software on the
 local host to process the sACN output frames from the MIDIMonster (e.g. `bind = 0.0.0.0 5568 local`).
-This has the side effect of generating mirroring the output of instances on this descriptors to their input.
+This has the side effect of mirroring the output of instances on those descriptors to their input.
 
 #### Instance configuration
 

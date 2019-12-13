@@ -338,13 +338,108 @@ static channel* rtpmidi_channel(instance* inst, char* spec, uint8_t flags){
 }
 
 static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v){
-	//TODO
-	return 1;
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+	rtpmidi_header* rtp_header = (rtpmidi_header*) frame;
+	rtpmidi_command_header* command_header = (rtpmidi_command_header*) (frame + sizeof(rtpmidi_header));
+	size_t offset = sizeof(rtpmidi_header) + sizeof(rtpmidi_command_header), u = 0;
+	uint8_t* payload = frame + offset;
+	rtpmidi_channel_ident ident;
+
+	rtp_header->vpxccmpt = RTPMIDI_HEADER_MAGIC;
+	rtp_header->sequence = htobe16(data->sequence++);
+	rtp_header->timestamp = 0; //TODO calculate appropriate timestamps
+	rtp_header->ssrc = htobe32(data->ssrc);
+
+	//midi command section header
+	//TODO enable the journal bit here
+	command_header->flags = 0xA0; //extended length header, first entry in list has dtime
+
+	//midi list
+	for(u = 0; u < num; u++){
+		ident.label = c[u]->ident;
+
+		//encode timestamp
+		payload[0] = 0;
+
+		//encode midi command
+		payload[1] = ident.fields.type | ident.fields.channel;
+		payload[2] = ident.fields.control;
+		payload[3] = v[u].normalised * 127.0;
+
+		if(ident.fields.type == pitchbend){
+			payload[2] = ((int)(v[u].normalised * 16384.0)) & 0x7F;
+			payload[3] = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
+		}
+		//channel-wide aftertouch is only 2 bytes
+		else if(ident.fields.type == aftertouch){
+			payload[2] = payload[3];
+			payload -= 1;
+			offset -= 1;
+		}
+
+		payload += 4;
+		offset += 4;
+	}
+
+	//update command section length
+	//FIXME this might overrun, might check the number of events at some point
+	command_header->flags |= (((offset - sizeof(rtpmidi_header) - sizeof(rtpmidi_command_header)) & 0x0F00) >> 8);
+	command_header->length = ((offset - sizeof(rtpmidi_header) - sizeof(rtpmidi_command_header)) & 0xFF);
+
+	//TODO journal section
+
+	for(u = 0; u < data->peers; u++){
+		sendto(data->fd, frame, offset, 0, (struct sockaddr*) &data->peer[u].dest, data->peer[u].dest_len);
+	}
+
+	return 0;
+}
+
+static int rtpmidi_handle_data(instance* inst){
+	size_t u;
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+	struct sockaddr_storage sock_addr;
+	socklen_t sock_len = sizeof(sock_addr);
+	rtpmidi_header* rtp_header = (rtpmidi_header*) frame;
+	ssize_t bytes_recv = recvfrom(data->fd, frame, sizeof(frame), 0, (struct sockaddr*) &sock_addr, &sock_len);
+
+	//TODO receive until EAGAIN
+	//FIXME might want to filter data input from sources that are not registered peers
+	if(rtp_header->vpxccmpt != RTPMIDI_HEADER_MAGIC){
+		fprintf(stderr, "rtpmidi instance %s received frame with invalid header magic\n", inst->name);
+		return 0;
+	}
+
+	//try to learn peers
+	if(data->learn_peers){
+		for(u = 0; u < data->peers; u++){
+			if(data->peer[u].dest_len == sock_len
+					&& !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
+				break;
+			}
+		}
+
+		if(u == data->peers){
+			fprintf(stderr, "rtpmidi instance %s learned new peer\n", inst->name);
+			return rtpmidi_push_peer(data, sock_addr, sock_len);
+		}
+	}
+	return 0;
+}
+
+static int rtpmidi_handle_control(instance* inst){
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+
+	return 0;
 }
 
 static int rtpmidi_handle(size_t num, managed_fd* fds){
 	size_t u;
 	int rv = 0;
+	instance* inst = NULL;
+	rtpmidi_instance_data* data = NULL;
 
 	//TODO handle mDNS discovery frames
 
@@ -357,7 +452,18 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 			//TODO handle mDNS discovery input
 		}
 		else{
-			//TODO handle rtp/control input
+			//handle rtp/control input
+			inst = (instance*) fds[u].impl;
+			data = (rtpmidi_instance_data*) inst->impl;
+			if(fds[u].fd == data->fd){
+				rv |= rtpmidi_handle_data(inst);
+			}
+			else if(fds[u].fd == data->control_fd){
+				rv |=  rtpmidi_handle_control(inst);
+			}
+			else{
+				fprintf(stderr, "rtpmidi signaled descriptor not recognized\n");
+			}
 		}
 	}
 

@@ -13,7 +13,7 @@ static int rtpmidi_handle(size_t num, managed_fd* fds);
 static int rtpmidi_start(size_t n, instance** inst);
 static int rtpmidi_shutdown(size_t n, instance** inst);
 
-#define RTPMIDI_RECV_BUF 4096
+#define RTPMIDI_PACKET_BUFFER 8192
 #define RTPMIDI_DEFAULT_HOST "::"
 #define RTPMIDI_MDNS_PORT "5353"
 #define RTPMIDI_HEADER_MAGIC htobe16(0x80E1)
@@ -58,6 +58,7 @@ typedef struct /*_rtmidi_instance_data*/ {
 	size_t peers;
 	rtpmidi_peer* peer;
 	uint32_t ssrc;
+	uint16_t sequence;
 
 	//apple-midi config
 	char* session_name;
@@ -103,6 +104,6 @@ typedef struct /*_rtp_midi_header*/ {
 
 typedef struct /*_rtp_midi_command*/ {
 	uint8_t flags;
-	uint8_t additional_length;
-} rtpmidi_command;
+	uint8_t length;
+} rtpmidi_command_header;
 #pragma pack(pop)

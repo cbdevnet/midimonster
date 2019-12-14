@@ -92,7 +92,7 @@ struct _managed_fd;
  * 		Parse instance configuration from the user-supplied configuration
  * 		file. Returning a non-zero value fails config parsing.
  * 	* mmbackend_channel
- * 		Parse a channel-spec to be mapped to/from. The `falgs` parameter supplies
+ * 		Parse a channel-spec to be mapped to/from. The `flags` parameter supplies
  * 		additional information to the parser, such as whether the channel is being
  * 		queried for use as input (to the MIDIMonster core) and/or output
  * 		(from the MIDIMonster core) channel (on a per-query basis).

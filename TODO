@@ -1,8 +1,8 @@
 keepalive channels per backend?
 Note source in channel value struct
 Optimize core channel search (store backend offset)
-
+udp backends may ignore MTU
 mm_managed_fd.impl is not freed currently (and is heaped most of the time anyway) -> documentation
-
 installer: implement an upgrade mode (check for newer versions in the repo)
-
+evdev.c:321 divides by zero with relaxis
+make event collectors threadsafe to stop marshalling data...

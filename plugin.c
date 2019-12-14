@@ -30,6 +30,11 @@ static int plugin_attach(char* path, char* file){
 	char* path_separator = "/";
 	#endif
 
+	if(!path || !file || !strlen(path)){
+		fprintf(stderr, "Invalid plugin loader path\n");
+		return 1;
+	}
+
 	lib = calloc(strlen(path) + strlen(file) + 2, sizeof(char));
 	if(!lib){
 		fprintf(stderr, "Failed to allocate memory\n");
@@ -37,7 +42,7 @@ static int plugin_attach(char* path, char* file){
 	}
 	snprintf(lib, strlen(path) + strlen(file) + 2, "%s%s%s",
 			path,
-			(path[strlen(path)] == path_separator[0]) ? "" : path_separator,
+			(path[strlen(path) - 1] == path_separator[0]) ? "" : path_separator,
 			file);
 
 	handle = dlopen(lib, RTLD_NOW);

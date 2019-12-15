@@ -398,9 +398,9 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	return 0;
 }
 
-static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* data, size_t bytes, struct sockaddr_storage* peer, socklen_t peer_len){
+static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size_t bytes, struct sockaddr_storage* peer, socklen_t peer_len){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
-	apple_command* command = (apple_command*) data;
+	apple_command* command = (apple_command*) frame;
 	size_t u;
 
 	//find peer if already in list

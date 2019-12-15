@@ -346,7 +346,9 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	uint8_t* payload = frame + offset;
 	rtpmidi_channel_ident ident;
 
-	rtp_header->vpxccmpt = RTPMIDI_HEADER_MAGIC;
+	rtp_header->vpxcc = RTPMIDI_HEADER_MAGIC;
+	//some receivers seem to have problems reading rfcs and interpreting the marker bit correctly
+	rtp_header->mpt = (data->mode == apple ? 0 : 0x80) | RTPMIDI_HEADER_TYPE;
 	rtp_header->sequence = htobe16(data->sequence++);
 	rtp_header->timestamp = 0; //TODO calculate appropriate timestamps
 	rtp_header->ssrc = htobe32(data->ssrc);
@@ -396,6 +398,44 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	return 0;
 }
 
+static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* data, size_t bytes, struct sockaddr_storage* peer, socklen_t peer_len){
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	apple_command* command = (apple_command*) data;
+	size_t u;
+
+	//find peer if already in list
+	for(u = 0; u < data->peers; u++){
+		if(data->peer[u].dest_len == peer_len
+				&& !memcmp(&data->peer[u].dest, peer, peer_len)){
+			break;
+		}
+	}
+
+	if(!strncmp((char*) command->command, APPLEMIDI_INVITE, 2)){
+		//TODO check whether the session is in the accept list
+	}
+	else if(!strncmp((char*) command->command, APPLEMIDI_ACCEPT, 2)){
+		//TODO mark peer as in-session, start timesync
+	}
+	else if(!strncmp((char*) command->command, APPLEMIDI_REJECT, 2)){
+		//TODO mark peer as rejected (or retry invitation)
+	}
+	else if(!strncmp((char*) command->command, APPLEMIDI_LEAVE, 2)){
+		//TODO mark peer as disconnected, retry invitation
+	}
+	else if(!strncmp((char*) command->command, APPLEMIDI_SYNC, 2)){
+		//TODO respond with sync answer
+	}
+	else if(!strncmp((char*) command->command, APPLEMIDI_FEEDBACK, 2)){
+		//ignore
+	}
+	else{
+		fprintf(stderr, "Unknown AppleMIDI session command %02X %02X\n", command->command[0], command->command[1]);
+	}
+
+	return 0;
+}
+
 static int rtpmidi_handle_data(instance* inst){
 	size_t u;
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
@@ -406,11 +446,26 @@ static int rtpmidi_handle_data(instance* inst){
 	ssize_t bytes_recv = recvfrom(data->fd, frame, sizeof(frame), 0, (struct sockaddr*) &sock_addr, &sock_len);
 
 	//TODO receive until EAGAIN
+	if(bytes_recv < 0){
+		fprintf(stderr, "rtpmidi failed to receive for instance %s\n", inst->name);
+		return 1;
+	}
+
+	if(bytes_recv < sizeof(rtpmidi_header)){
+		fprintf(stderr, "Skipping short packet on rtpmidi instance %s\n", inst->name);
+		return 0;
+	}
+
 	//FIXME might want to filter data input from sources that are not registered peers
-	if(rtp_header->vpxccmpt != RTPMIDI_HEADER_MAGIC){
+	if(data->mode == apple && rtp_header->vpxcc == 0xFF && rtp_header->mpt == 0xFF){
+		return rtpmidi_handle_applemidi(inst, data->fd, frame, bytes_recv, &sock_addr, sock_len);
+	}
+	else if(rtp_header->vpxcc != RTPMIDI_HEADER_MAGIC || RTPMIDI_GET_TYPE(rtp_header->mpt) != RTPMIDI_HEADER_TYPE){
 		fprintf(stderr, "rtpmidi instance %s received frame with invalid header magic\n", inst->name);
 		return 0;
 	}
+
+	//TODO parse data
 
 	//try to learn peers
 	if(data->learn_peers){
@@ -431,7 +486,27 @@ static int rtpmidi_handle_data(instance* inst){
 
 static int rtpmidi_handle_control(instance* inst){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+	struct sockaddr_storage sock_addr;
+	socklen_t sock_len = sizeof(sock_addr);
+	ssize_t bytes_recv = recvfrom(data->control_fd, frame, sizeof(frame), 0, (struct sockaddr*) &sock_addr, &sock_len);
 
+	if(bytes_recv < 0){
+		fprintf(stderr, "rtpmidi failed to receive for instance %s\n", inst->name);
+		return 1;
+	}
+
+	//the shortest applemidi packet is still larger than the rtpmidi header, so use that as bar
+	if(bytes_recv < sizeof(rtpmidi_header)){
+		fprintf(stderr, "Skipping short packet on rtpmidi instance %s\n", inst->name);
+		return 0;
+	}
+
+	if(data->mode == apple && frame[0] == 0xFF && frame[1] == 0xFF){
+		return rtpmidi_handle_applemidi(inst, data->control_fd, frame, bytes_recv, &sock_addr, sock_len);
+	}
+
+	fprintf(stderr, "Unknown session protocol frame received on rtpmidi instance %s\n", inst->name);
 	return 0;
 }
 

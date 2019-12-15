@@ -16,7 +16,16 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 #define RTPMIDI_PACKET_BUFFER 8192
 #define RTPMIDI_DEFAULT_HOST "::"
 #define RTPMIDI_MDNS_PORT "5353"
-#define RTPMIDI_HEADER_MAGIC htobe16(0x80E1)
+#define RTPMIDI_HEADER_MAGIC 0x80
+#define RTPMIDI_HEADER_TYPE 0x61
+#define RTPMIDI_GET_TYPE(a) ((a) & 0x7F)
+
+#define APPLEMIDI_INVITE "IN"
+#define APPLEMIDI_ACCEPT "OK"
+#define APPLEMIDI_REJECT "NO"
+#define APPLEMIDI_LEAVE "BY"
+#define APPLEMIDI_SYNC "CK"
+#define APPLEMIDI_FEEDBACK "RS"
 
 enum /*_rtpmidi_channel_type*/ {
 	none = 0,
@@ -96,7 +105,8 @@ typedef struct /*_apple_session_feedback*/ {
 } apple_feedback;
 
 typedef struct /*_rtp_midi_header*/ {
-	uint16_t vpxccmpt; //this is really just an amalgamated constant value
+	uint8_t vpxcc;
+	uint8_t mpt;
 	uint16_t sequence;
 	uint32_t timestamp;
 	uint32_t ssrc;

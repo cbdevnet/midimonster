@@ -34,6 +34,7 @@ Common instance configuration parameters
 |---------------|-----------------------|-----------------------|-----------------------|
 | `ssrc`	| `0xDEADBEEF`		| Randomly generated	| 32-bit synchronization source identifier |
 | `mode`	| `direct`		| none			| Instance session management mode (`direct` or `apple`) |
+| `peer`	| `10.1.2.3 9001`	| none			| MIDI session peer, may be specified multiple times. Bypasses session discovery protocols |
 
 `direct` mode instance configuration parameters
 
@@ -41,7 +42,6 @@ Common instance configuration parameters
 |---------------|-----------------------|-----------------------|-----------------------|
 | `bind`	| `10.1.2.1 9001`	| `:: <random>`		| Local network address to bind to | 
 | `learn`	| `true`		| `false`		| Accept new peers for data exchange at runtime |
-| `peer`	| `10.1.2.3 9001`	| none			| MIDI session peer, may be specified multiple times |
 
 `apple` mode instance configuration parameters
 
@@ -49,8 +49,8 @@ Common instance configuration parameters
 |---------------|-----------------------|-----------------------|-----------------------|
 | `bind`	| `10.1.2.1 9001`	| `:: <random>`		| Local network address to bind to (note that AppleMIDI requires two consecutive port numbers to be allocated) |
 | `session`	| `Just Jamming`	| `MIDIMonster`		| Session name to announce via mDNS |
-| `invite`	| `pad,piano`		| none			| Devices to send invitations to when discovered (the special value `*` invites all discovered peers). Setting this option makes the instance a session initiator |
-| `join`	| `Just Jamming`	| none			| Sessions for which to accept invitations (the special value `*` accepts all invitations). Setting this option makes the instance a session participant |
+| `invite`	| `pad`			| none			| Devices to send invitations to when discovered (the special value `*` invites all discovered peers). Setting this option makes the instance a session initiator. May be specified multiple times |
+| `join`	| `Just Jamming`	| none			| Session for which to accept invitations (the special value `*` accepts all invitations). Setting this option makes the instance a session participant |
 | `peer`	| `10.1.2.3 9001`	| none			| Configure a direct session peer, bypassing AppleMIDI discovery. May be specified multiple times |
 
 Note that AppleMIDI session discovery requires mDNS functionality, thus the `mdns-name` global parameter

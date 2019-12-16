@@ -13,10 +13,15 @@ static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
 	char* mdns_name;
 	uint8_t detect;
+
+	size_t announces;
+	rtpmidi_announce* announce;
 } cfg = {
 	.mdns_fd = -1,
 	.mdns_name = NULL,
-	.detect = 0
+	.detect = 0,
+	.announces = 0,
+	.announce = NULL
 };
 
 MM_PLUGIN_API int init(){
@@ -137,6 +142,7 @@ static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storag
 	data->peer = realloc(data->peer, (data->peers + 1) * sizeof(rtpmidi_peer));
 	if(!data->peer){
 		fprintf(stderr, "Failed to allocate memory\n");
+		data->peers = 0;
 		return 1;
 	}
 
@@ -144,6 +150,58 @@ static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storag
 	data->peer[data->peers].dest_len = sock_len;
 
 	data->peers++;
+	return 0;
+}
+
+static int rtpmidi_push_invite(instance* inst, char* peer){
+	size_t u, p;
+
+	//check whether the instance is already in the announce list
+	for(u = 0; u < cfg.announces; u++){
+		if(cfg.announce[u].inst == inst){
+			break;
+		}
+	}
+
+	//add to the announce list
+	if(u == cfg.announces){
+		cfg.announce = realloc(cfg.announce, (cfg.announces + 1) * sizeof(rtpmidi_announce));
+		if(!cfg.announce){
+			fprintf(stderr, "Failed to allocate memory\n");
+			cfg.announces = 0;
+			return 1;
+		}
+
+		cfg.announce[u].inst = inst;
+		cfg.announce[u].invites = 0;
+		cfg.announce[u].invite = NULL;
+
+		cfg.announces++;
+	}
+
+	//check whether the peer is already in the invite list
+	for(p = 0; p < cfg.announce[u].invites; p++){
+		if(!strcmp(cfg.announce[u].invite[p], peer)){
+			return 0;
+		}
+	}
+
+	//extend the invite list
+	cfg.announce[u].invite = realloc(cfg.announce[u].invite, (cfg.announce[u].invites + 1) * sizeof(char*));
+	if(!cfg.announce[u].invite){
+		fprintf(stderr, "Failed to allocate memory\n");
+		cfg.announce[u].invites = 0;
+		return 1;
+	}
+
+	//append the new invitee
+	cfg.announce[u].invite[p] = strdup(peer);
+	if(!cfg.announce[u].invite[p]){
+		fprintf(stderr, "Failed to allocate memory\n");
+		return 1;
+	}
+
+	cfg.announce[u].invites++;
 	return 0;
 }
 
@@ -230,22 +288,17 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 			fprintf(stderr, "The rtpmidi 'invite' option is only valid for apple mode instances\n");
 			return 1;
 		}
-		free(data->invite_peers);
-		data->invite_peers = strdup(value);
-		if(!data->invite_peers){
-			fprintf(stderr, "Failed to allocate memory\n");
-			return 1;
-		}
-		return 0;
+
+		return rtpmidi_push_invite(inst, value);
 	}
 	else if(!strcmp(option, "join")){
 		if(data->mode != apple){
 			fprintf(stderr, "The rtpmidi 'join' option is only valid for apple mode instances\n");
 			return 1;
 		}
-		free(data->invite_accept);
-		data->invite_accept = strdup(value);
-		if(!data->invite_accept){
+		free(data->accept);
+		data->accept = strdup(value);
+		if(!data->accept){
 			fprintf(stderr, "Failed to allocate memory\n");
 			return 1;
 		}
@@ -350,7 +403,7 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	//some receivers seem to have problems reading rfcs and interpreting the marker bit correctly
 	rtp_header->mpt = (data->mode == apple ? 0 : 0x80) | RTPMIDI_HEADER_TYPE;
 	rtp_header->sequence = htobe16(data->sequence++);
-	rtp_header->timestamp = 0; //TODO calculate appropriate timestamps
+	rtp_header->timestamp = mm_timestamp() * 10; //just assume 100msec resolution because rfc4695 handwaves it
 	rtp_header->ssrc = htobe32(data->ssrc);
 
 	//midi command section header
@@ -617,11 +670,8 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 		free(data->session_name);
 		data->session_name = NULL;
 
-		free(data->invite_peers);
-		data->invite_peers = NULL;
-
-		free(data->invite_accept);
-		data->invite_accept = NULL;
+		free(data->accept);
+		data->accept = NULL;
 
 		free(data->peer);
 		data->peer = NULL;
@@ -631,6 +681,7 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 		inst[u]->impl = NULL;
 	}
 
+	//TODO free announces
 	free(cfg.mdns_name);
 	if(cfg.mdns_fd >= 0){
 		close(cfg.mdns_fd);

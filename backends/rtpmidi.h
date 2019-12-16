@@ -71,12 +71,17 @@ typedef struct /*_rtmidi_instance_data*/ {
 
 	//apple-midi config
 	char* session_name;
-	char* invite_peers;
-	char* invite_accept;
+	char* accept;
 
 	//direct mode config
 	uint8_t learn_peers;
 } rtpmidi_instance_data;
+
+typedef struct /*rtpmidi_announced_instance*/ {
+	instance* inst;
+	size_t invites;
+	char** invite;
+} rtpmidi_announce;
 
 #pragma pack(push, 1)
 typedef struct /*_apple_session_command*/ {

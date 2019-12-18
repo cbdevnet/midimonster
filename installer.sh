@@ -5,7 +5,7 @@ deps=(libasound2-dev libevdev-dev liblua5.3-dev libjack-jackd2-dev pkg-config li
 user=$(whoami)                  # for bypassing user check replace "$(whoami)" with "root".
 
 tmp_path=$(mktemp -d)           # Repo download path
-updater_dir=/etc/midimonster-updater-installer       # Updater download + config path
+updater_dir=/etc/midimonster-updater       # Updater download + config path
 updater_file=$updater_dir/updater.conf                   # 
 
 latest_version=$(curl --silent "https://api.github.com/repos/cbdevnet/midimonster/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -39,17 +39,9 @@ done
 printf "\n"
 }
 
-INSTALL-PREP () {
-(#### Subshell make things like cd $tmp_path easier to revert
-    printf "\nStarting download..."
-    git clone https://github.com/cbdevnet/midimonster.git "$tmp_path" # Gets Midimonster   
-    printf "\n\n\nInitializing repository..."
-    cd $tmp_path
-    git init $tmp_path
-    printf "\n"
-    
-    read -p "Do you want to install the nightly version? (y/n)? " magic      #Asks for nightly version
-    case "$magic" in 
+NIGHTLY_CHECK () {
+read -p "Do you want to install the latest developement version? (y/n)? " magic      #Asks for nightly version
+case "$magic" in 
     y|Y )   printf "\nOK! You´re a risky person ;D"
             NIGHTLY=1
             ;;
@@ -59,11 +51,29 @@ INSTALL-PREP () {
       * )   printf "\nInvalid input"
             ERROR
             ;;
-    esac
+esac
 
-    if [ $NIGHTLY != 1 ]; then printf "\nFinding latest stable version..."; Iversion=$(git describe --abbrev=0); printf "\nStarting Git checkout to "$Iversion"..."; git checkout -f -q $Iversion; fi # Git checkout if NIGHTLY !=1
-    printf "\nPreparing Done.\n\n\n"
+if [ $NIGHTLY != 1 ]    # Git checkout if NIGHTLY !=1
+then
+    printf "\nFinding latest stable version..."
+    Iversion=$(git describe --abbrev=0)
+    printf "\nStarting Git checkout to "$Iversion"..."
+    git checkout -f -q $Iversion
+fi
+}
+
+INSTALL-PREP () {
+(#### Subshell make things like cd $tmp_path easier to revert
+    printf "\nStarting download..."
+    git clone https://github.com/cbdevnet/midimonster.git "$tmp_path" # Gets Midimonster   
+    printf "\n\n\nInitializing repository...\n"
+    cd $tmp_path
+    git init $tmp_path
+    printf "\n"
 )
+NIGHTLY_CHECK
+printf "\nPreparing Done.\n\n\n"
+
 printf "${bold}If you don't know what you're doing, just hit enter 4 times.${normal}\n"
 
 read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX
@@ -97,25 +107,10 @@ UPDATER-PREP () {
     printf "\nInitializing repository..."
     cd $tmp_path
     git init $tmp_path
-    printf "\n"
-
-    read -p "Do you want to install the nightly version? (y/n)? " magic      #Asks for nightly version
-    case "$magic" in 
-    y|Y )   printf "\nOK! You´re a risky person ;D"
-            NIGHTLY=1
-            ;;
-    n|N )   printf "\nThat´s ok I´ll install the latest stable version for you ;-)"
-            NIGHTLY=0
-            ;;
-      * )   printf "\nInvalid input"
-            ERROR
-            ;;
-    esac
-
-    if [ $NIGHTLY != 1 ]; then printf "\nFinding latest stable version..."; Iversion=$(git describe --abbrev=0); printf "\nStarting Git checkout to "$Iversion"..."; git checkout -f -q $Iversion; fi # Git checkout if NIGHTLY !=1
-    printf "\nDone.\n\n\n"
+    printf "\nSucessfully imported Updater settings from $updater_file.\n\n\n"
  )
-
+NIGHTLY_CHECK
+printf "\nPreparing Done.\n\n\n"
 
 rm -f "$VAR_PREFIX/bin/midimonster"
 rm -rf "$VAR_PLUGINS/"
@@ -127,26 +122,20 @@ export PLUGINS=$VAR_PLUGINS
 export DEFAULT_CFG=$VAR_DEFAULT_CFG
 export DESTDIR=$VAR_DESTDIR
 export EXAMPLES=$VAR_EXAMPLE_CFGS
-
-printf "\nSucessfully imported Updater settings from $updater_file."
 }
 
 UPDATER () {
     installed_version="$(midimonster --version)"
-    #installed_version="MIDIMonster v0.3-40-gafed325" # FOR TESTING ONLY! (or bypassing updater version check)
+    installed_version="MIDIMonster v0.3-40-gafed325" # FOR TESTING ONLY! (or bypassing updater version check)
     if [[ "$installed_version" =~ "$latest_version" ]]; then
         printf "\nNewest Version is already installed! ${bold}($installed_version)${normal}\n\n"
         ERROR
     else
-        printf "\nThe installed Version ${bold}´$installed_version´${normal} equals not the newest stable version ${bold}´$latest_version´${normal} ( Maybe you are running on nightly? )\n\n"
+        printf "\nThe installed Version ${bold}´$installed_version´${normal} equals not the newest stable version ${bold}´$latest_version´${normal} ( Maybe you are running a developement version? )\n\n"
     fi
 
     UPDATER-PREP
     INSTALL-RUN
-
-    printf "\nUpdating updater/installer script in $updater_dir"
-    wget "https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh" -O $updater_dir
-    chmod +x $updater_dir/installer.sh
     DONE
     }
 
@@ -159,12 +148,12 @@ INSTALL-RUN () {                                    # Build
 
 UPDATER_SAVE () {                                   # Saves file for the auto updater in this script
     rm -rf $updater_dir
-    printf "\nSaving updater to $updater_dir/installer.sh" 
+    printf "\nSaving updater to $updater_dir/updater.sh" 
     mkdir -p "$updater_dir"
-    wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh -O $updater_dir/installer.sh
-    printf "\nCreating symlink to updater/installer in /usr/bin/midimonster-updater-installer"
-    ln -s "$updater_dir/installer.sh" "/usr/bin/midimonster-updater-installer"
-    chmod +x "$updater_dir/installer.sh"
+    wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh -O $updater_dir/updater.sh
+    printf "\nCreating symlink to updater in /usr/bin/midimonster-updater"
+    ln -s "$updater_dir/updater.sh" "/usr/bin/midimonster-updater"
+    chmod +x "$updater_dir/updater.sh"
     printf "\nExporting updater config to $updater_file"
     printf "VAR_PREFIX=%s\nVAR_PLUGINS=%s\nVAR_DEFAULT_CFG=%s\nVAR_DESTDIR=%s\nVAR_EXAMPLE_CFGS=%s\n" "$VAR_PREFIX" "$VAR_PLUGINS" "$VAR_DEFAULT_CFG" "$VAR_DESTDIR" "$VAR_EXAMPLE_CFGS" > $updater_file
 }

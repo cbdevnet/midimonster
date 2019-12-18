@@ -126,7 +126,7 @@ export EXAMPLES=$VAR_EXAMPLE_CFGS
 
 UPDATER () {
     installed_version="$(midimonster --version)"
-    installed_version="MIDIMonster v0.3-40-gafed325" # FOR TESTING ONLY! (or bypassing updater version check)
+    #installed_version="MIDIMonster v0.3-40-gafed325" # FOR TESTING ONLY! (or bypassing updater version check)
     if [[ "$installed_version" =~ "$latest_version" ]]; then
         printf "\nNewest Version is already installed! ${bold}($installed_version)${normal}\n\n"
         ERROR

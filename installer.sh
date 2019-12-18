@@ -40,7 +40,7 @@ INSTALL-DEPS () {           ##Install deps from array "$deps"
 
 NIGHTLY_CHECK () {
 	#Asks for nightly version
-	read -p "Do you want to install the latest developement version? (y/n)? " magic
+	read -p "Do you want to install the latest development version? (y/n)? " magic
 	case "$magic" in
 		y|Y)
 			printf "OK! You´re a risky person ;D\n"
@@ -130,7 +130,7 @@ UPDATER () {
 		printf "Newest Version is already installed! ${bold}($installed_version)${normal}\n\n"
 		ERROR
 	else
-		printf "The installed Version ${bold}´$installed_version´${normal} equals not the newest stable version ${bold}´$latest_version´${normal} ( Maybe you are running a developement version? )\n\n"
+		printf "The installed Version ${bold}´$installed_version´${normal} equals not the newest stable version ${bold}´$latest_version´${normal} (Maybe you are running a development version?)\n\n"
 	fi
 
 	UPDATER-PREP

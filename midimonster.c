@@ -224,7 +224,7 @@ static void event_free(){
 }
 
 static void version(){
-	fprintf(stdout, "MIDIMonster %s\n", MIDIMONSTER_VERSION);
+	printf("MIDIMonster %s\n", MIDIMONSTER_VERSION);
 }
 
 static int usage(char* fn){

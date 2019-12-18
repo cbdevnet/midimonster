@@ -208,6 +208,9 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			data->relative_axis[data->relative_axes].max *= -1;
 			data->relative_axis[data->relative_axes].inverted = 1;
 		}
+		else if(data->relative_axis[data->relative_axes].max == 0){
+			fprintf(stderr, "Relative axis configuration for %s.%s has invalid range\n", inst->name, option + 8);
+		}
 		data->relative_axis[data->relative_axes].current = strtoul(next_token, NULL, 0);
 		if(data->relative_axis[data->relative_axes].code < 0){
 			fprintf(stderr, "Failed to configure relative axis extents for %s.%s\n", inst->name, option + 8);

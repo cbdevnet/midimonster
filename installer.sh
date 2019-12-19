@@ -151,7 +151,7 @@ UPDATER_SAVE () {                                   # Saves file for the auto up
 	mkdir -p "$updater_dir"
 	wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh -O $updater_dir/updater.sh
 	printf "Creating symlink to updater in /usr/bin/midimonster-updater\n"
-	ln -s "$updater_dir/updater.sh" "/usr/bin/midimonster-updater\n"
+	ln -s "$updater_dir/updater.sh" "/usr/bin/midimonster-updater"
 	chmod +x "$updater_dir/updater.sh"
 	printf "Exporting updater config to %s\n" "$updater_file"
 	printf "VAR_PREFIX=%s\nVAR_PLUGINS=%s\nVAR_DEFAULT_CFG=%s\nVAR_DESTDIR=%s\nVAR_EXAMPLE_CFGS=%s\n" "$VAR_PREFIX" "$VAR_PLUGINS" "$VAR_DEFAULT_CFG" "$VAR_DESTDIR" "$VAR_EXAMPLE_CFGS" > $updater_file

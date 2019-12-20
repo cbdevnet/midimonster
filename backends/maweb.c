@@ -1,3 +1,5 @@
+#define BACKEND_NAME "maweb"
+
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -8,7 +10,6 @@
 #include "libmmbackend.h"
 #include "maweb.h"
 
-#define BACKEND_NAME "maweb"
 #define WS_LEN(a) ((a) & 0x7F)
 #define WS_OP(a) ((a) & 0x0F)
 #define WS_FLAG_FIN 0x80
@@ -88,7 +89,7 @@ MM_PLUGIN_API int init(){
 
 	//register backend
 	if(mm_backend_register(maweb)){
-		fprintf(stderr, "Failed to register maweb backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 	return 0;
@@ -139,7 +140,7 @@ static int maweb_configure(char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown maweb backend configuration option %s\n", option);
+	LOGPF("Unknown backend configuration option %s", option);
 	return 1;
 }
 
@@ -150,7 +151,7 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 	if(!strcmp(option, "host")){
 		mmbackend_parse_hostspec(value, &host, &port, &fd_opts);
 		if(!host){
-			fprintf(stderr, "Invalid host specified for maweb instance %s\n", inst->name);
+			LOGPF("Invalid host specified for instance %s", inst->name);
 			return 1;
 		}
 		free(data->host);
@@ -179,7 +180,7 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 		}
 		return 0;
 		#else
-		fprintf(stderr, "This build of the maweb backend only supports the default password\n");
+		LOG("This build only supports the default password");
 		return 1;
 		#endif
 	}
@@ -194,13 +195,13 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 			data->cmdline = cmd_downgrade;
 		}
 		else{
-			fprintf(stderr, "Unknown maweb commandline mode %s for instance %s\n", value, inst->name);
+			LOGPF("Unknown commandline mode %s for instance %s", value, inst->name);
 			return 1;
 		}
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown configuration parameter %s for maweb instance %s\n", option, inst->name);
+	LOGPF("Unknown instance configuration parameter %s for instance %s", option, inst->name);
 	return 1;
 }
 
@@ -212,14 +213,14 @@ static instance* maweb_instance(){
 
 	maweb_instance_data* data = calloc(1, sizeof(maweb_instance_data));
 	if(!data){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
 	data->fd = -1;
 	data->buffer = calloc(MAWEB_RECV_CHUNK, sizeof(uint8_t));
 	if(!data->buffer){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		free(data);
 		return NULL;
 	}
@@ -241,7 +242,7 @@ static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){
 	if(!strncmp(spec, "page", 4)){
 		chan.page = strtoul(spec + 4, &next_token, 10);
 		if(*next_token != '.'){
-			fprintf(stderr, "Failed to parse maweb channel spec %s: Missing separator\n", spec);
+			LOGPF("Failed to parse channel spec %s: Missing separator", spec);
 			return NULL;
 		}
 
@@ -273,7 +274,7 @@ static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){
 			if(!strcmp(spec, cmdline_keys[n].name)){
 				if((data->cmdline == cmd_remote && !cmdline_keys[n].press && !cmdline_keys[n].release)
 							|| (data->cmdline == cmd_console && !cmdline_keys[n].lua)){
-					fprintf(stderr, "maweb cmdline key %s does not work with the current commandline mode for instance %s\n", spec, inst->name);
+					LOGPF("Key %s does not work with the current commandline mode for instance %s", spec, inst->name);
 					return NULL;
 				}
 
@@ -293,7 +294,7 @@ static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){
 		if(maweb_channel_index(data, chan.type, chan.page, chan.index) == -1){
 			data->channel = realloc(data->channel, (data->channels + 1) * sizeof(maweb_channel_data));
 			if(!data->channel){
-				fprintf(stderr, "Failed to allocate memory\n");
+				LOG("Failed to allocate memory");
 				return NULL;
 			}
 			data->channel[data->channels] = chan;
@@ -305,7 +306,7 @@ static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){
 		return channel_ref;
 	}
 
-	fprintf(stderr, "Failed to parse maweb channel spec %s\n", spec);
+	LOGPF("Failed to parse channel spec %s", spec);
 	return NULL;
 }
 
@@ -353,7 +354,7 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 			//ignore unused buttons
 			return 0;
 		}
-		fprintf(stderr, "maweb missing exec block data on exec %" PRIu64 ".%" PRIu64 "\n", page, exec_index);
+		LOGPF("Missing exec block data on exec %" PRIu64 ".%" PRIu64, page, exec_index);
 		return 1;
 	}
 
@@ -395,7 +396,7 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 			}
 		}
 
-		DBGPF("maweb page %" PRIu64 " exec %" PRIu64 " value %f running %" PRIu64 "\n", page, exec_index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
+		DBGPF("Page %" PRIu64 " exec %" PRIu64 " value %f running %" PRIu64, page, exec_index, json_obj_double(payload + control, "v", 0.0), json_obj_int(payload, "isRun", 0));
 		exec_index++;
 		block++;
 	}
@@ -408,12 +409,12 @@ static int maweb_process_playbacks(instance* inst, int64_t page, char* payload, 
 	uint64_t group = 0, subgroup, item, metatype;
 
 	if(!page){
-		fprintf(stderr, "maweb received playbacks for invalid page\n");
+		LOG("Received playbacks for invalid page");
 		return 0;
 	}
 
 	if(!base_offset){
-		fprintf(stderr, "maweb playback data missing item key\n");
+		LOG("Playback data missing item key");
 		return 0;
 	}
 
@@ -448,7 +449,7 @@ static int maweb_process_playbacks(instance* inst, int64_t page, char* payload, 
 		group++;
 	}
 	updates_inflight--;
-	DBGPF("maweb playback message processing done, %" PRIu64 " updates inflight\n", updates_inflight);
+	DBGPF("Playback message processing done, %" PRIu64 " updates inflight", updates_inflight);
 	return 0;
 }
 
@@ -461,7 +462,7 @@ static int maweb_request_playbacks(instance* inst){
 	size_t page_index = 0, view = 3, channel = 0, offsets[3], channel_offset, channels;
 
 	if(updates_inflight){
-		fprintf(stderr, "maweb skipping update request, %" PRIu64 " updates still inflight\n", updates_inflight);
+		LOGPF("Skipping update request, %" PRIu64 " updates still inflight", updates_inflight);
 		return 0;
 	}
 
@@ -522,7 +523,7 @@ static int maweb_request_playbacks(instance* inst){
 			snprintf(item_counts, sizeof(item_indices), "[%" PRIsize_t "]", ((channels / 5) * 5 + 5));
 		}
 
-		DBGPF("maweb poll range first %d: %d.%d last %d: %d.%d next %d: %d.%d\n",
+		DBGPF("Poll range first %d: %d.%d last %d: %d.%d next %d: %d.%d",
 				data->channel[channel].type, data->channel[channel].page, data->channel[channel].index,
 				data->channel[channel + channel_offset - 1].type, data->channel[channel + channel_offset - 1].page, data->channel[channel + channel_offset - 1].index,
 				data->channel[channel + channel_offset].type, data->channel[channel + channel_offset].page, data->channel[channel + channel_offset].index);
@@ -550,11 +551,11 @@ static int maweb_request_playbacks(instance* inst){
 				view,
 				data->session);
 		rv |= maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
-		DBGPF("maweb poll request: %s\n", xmit_buffer);
+		DBGPF("Poll request: %s", xmit_buffer);
 		updates_inflight++;
 	}
 
-	DBGPF("maweb poll request handling done, %" PRIu64 " updates requested\n", updates_inflight);
+	DBGPF("Poll request handling done, %" PRIu64 " updates requested", updates_inflight);
 	return rv;
 }
 
@@ -568,42 +569,42 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		field = json_obj_str(payload, "responseType", NULL);
 		if(!strncmp(field, "login", 5)){
 			if(json_obj_bool(payload, "result", 0)){
-				fprintf(stderr, "maweb login successful\n");
+				LOG("Login successful");
 				data->login = 1;
 			}
 			else{
-				fprintf(stderr, "maweb login failed\n");
+				LOG("Login failed");
 				data->login = 0;
 			}
 		}
 		if(!strncmp(field, "playbacks", 9)){
 			if(maweb_process_playbacks(inst, json_obj_int(payload, "iPage", 0), payload, payload_length)){
-				fprintf(stderr, "maweb failed to handle/request input data\n");
+				LOG("Failed to handle/request input data");
 			}
 			return 0;
 		}
 	}
 
-	DBGPF("maweb message (%" PRIsize_t "): %s\n", payload_length, payload);
+	DBGPF("Incoming message (%" PRIsize_t "): %s", payload_length, payload);
 	if(json_obj(payload, "session") == JSON_NUMBER){
 		data->session = json_obj_int(payload, "session", data->session);
 		if(data->session < 0){
-				fprintf(stderr, "maweb login failed\n");
+				LOG("Login failed");
 				data->login = 0;
 				return 0;
 		}
-		fprintf(stderr, "maweb session id is now %" PRId64 "\n", data->session);
+		LOGPF("Session id is now %" PRId64, data->session);
 	}
 
 	if(json_obj_bool(payload, "forceLogin", 0)){
-		fprintf(stderr, "maweb sending user credentials\n");
+		LOG("Sending user credentials");
 		snprintf(xmit_buffer, sizeof(xmit_buffer),
 				"{\"requestType\":\"login\",\"username\":\"%s\",\"password\":\"%s\",\"session\":%" PRIu64 "}",
 				(data->peer_type == peer_dot2) ? "remote" : data->user, data->pass ? data->pass : MAWEB_DEFAULT_PASSWORD, data->session);
 		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 	}
 	if(json_obj(payload, "status") && json_obj(payload, "appType")){
-		fprintf(stderr, "maweb connection established\n");
+		LOG("Connection established");
 		field = json_obj_str(payload, "appType", NULL);
 		if(!strncmp(field, "dot2", 4)){
 			data->peer_type = peer_dot2;
@@ -644,13 +645,13 @@ static int maweb_connect(instance* inst){
 			//and the whole websocket 'accept key' dance is plenty stupid as it is
 			|| mmbackend_send_str(data->fd, "Sec-WebSocket-Key: rbEQrXMEvCm4ZUjkj6juBQ==\r\n")
 			|| mmbackend_send_str(data->fd, "\r\n")){
-		fprintf(stderr, "maweb backend failed to communicate with peer\n");
+		LOG("Failed to communicate with peer");
 		return 1;
 	}
 
 	//register new fd
 	if(mm_manage_fd(data->fd, BACKEND_NAME, 1, (void*) inst)){
-		fprintf(stderr, "maweb backend failed to register fd\n");
+		LOG("Failed to register FD");
 		return 1;
 	}
 	return 0;
@@ -667,7 +668,7 @@ static ssize_t maweb_handle_lines(instance* inst, ssize_t bytes_read){
 					data->state = ws_http;
 				}
 				else{
-					fprintf(stderr, "maweb received invalid HTTP response for instance %s\n", inst->name);
+					LOGPF("Invalid HTTP response for instance %s", inst->name);
 					return -1;
 				}
 			}
@@ -737,11 +738,11 @@ static ssize_t maweb_handle_ws(instance* inst, ssize_t bytes_read){
 		case ws_ping:
 			//answer server ping with a pong
 			if(maweb_send_frame(inst, ws_pong, payload, payload_length)){
-				fprintf(stderr, "maweb failed to send pong\n");
+				LOG("Failed to send pong");
 			}
 			return header_length + payload_length;
 		default:
-			fprintf(stderr, "maweb encountered unhandled frame type %02X\n", WS_OP(data->buffer[0]));
+			LOGPF("Unhandled frame type %02X", WS_OP(data->buffer[0]));
 			//this is somewhat dicey, it might be better to handle only header + payload length for known but unhandled types
 			return data->offset + bytes_read;
 	}
@@ -756,7 +757,7 @@ static int maweb_handle_fd(instance* inst){
 	if(bytes_left < 3){
 		data->buffer = realloc(data->buffer, (data->allocated + MAWEB_RECV_CHUNK) * sizeof(uint8_t));
 		if(!data->buffer){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 		data->allocated += MAWEB_RECV_CHUNK;
@@ -765,7 +766,7 @@ static int maweb_handle_fd(instance* inst){
 
 	bytes_read = recv(data->fd, data->buffer + data->offset, bytes_left - 1, 0);
 	if(bytes_read < 0){
-		fprintf(stderr, "maweb backend failed to receive: %s\n", strerror(errno));
+		LOGPF("Failed to receive: %s", strerror(errno));
 		//TODO close, reopen
 		return 1;
 	}
@@ -793,7 +794,7 @@ static int maweb_handle_fd(instance* inst){
 			bytes_handled = data->offset + bytes_read;
 			data->offset = 0;
 			//TODO close, reopen
-			fprintf(stderr, "maweb failed to handle incoming data\n");
+			LOG("Failed to handle incoming data");
 			return 1;
 		}
 		else if(bytes_handled == 0){
@@ -818,7 +819,7 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t n;
 
 	if(num && !data->login){
-		fprintf(stderr, "maweb instance %s can not send output, not logged in\n", inst->name);
+		LOGPF("Instance %s can not send output, not logged in", inst->name);
 		return 0;
 	}
 
@@ -904,16 +905,16 @@ static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v){
 					}
 				}
 				else{
-					fprintf(stderr, "maweb commandline key %s not executed on %s due to mode mismatch\n",
+					LOGPF("Key %s not executed on %s due to mode mismatch",
 							cmdline_keys[chan->index].name, inst->name);
 					continue;
 				}
 				break;
 			default:
-				fprintf(stderr, "maweb control not yet implemented\n");
+				LOG("Control not yet implemented");
 				return 1;
 		}
-		DBGPF("maweb command out %s\n", xmit_buffer);
+		DBGPF("Command out %s", xmit_buffer);
 		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 	}
 	return 0;
@@ -927,7 +928,7 @@ static int maweb_keepalive(){
 
 	//fetch all defined instances
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
+		LOG("Failed to fetch instance list");
 		return 1;
 	}
 
@@ -951,7 +952,7 @@ static int maweb_poll(){
 
 	//fetch all defined instances
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
+		LOG( "Failed to fetch instance list");
 		return 1;
 	}
 
@@ -1004,13 +1005,13 @@ static int maweb_start(size_t n, instance** inst){
 		}
 
 		if(maweb_connect(inst[u])){
-			fprintf(stderr, "Failed to open connection to MA Web Remote for instance %s\n", inst[u]->name);
+			LOGPF("Failed to open connection for instance %s", inst[u]->name);
 			free(inst);
 			return 1;
 		}
 	}
 
-	fprintf(stderr, "maweb backend registering %" PRIsize_t " descriptors to core\n", n);
+	LOGPF("Registering %" PRIsize_t " descriptors to core", n);
 
 	//initialize timeouts
 	last_keepalive = last_update = mm_timestamp();
@@ -1048,6 +1049,6 @@ static int maweb_shutdown(size_t n, instance** inst){
 		free(inst[u]->impl);
 	}
 
-	fprintf(stderr, "maweb backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

@@ -1,3 +1,5 @@
+#define BACKEND_NAME "sacn"
+
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -15,7 +17,6 @@
 
 //upper limit imposed by using the fd index as 16-bit part of the instance id
 #define MAX_FDS 4096
-#define BACKEND_NAME "sacn"
 
 enum /*_sacn_fd_flags*/ {
 	mcast_loop = 1
@@ -49,13 +50,13 @@ MM_PLUGIN_API int init(){
 	};
 
 	if(sizeof(sacn_instance_id) != sizeof(uint64_t)){
-		fprintf(stderr, "sACN instance identification union out of bounds\n");
+		LOG("Instance identification union out of bounds");
 		return 1;
 	}
 
 	//register the backend
 	if(mm_backend_register(sacn)){
-		fprintf(stderr, "Failed to register sACN backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 
@@ -65,7 +66,7 @@ MM_PLUGIN_API int init(){
 static int sacn_listener(char* host, char* port, uint8_t flags){
 	int fd = -1, yes = 1;
 	if(global_cfg.fds >= MAX_FDS){
-		fprintf(stderr, "sACN backend descriptor limit reached\n");
+		LOG("Descriptor limit reached");
 		return -1;
 	}
 
@@ -78,11 +79,11 @@ static int sacn_listener(char* host, char* port, uint8_t flags){
 	global_cfg.fd = realloc(global_cfg.fd, (global_cfg.fds + 1) * sizeof(sacn_fd));
 	if(!global_cfg.fd){
 		close(fd);
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return -1;
 	}
 
-	fprintf(stderr, "sACN backend interface %" PRIsize_t " bound to %s port %s\n", global_cfg.fds, host, port);
+	LOGPF("Interface %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].universes = 0;
 	global_cfg.fd[global_cfg.fds].universe = NULL;
@@ -91,7 +92,7 @@ static int sacn_listener(char* host, char* port, uint8_t flags){
 	if(flags & mcast_loop){
 		//set IP_MCAST_LOOP to allow local applications to receive output
 		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to disable IP_MULTICAST_LOOP on socket: %s\n", strerror(errno));
+			LOGPF("Failed to re-enable IP_MULTICAST_LOOP on socket: %s", strerror(errno));
 		}
 	}
 
@@ -106,7 +107,7 @@ static int sacn_configure(char* option, char* value){
 
 	if(!strcmp(option, "name")){
 		if(strlen(value) > 63){
-			fprintf(stderr, "Invalid sACN source name %s, limit is 63 characters\n", value);
+			LOGPF("Invalid source name %s, limit is 63 characters", value);
 			return 1;
 		}
 
@@ -124,7 +125,7 @@ static int sacn_configure(char* option, char* value){
 		mmbackend_parse_hostspec(value, &host, &port, &next);
 
 		if(!host){
-			fprintf(stderr, "No valid sACN bind address provided\n");
+			LOG("No valid bind address provided");
 			return 1;
 		}
 
@@ -133,14 +134,14 @@ static int sacn_configure(char* option, char* value){
 		}
 
 		if(sacn_listener(host, port ? port : SACN_PORT, flags)){
-			fprintf(stderr, "Failed to bind sACN descriptor: %s\n", value);
+			LOGPF("Failed to bind descriptor: %s", value);
 			return 1;
 		}
 
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown sACN backend option %s\n", option);
+	LOGPF("Unknown backend configuration option %s", option);
 	return 1;
 }
 
@@ -157,7 +158,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		data->fd_index = strtoul(value, NULL, 10);
 
 		if(data->fd_index >= global_cfg.fds){
-			fprintf(stderr, "Configured sACN interface index is out of range on instance %s\n", inst->name);
+			LOGPF("Configured interface index is out of range on instance %s", inst->name);
 			return 1;
 		}
 		return 0;
@@ -170,7 +171,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		mmbackend_parse_hostspec(value, &host, &port, NULL);
 
 		if(!host){
-			fprintf(stderr, "No valid sACN destination for instance %s\n", inst->name);
+			LOGPF("No valid destination for instance %s", inst->name);
 			return 1;
 		}
 
@@ -182,7 +183,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		for(u = 0; u < sizeof(data->cid_filter); u++){
 			data->cid_filter[u] = (strtoul(next, &next, 0) & 0xFF);
 		}
-		fprintf(stderr, "Enabled source CID filter for instance %s\n", inst->name);
+		LOGPF("Enabled source CID filter for instance %s", inst->name);
 		return 0;
 	}
 	else if(!strcmp(option, "unicast")){
@@ -190,7 +191,7 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown configuration option %s for sACN backend\n", option);
+	LOGPF("Unknown instance configuration option %s for instance %s", option, inst->name);
 	return 1;
 }
 
@@ -202,7 +203,7 @@ static instance* sacn_instance(){
 
 	inst->impl = calloc(1, sizeof(sacn_instance_data));
 	if(!inst->impl){
-		fprintf(stderr, "Failed to allocate memory");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -217,7 +218,7 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	
 	//range check
 	if(!chan_a || chan_a > 512){
-		fprintf(stderr, "sACN channel out of range on instance %s: %s\n", inst->name, spec);
+		LOGPF("Channel out of range on instance %s: %s", inst->name, spec);
 		return NULL;
 	}
 	chan_a--;
@@ -226,14 +227,14 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	if(*spec_next == '+'){
 		chan_b = strtoul(spec_next + 1, NULL, 10);
 		if(!chan_b || chan_b > 512){
-			fprintf(stderr, "Invalid wide-channel spec on instance %s: %s\n", inst->name, spec);
+			LOGPF("Invalid wide-channel spec on instance %s: %s", inst->name, spec);
 			return NULL;
 		}
 		chan_b--;
 
 		//if already mapped, bail
 		if(IS_ACTIVE(data->data.map[chan_b]) && data->data.map[chan_b] != (MAP_FINE | chan_a)){
-			fprintf(stderr, "Fine channel %u already mapped on instance %s\n", chan_b, inst->name);
+			LOGPF("Fine channel %u already mapped on instance %s", chan_b, inst->name);
 			return NULL;
 		}
 
@@ -244,7 +245,7 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	if(IS_ACTIVE(data->data.map[chan_a])){
 		if((*spec_next == '+' && data->data.map[chan_a] != (MAP_COARSE | chan_b))
 				|| (*spec_next != '+' && data->data.map[chan_a] != (MAP_SINGLE | chan_a))){
-			fprintf(stderr, "Primary sACN channel %u already mapped in another mode on instance %s\n", chan_a, inst->name);
+			LOGPF("Primary channel %u already mapped in another mode on instance %s", chan_a, inst->name);
 			return NULL;
 		}
 	}
@@ -290,7 +291,7 @@ static int sacn_transmit(instance* inst){
 	memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
 
 	if(sendto(global_cfg.fd[data->fd_index].fd, (uint8_t*) &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		fprintf(stderr, "Failed to output sACN frame for instance %s: %s\n", inst->name, strerror(errno));
+		LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
 	}
 
 	//update last transmit timestamp
@@ -311,7 +312,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	}
 
 	if(!data->xmit_prio){
-		fprintf(stderr, "sACN instance %s not enabled for output (%" PRIsize_t " channel events)\n", inst->name, num);
+		LOGPF("Instance %s not enabled for output (%" PRIsize_t " channel events)", inst->name, num);
 		return 0;
 	}
 
@@ -357,12 +358,12 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 	if(data->format != 0xa1
 			|| data->startcode_offset
 			|| be16toh(data->address_increment) != 1){
-		fprintf(stderr, "sACN framing not supported\n");
+		LOGPF("Framing not supported for incoming data on instance %s\n", inst->name);
 		return 1;
 	}
 
 	if(be16toh(data->channels) > 513){
-		fprintf(stderr, "Invalid sACN frame channel count\n");
+		LOGPF("Invalid frame channel count %d on instance %s", be16toh(data->channels), inst->name);
 		return 1;
 	}
 
@@ -396,7 +397,7 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 			}
 
 			if(!chan){
-				fprintf(stderr, "Active channel %" PRIsize_t " on %s not known to core", u, inst->name);
+				LOGPF("Active channel %" PRIsize_t " on %s not known to core", u, inst->name);
 				return 1;
 			}
 
@@ -413,7 +414,7 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 			}
 
 			if(mm_channel_event(chan, val)){
-				fprintf(stderr, "Failed to push sACN channel event to core\n");
+				LOG("Failed to push event to core");
 				return 1;
 			}
 		}
@@ -464,7 +465,7 @@ static void sacn_discovery(size_t fd){
 		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
 		if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
-			fprintf(stderr, "Failed to output sACN universe discovery frame for interface %" PRIsize_t ": %s\n", fd, strerror(errno));
+			LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, strerror(errno));
 		}
 	}
 }
@@ -524,7 +525,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 					instance_id.fields.uni = be16toh(data->universe);
 					inst = mm_instance_find(BACKEND_NAME, instance_id.label);
 					if(inst && sacn_process_frame(inst, frame, data)){
-						fprintf(stderr, "Failed to process sACN frame\n");
+						LOG("Failed to process frame");
 					}
 				}
 			}
@@ -535,11 +536,11 @@ static int sacn_handle(size_t num, managed_fd* fds){
 		#else
 		if(bytes_read < 0 && errno != EAGAIN){
 		#endif
-			fprintf(stderr, "sACN failed to receive data: %s\n", strerror(errno));
+			LOGPF("Failed to receive data: %s", strerror(errno));
 		}
 
 		if(bytes_read == 0){
-			fprintf(stderr, "sACN listener closed\n");
+			LOG("Listener closed");
 			return 1;
 		}
 	}
@@ -560,7 +561,7 @@ static int sacn_start(size_t n, instance** inst){
 	struct sockaddr_in* dest_v4 = NULL;
 
 	if(!global_cfg.fds){
-		fprintf(stderr, "Failed to start sACN backend: no descriptors bound\n");
+		LOG("Failed to start, no descriptors bound");
 		free(inst);
 		return 1;
 	}
@@ -573,14 +574,14 @@ static int sacn_start(size_t n, instance** inst){
 		inst[u]->ident = id.label;
 
 		if(!data->uni){
-			fprintf(stderr, "Please specify a universe on instance %s\n", inst[u]->name);
+			LOGPF("Please specify a universe on instance %s", inst[u]->name);
 			goto bail;
 		}
 
 		//find duplicates
 		for(p = 0; p < u; p++){
 			if(inst[u]->ident == inst[p]->ident){
-				fprintf(stderr, "Colliding sACN instances, use one: %s - %s\n", inst[u]->name, inst[p]->name);
+				LOGPF("Colliding instances, use one: %s - %s", inst[u]->name, inst[p]->name);
 				goto bail;
 			}
 		}
@@ -588,7 +589,7 @@ static int sacn_start(size_t n, instance** inst){
 		if(!data->unicast_input){
 			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
 			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
-				fprintf(stderr, "Failed to join Multicast group for sACN universe %u on instance %s: %s\n", data->uni, inst[u]->name, strerror(errno));
+				LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst[u]->name, strerror(errno));
 			}
 		}
 
@@ -596,7 +597,7 @@ static int sacn_start(size_t n, instance** inst){
 			//add to list of advertised universes for this fd
 			global_cfg.fd[data->fd_index].universe = realloc(global_cfg.fd[data->fd_index].universe, (global_cfg.fd[data->fd_index].universes + 1) * sizeof(uint16_t));
 			if(!global_cfg.fd[data->fd_index].universe){
-				fprintf(stderr, "Failed to allocate memory\n");
+				LOG("Failed to allocate memory");
 				goto bail;
 			}
 
@@ -614,12 +615,12 @@ static int sacn_start(size_t n, instance** inst){
 		}
 	}
 
-	fprintf(stderr, "sACN backend registering %" PRIsize_t " descriptors to core\n", global_cfg.fds);
+	LOGPF("Registering %" PRIsize_t " descriptors to core", global_cfg.fds);
 	for(u = 0; u < global_cfg.fds; u++){
 		//allocate memory for storing last frame transmission timestamp
 		global_cfg.fd[u].last_frame = calloc(global_cfg.fd[u].universes, sizeof(uint64_t));
 		if(!global_cfg.fd[u].last_frame){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			goto bail;
 		}
 		if(mm_manage_fd(global_cfg.fd[u].fd, BACKEND_NAME, 1, (void*) u)){
@@ -645,6 +646,6 @@ static int sacn_shutdown(size_t n, instance** inst){
 		free(global_cfg.fd[p].last_frame);
 	}
 	free(global_cfg.fd);
-	fprintf(stderr, "sACN backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

@@ -10,6 +10,11 @@
 	#define MIDIMONSTER_VERSION "v0.3-dist"
 #endif
 
+/* Set backend name if unset */
+#ifndef BACKEND_NAME
+	#define BACKEND_NAME "unspec"
+#endif
+
 /* API call attributes and visibilities */
 #ifndef MM_API
 	#ifdef _WIN32
@@ -37,12 +42,14 @@
 
 /* Debug messages only compile in when DEBUG is set */
 #ifdef DEBUG
-	#define DBGPF(format, ...) fprintf(stderr, (format), __VA_ARGS__)
-	#define DBG(message) fprintf(stderr, "%s", (message))
+	#define DBGPF(format, ...) fprintf(stderr, "debug/%s\t" format "\n", (BACKEND_NAME), __VA_ARGS__)
 #else
 	#define DBGPF(format, ...)
-	#define DBG(message)
 #endif
+
+/* Log messages should be routed through these macros to ensure interoperability with different core implementations */
+#define LOGPF(format, ...) fprintf(stderr, "%s\t" format "\n", (BACKEND_NAME), __VA_ARGS__)
+#define LOG(message) fprintf(stderr, "%s\t%s\n", (BACKEND_NAME), (message))
 
 /* Stop compilation if the build system reports an error */
 #ifdef BUILD_ERROR

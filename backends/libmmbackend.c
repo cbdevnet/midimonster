@@ -1,5 +1,7 @@
 #include "libmmbackend.h"
 
+#define LOGPF(format, ...) fprintf(stderr, "libmmbe\t" format "\n", __VA_ARGS__)
+
 void mmbackend_parse_hostspec(char* spec, char** host, char** port, char** options){
 	size_t u = 0;
 
@@ -52,7 +54,7 @@ int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* ad
 
 	int error = getaddrinfo(host, port, &hints, &head);
 	if(error || !head){
-		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(error));
+		LOGPF("Failed to parse address %s port %s: %s", host, port, gai_strerror(error));
 		return 1;
 	}
 
@@ -76,7 +78,7 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 
 	status = getaddrinfo(host, port, &hints, &info);
 	if(status){
-		fprintf(stderr, "Failed to parse address %s port %s: %s\n", host, port, gai_strerror(status));
+		LOGPF("Failed to parse address %s port %s: %s", host, port, gai_strerror(status));
 		return -1;
 	}
 
@@ -90,18 +92,18 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 		//set required socket options
 		yes = 1;
 		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
-			fprintf(stderr, "Failed to enable SO_REUSEADDR on socket\n");
+			LOGPF("Failed to enable SO_REUSEADDR on socket: %s", strerror(errno));
 		}
 
 		if(mcast){
 			yes = 1;
 			if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-				fprintf(stderr, "Failed to enable SO_BROADCAST on socket\n");
+				LOGPF("Failed to enable SO_BROADCAST on socket: %s", strerror(errno));
 			}
 
 			yes = 0;
 			if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-				fprintf(stderr, "Failed to disable IP_MULTICAST_LOOP on socket: %s\n", strerror(errno));
+				LOGPF("Failed to disable IP_MULTICAST_LOOP on socket: %s", strerror(errno));
 			}
 		}
 
@@ -125,7 +127,7 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 	freeaddrinfo(info);
 
 	if(!addr_it){
-		fprintf(stderr, "Failed to create socket for %s port %s\n", host, port);
+		LOGPF("Failed to create socket for %s port %s", host, port);
 		return -1;
 	}
 
@@ -139,7 +141,7 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 	#else
 	int flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		fprintf(stderr, "Failed to set socket nonblocking\n");
+		LOGPF("Failed to set socket nonblocking: %s", strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -153,7 +155,7 @@ int mmbackend_send(int fd, uint8_t* data, size_t length){
 	while(total < length){
 		sent = send(fd, data + total, length - total, 0);
 		if(sent < 0){
-			fprintf(stderr, "Failed to send: %s\n", strerror(errno));
+			LOGPF("Failed to send: %s", strerror(errno));
 			return 1;
 		}
 		total += sent;

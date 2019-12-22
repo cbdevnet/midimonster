@@ -10,7 +10,11 @@ containing all write-enabled universes.
 |---------------|-----------------------|-----------------------|-----------------------|
 | `name`	| `sACN source`		| `MIDIMonster`		| sACN source name	|
 | `cid`		| `0xAA 0xBB 0xCC` ...	| `MIDIMonster`		| Source CID (16 bytes)	|
-| `bind`	| `0.0.0.0 5568`	| none			| Binds a network address to listen for data. This option may be set multiple times, with each descriptor being assigned an index starting from 0 to be used with the `interface` instance configuration option. At least one descriptor is required for transmission. |
+| `bind`	| `0.0.0.0 5568`	| none			| Binds a network address to listen for data. This option may be set multiple times, with each descriptor being assigned an index starting from 0 to be used with the `interface` instance configuration option. At least one descriptor is required for operation. |
+
+The `bind` configuration value can be extended by the keyword `local` to allow software on the
+local host to process the sACN output frames from the MIDIMonster (e.g. `bind = 0.0.0.0 5568 local`).
+This has the side effect of mirroring the output of instances on those descriptors to their input.
 
 #### Instance configuration
 

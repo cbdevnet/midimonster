@@ -56,7 +56,6 @@ typedef union /*_sacn_instance_id*/ {
 
 typedef struct /*_sacn_socket*/ {
 	int fd;
-	uint8_t flags;
 	size_t universes;
 	uint16_t* universe;
 	uint64_t* last_frame;

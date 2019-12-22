@@ -1,3 +1,5 @@
+#define BACKEND_NAME "artnet"
+
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
@@ -6,7 +8,6 @@
 #include "artnet.h"
 
 #define MAX_FDS 255
-#define BACKEND_NAME "artnet"
 
 static uint8_t default_net = 0;
 static size_t artnet_fds = 0;
@@ -15,7 +16,7 @@ static artnet_descriptor* artnet_fd = NULL;
 static int artnet_listener(char* host, char* port){
 	int fd;
 	if(artnet_fds >= MAX_FDS){
-		fprintf(stderr, "ArtNet backend descriptor limit reached\n");
+		LOG("Backend descriptor limit reached");
 		return -1;
 	}
 
@@ -28,11 +29,11 @@ static int artnet_listener(char* host, char* port){
 	artnet_fd = realloc(artnet_fd, (artnet_fds + 1) * sizeof(artnet_descriptor));
 	if(!artnet_fd){
 		close(fd);
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return -1;
 	}
 
-	fprintf(stderr, "ArtNet backend interface %" PRIsize_t " bound to %s port %s\n", artnet_fds, host, port);
+	LOGPF("Interface %" PRIsize_t " bound to %s port %s", artnet_fds, host, port);
 	artnet_fd[artnet_fds].fd = fd;
 	artnet_fd[artnet_fds].output_instances = 0;
 	artnet_fd[artnet_fds].output_instance = NULL;
@@ -55,41 +56,41 @@ MM_PLUGIN_API int init(){
 	};
 
 	if(sizeof(artnet_instance_id) != sizeof(uint64_t)){
-		fprintf(stderr, "ArtNet instance identification union out of bounds\n");
+		LOG("Instance identification union out of bounds");
 		return 1;
 	}
 
 	//register backend
 	if(mm_backend_register(artnet)){
-		fprintf(stderr, "Failed to register ArtNet backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 	return 0;
 }
 
 static int artnet_configure(char* option, char* value){
-	char* host = NULL, *port = NULL;
+	char* host = NULL, *port = NULL, *fd_opts = NULL;
 	if(!strcmp(option, "net")){
 		//configure default net
 		default_net = strtoul(value, NULL, 0);
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, &fd_opts);
 
 		if(!host){
-			fprintf(stderr, "Not valid ArtNet bind address given\n");
+			LOGPF("%s is not a valid bind address", value);
 			return 1;
 		}
 
 		if(artnet_listener(host, (port ? port : ARTNET_PORT))){
-			fprintf(stderr, "Failed to bind ArtNet descriptor: %s\n", value);
+			LOGPF("Failed to bind descriptor: %s", value);
 			return 1;
 		}
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown ArtNet backend option %s\n", option);
+	LOGPF("Unknown backend option %s", option);
 	return 1;
 }
 
@@ -102,7 +103,7 @@ static instance* artnet_instance(){
 
 	data = calloc(1, sizeof(artnet_instance_data));
 	if(!data){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -128,23 +129,23 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 		data->fd_index = strtoul(value, NULL, 0);
 
 		if(data->fd_index >= artnet_fds){
-			fprintf(stderr, "Invalid interface configured for ArtNet instance %s\n", inst->name);
+			LOGPF("Invalid interface configured for instance %s", inst->name);
 			return 1;
 		}
 		return 0;
 	}
 	else if(!strcmp(option, "dest") || !strcmp(option, "destination")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, NULL);
 
 		if(!host){
-			fprintf(stderr, "Not a valid ArtNet destination for instance %s\n", inst->name);
+			LOGPF("Not a valid destination for instance %s: %s", inst->name, value);
 			return 1;
 		}
 
 		return mmbackend_parse_sockaddr(host, port ? port : ARTNET_PORT, &data->dest_addr, &data->dest_len);
 	}
 
-	fprintf(stderr, "Unknown ArtNet option %s for instance %s\n", option, inst->name);
+	LOGPF("Unknown instance option %s for instance %s", option, inst->name);
 	return 1;
 }
 
@@ -156,7 +157,7 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 
 	//primary channel sanity check
 	if(!chan_a || chan_a > 512){
-		fprintf(stderr, "Invalid ArtNet channel specification %s\n", spec);
+		LOGPF("Invalid channel specification %s", spec);
 		return NULL;
 	}
 	chan_a--;
@@ -165,14 +166,14 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	if(*spec_next == '+'){
 		chan_b = strtoul(spec_next + 1, NULL, 10);
 		if(!chan_b || chan_b > 512){
-			fprintf(stderr, "Invalid wide-channel spec %s\n", spec);
+			LOGPF("Invalid wide-channel specification %s", spec);
 			return NULL;
 		}
 		chan_b--;
 
 		//if mapped mode differs, bail
 		if(IS_ACTIVE(data->data.map[chan_b]) && data->data.map[chan_b] != (MAP_FINE | chan_a)){
-			fprintf(stderr, "Fine channel already mapped for ArtNet spec %s\n", spec);
+			LOGPF("Fine channel already mapped for spec %s", spec);
 			return NULL;
 		}
 
@@ -183,7 +184,7 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	if(IS_ACTIVE(data->data.map[chan_a])){
 		if((*spec_next == '+' && data->data.map[chan_a] != (MAP_COARSE | chan_b))
 				|| (*spec_next != '+' && data->data.map[chan_a] != (MAP_SINGLE | chan_a))){
-			fprintf(stderr, "Primary ArtNet channel already mapped at differing mode: %s\n", spec);
+			LOGPF("Primary channel already mapped at differing mode: %s", spec);
 			return NULL;
 		}
 	}
@@ -210,7 +211,7 @@ static int artnet_transmit(instance* inst){
 	memcpy(frame.data, data->data.out, 512);
 
 	if(sendto(artnet_fd[data->fd_index].fd, (uint8_t*) &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		fprintf(stderr, "Failed to output ArtNet frame for instance %s: %s\n", inst->name, strerror(errno));
+		LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
 	}
 
 	//update last frame timestamp
@@ -227,7 +228,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	if(!data->dest_len){
-		fprintf(stderr, "ArtNet instance %s not enabled for output (%" PRIsize_t " channel events)\n", inst->name, num);
+		LOGPF("Instance %s not enabled for output (%" PRIsize_t " channel events)", inst->name, num);
 		return 0;
 	}
 
@@ -267,7 +268,7 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	if(be16toh(frame->length) > 512){
-		fprintf(stderr, "Invalid ArtNet frame channel count\n");
+		LOGPF("Invalid frame channel count: %d", be16toh(frame->length));
 		return 1;
 	}
 
@@ -292,7 +293,7 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 			}
 
 			if(!chan){
-				fprintf(stderr, "Active channel %" PRIsize_t " on %s not known to core\n", p, inst->name);
+				LOGPF("Active channel %" PRIsize_t " on %s not known to core", p, inst->name);
 				return 1;
 			}
 
@@ -311,7 +312,7 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 			}
 
 			if(mm_channel_event(chan, val)){
-				fprintf(stderr, "Failed to push ArtNet channel event to core\n");
+				LOG("Failed to push channel event to core");
 				return 1;
 			}
 		}
@@ -358,7 +359,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 					inst_id.fields.uni = frame->universe;
 					inst = mm_instance_find(BACKEND_NAME, inst_id.label);
 					if(inst && artnet_process_frame(inst, frame)){
-						fprintf(stderr, "Failed to process ArtNet frame\n");
+						LOG("Failed to process frame");
 					}
 				}
 			}
@@ -369,11 +370,11 @@ static int artnet_handle(size_t num, managed_fd* fds){
 		#else
 		if(bytes_read < 0 && errno != EAGAIN){
 		#endif
-			fprintf(stderr, "ArtNet failed to receive data: %s\n", strerror(errno));
+			LOGPF("Failed to receive data: %s", strerror(errno));
 		}
 
 		if(bytes_read == 0){
-			fprintf(stderr, "ArtNet listener closed\n");
+			LOG("Listener closed");
 			return 1;
 		}
 	}
@@ -390,7 +391,7 @@ static int artnet_start(size_t n, instance** inst){
 	};
 
 	if(!artnet_fds){
-		fprintf(stderr, "Failed to start ArtNet backend: no descriptors bound\n");
+		LOG("Failed to start backend: no descriptors bound");
 		return 1;
 	}
 
@@ -405,7 +406,7 @@ static int artnet_start(size_t n, instance** inst){
 		//check for duplicates
 		for(p = 0; p < u; p++){
 			if(inst[u]->ident == inst[p]->ident){
-				fprintf(stderr, "Universe specified multiple times, use one instance: %s - %s\n", inst[u]->name, inst[p]->name);
+				LOGPF("Universe specified multiple times, use one instance: %s - %s", inst[u]->name, inst[p]->name);
 				goto bail;
 			}
 		}
@@ -416,7 +417,7 @@ static int artnet_start(size_t n, instance** inst){
 			artnet_fd[data->fd_index].last_frame = realloc(artnet_fd[data->fd_index].last_frame, (artnet_fd[data->fd_index].output_instances + 1) * sizeof(uint64_t));
 
 			if(!artnet_fd[data->fd_index].output_instance || !artnet_fd[data->fd_index].last_frame){
-				fprintf(stderr, "Failed to allocate memory\n");
+				LOG("Failed to allocate memory");
 				goto bail;
 			}
 			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances] = id;
@@ -426,7 +427,7 @@ static int artnet_start(size_t n, instance** inst){
 		}
 	}
 
-	fprintf(stderr, "ArtNet backend registering %" PRIsize_t " descriptors to core\n", artnet_fds);
+	LOGPF("Registering %" PRIsize_t " descriptors to core", artnet_fds);
 	for(u = 0; u < artnet_fds; u++){
 		if(mm_manage_fd(artnet_fd[u].fd, BACKEND_NAME, 1, (void*) u)){
 			goto bail;
@@ -452,6 +453,6 @@ static int artnet_shutdown(size_t n, instance** inst){
 	}
 	free(artnet_fd);
 
-	fprintf(stderr, "ArtNet backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

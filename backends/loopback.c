@@ -1,7 +1,7 @@
+#define BACKEND_NAME "loopback"
+
 #include <string.h>
 #include "loopback.h"
-
-#define BACKEND_NAME "loopback"
 
 MM_PLUGIN_API int init(){
 	backend loopback = {
@@ -18,7 +18,7 @@ MM_PLUGIN_API int init(){
 
 	//register backend
 	if(mm_backend_register(loopback)){
-		fprintf(stderr, "Failed to register loopback backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 	return 0;
@@ -42,7 +42,7 @@ static instance* loopback_instance(){
 
 	i->impl = calloc(1, sizeof(loopback_instance_data));
 	if(!i->impl){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -64,13 +64,13 @@ static channel* loopback_channel(instance* inst, char* spec, uint8_t flags){
 	if(u == data->n){
 		data->name = realloc(data->name, (u + 1) * sizeof(char*));
 		if(!data->name){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return NULL;
 		}
 
 		data->name[u] = strdup(spec);
 		if(!data->name[u]){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return NULL;
 		}
 		data->n++;
@@ -109,6 +109,6 @@ static int loopback_shutdown(size_t n, instance** inst){
 		free(inst[u]->impl);
 	}
 
-	fprintf(stderr, "Loopback backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

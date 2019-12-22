@@ -1,8 +1,9 @@
+#define BACKEND_NAME "midi"
+
 #include <string.h>
 #include <alsa/asoundlib.h>
 #include "midi.h"
 
-#define BACKEND_NAME "midi"
 static char* sequencer_name = NULL;
 static snd_seq_t* sequencer = NULL;
 
@@ -37,13 +38,13 @@ MM_PLUGIN_API int init(){
 	};
 
 	if(sizeof(midi_channel_ident) != sizeof(uint64_t)){
-		fprintf(stderr, "MIDI channel identification union out of bounds\n");
+		LOG("Channel identification union out of bounds");
 		return 1;
 	}
 
 	//register backend
 	if(mm_backend_register(midi)){
-		fprintf(stderr, "Failed to register MIDI backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 
@@ -64,7 +65,7 @@ static int midi_configure(char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown MIDI backend option %s\n", option);
+	LOGPF("Unknown backend option %s", option);
 	return 1;
 }
 
@@ -76,7 +77,7 @@ static instance* midi_instance(){
 
 	inst->impl = calloc(1, sizeof(midi_instance_data));
 	if(!inst->impl){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -90,7 +91,7 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 	if(!strcmp(option, "read")){
 		//connect input device
 		if(data->read){
-			fprintf(stderr, "MIDI instance %s was already connected to an input device\n", inst->name);
+			LOGPF("Instance %s was already connected to an input device", inst->name);
 			return 1;
 		}
 		data->read = strdup(value);
@@ -99,14 +100,14 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 	else if(!strcmp(option, "write")){
 		//connect output device
 		if(data->write){
-			fprintf(stderr, "MIDI instance %s was already connected to an output device\n", inst->name);
+			LOGPF("Instance %s was already connected to an output device", inst->name);
 			return 1;
 		}
 		data->write = strdup(value);
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown MIDI instance option %s\n", option);
+	LOGPF("Unknown instance option %s", option);
 	return 1;
 }
 
@@ -141,18 +142,18 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 		old_syntax = 1;
 	}
 	else{
-		fprintf(stderr, "Unknown MIDI channel control type in %s\n", spec);
+		LOGPF("Unknown control type in %s", spec);
 		return NULL;
 	}
 
 	ident.fields.channel = strtoul(channel, &channel, 10);
 	if(ident.fields.channel > 15){
-		fprintf(stderr, "MIDI channel out of range in midi channel spec %s\n", spec);
+		LOGPF("Channel out of range in spec %s", spec);
 		return NULL;
 	}
 
 	if(*channel != '.'){
-		fprintf(stderr, "Need MIDI channel specification of form channel<X>.<control><Y>, had %s\n", spec);
+		LOGPF("Need specification of form channel<X>.<control><Y>, had %s", spec);
 		return NULL;
 	}
 	//skip the period
@@ -182,7 +183,7 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 			ident.fields.type = aftertouch;
 		}
 		else{
-			fprintf(stderr, "Unknown MIDI channel control type in %s\n", spec);
+			LOGPF("Unknown control type in %s", spec);
 			return NULL;
 		}
 	}
@@ -306,14 +307,14 @@ static int midi_handle(size_t num, managed_fd* fds){
 				ident.fields.control = ev->data.control.param;
 				break;
 			default:
-				fprintf(stderr, "Ignored MIDI event of unsupported type\n");
+				LOG("Ignored event of unsupported type");
 				continue;
 		}
 
 		inst = mm_instance_find(BACKEND_NAME, ev->dest.port);
 		if(!inst){
 			//FIXME might want to return failure
-			fprintf(stderr, "Delivered MIDI event did not match any instance\n");
+			LOG("Delivered event did not match any instance");
 			continue;
 		}
 
@@ -327,10 +328,10 @@ static int midi_handle(size_t num, managed_fd* fds){
 
 		if(midi_config.detect && event_type){
 			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch){
-				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s\n", inst->name, ident.fields.channel, event_type);
+				LOGPF("Incoming data on channel %s.ch%d.%s", inst->name, ident.fields.channel, event_type);
 			}
 			else{
-				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s%d\n", inst->name, ident.fields.channel, event_type, ident.fields.control);
+				LOGPF("Incoming data on channel %s.ch%d.%s%d", inst->name, ident.fields.channel, event_type, ident.fields.control);
 			}
 		}
 	}
@@ -347,16 +348,16 @@ static int midi_start(size_t n, instance** inst){
 
 	//connect to the sequencer
 	if(snd_seq_open(&sequencer, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
-		fprintf(stderr, "Failed to open ALSA sequencer\n");
+		LOG("Failed to open ALSA sequencer");
 		goto bail;
 	}
 
 	snd_seq_nonblock(sequencer, 1);
-	fprintf(stderr, "MIDI client ID is %d\n", snd_seq_client_id(sequencer));
+	LOGPF("Client ID is %d", snd_seq_client_id(sequencer));
 
 	//update the sequencer client name
 	if(snd_seq_set_client_name(sequencer, sequencer_name ? sequencer_name : "MIDIMonster") < 0){
-		fprintf(stderr, "Failed to set MIDI client name to %s\n", sequencer_name);
+		LOGPF("Failed to set client name to %s", sequencer_name);
 		goto bail;
 	}
 
@@ -369,11 +370,11 @@ static int midi_start(size_t n, instance** inst){
 		//make connections
 		if(data->write){
 			if(snd_seq_parse_address(sequencer, &addr, data->write) == 0){
-				fprintf(stderr, "Connecting output of instance %s to MIDI device %s (%d:%d)\n", inst[p]->name, data->write, addr.client, addr.port);
+				LOGPF("Connecting output of instance %s to device %s (%d:%d)", inst[p]->name, data->write, addr.client, addr.port);
 				snd_seq_connect_to(sequencer, data->port, addr.client, addr.port);
 			}
 			else{
-				fprintf(stderr, "Failed to get destination MIDI device address: %s\n", data->write);
+				LOGPF("Failed to get destination device address: %s", data->write);
 			}
 			free(data->write);
 			data->write = NULL;
@@ -381,11 +382,11 @@ static int midi_start(size_t n, instance** inst){
 
 		if(data->read){
 			if(snd_seq_parse_address(sequencer, &addr, data->read) == 0){
-				fprintf(stderr, "Connecting input from MIDI device %s to instance %s (%d:%d)\n", data->read, inst[p]->name, addr.client, addr.port);
+				LOGPF("Connecting input from device %s to instance %s (%d:%d)", data->read, inst[p]->name, addr.client, addr.port);
 				snd_seq_connect_from(sequencer, data->port, addr.client, addr.port);
 			}
 			else{
-				fprintf(stderr, "Failed to get source MIDI device address: %s\n", data->read);
+				LOGPF("Failed to get source device address: %s", data->read);
 			}
 			free(data->read);
 			data->read = NULL;
@@ -396,12 +397,12 @@ static int midi_start(size_t n, instance** inst){
 	nfds = snd_seq_poll_descriptors_count(sequencer, POLLIN | POLLOUT);
 	pfds = calloc(nfds, sizeof(struct pollfd));
 	if(!pfds){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		goto bail;
 	}
 	nfds = snd_seq_poll_descriptors(sequencer, pfds, nfds, POLLIN | POLLOUT);
 
-	fprintf(stderr, "MIDI backend registering %d descriptors to core\n", nfds);
+	LOGPF("Registering %d descriptors to core", nfds);
 	for(p = 0; p < nfds; p++){
 		if(mm_manage_fd(pfds[p].fd, BACKEND_NAME, 1, NULL)){
 			goto bail;
@@ -440,6 +441,6 @@ static int midi_shutdown(size_t n, instance** inst){
 	free(sequencer_name);
 	sequencer_name = NULL;
 
-	fprintf(stderr, "MIDI backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

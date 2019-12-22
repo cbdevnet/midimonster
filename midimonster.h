@@ -10,6 +10,11 @@
 	#define MIDIMONSTER_VERSION "v0.3-dist"
 #endif
 
+/* Set backend name if unset */
+#ifndef BACKEND_NAME
+	#define BACKEND_NAME "unspec"
+#endif
+
 /* API call attributes and visibilities */
 #ifndef MM_API
 	#ifdef _WIN32
@@ -37,12 +42,14 @@
 
 /* Debug messages only compile in when DEBUG is set */
 #ifdef DEBUG
-	#define DBGPF(format, ...) fprintf(stderr, (format), __VA_ARGS__)
-	#define DBG(message) fprintf(stderr, "%s", (message))
+	#define DBGPF(format, ...) fprintf(stderr, "debug/%s\t" format "\n", (BACKEND_NAME), __VA_ARGS__)
 #else
 	#define DBGPF(format, ...)
-	#define DBG(message)
 #endif
+
+/* Log messages should be routed through these macros to ensure interoperability with different core implementations */
+#define LOGPF(format, ...) fprintf(stderr, "%s\t" format "\n", (BACKEND_NAME), __VA_ARGS__)
+#define LOG(message) fprintf(stderr, "%s\t%s\n", (BACKEND_NAME), (message))
 
 /* Stop compilation if the build system reports an error */
 #ifdef BUILD_ERROR
@@ -92,7 +99,7 @@ struct _managed_fd;
  * 		Parse instance configuration from the user-supplied configuration
  * 		file. Returning a non-zero value fails config parsing.
  * 	* mmbackend_channel
- * 		Parse a channel-spec to be mapped to/from. The `falgs` parameter supplies
+ * 		Parse a channel-spec to be mapped to/from. The `flags` parameter supplies
  * 		additional information to the parser, such as whether the channel is being
  * 		queried for use as input (to the MIDIMonster core) and/or output
  * 		(from the MIDIMonster core) channel (on a per-query basis).

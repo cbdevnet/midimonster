@@ -7,8 +7,12 @@ BACKEND_LIB = libmmbackend.o
 
 SYSTEM := $(shell uname -s)
 
-CFLAGS += -g -fPIC -I../ -Wall -Wpedantic
-CPPFLAGS += -g -fPIC -I../
+# Generate debug symbols unless overridden
+CFLAGS ?= -g
+CPPFLAGS ?= -g
+
+CFLAGS += -fPIC -I../ -Wall -Wpedantic
+CPPFLAGS += -fPIC -I../
 LDFLAGS += -shared
 
 # Build Linux backends if possible
@@ -51,10 +55,13 @@ evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev || echo "-DBUILD_ERROR=
 evdev.so: LDLIBS = $(shell pkg-config --libs libevdev || echo "-DBUILD_ERROR=\"Missing pkg-config data for libevdev\"")
 ola.so: LDLIBS = -lola
 ola.so: CPPFLAGS += -Wno-write-strings
+
 # The pkg-config name for liblua5.3 is subject to discussion. I prefer 'lua5.3' (which works on Debian and OSX),
 # but Arch requires 'lua53' which works on Debian, too, but breaks on OSX.
 lua.so: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
 lua.so: LDLIBS += $(shell pkg-config --libs lua53 || pkg-config --libs lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
+lua.dll: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
+lua.dll: LDLIBS += -L../libs -llua53
 
 %.so :: %.c %.h $(BACKEND_LIB)
 	$(CC) $(CFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
@@ -70,10 +77,12 @@ all: $(BACKEND_LIB) $(BACKENDS)
 ../libmmapi.a:
 	$(MAKE) -C ../ midimonster.exe
 
-windows: export CC = x86_64-w64-mingw32-gcc
-windows: LDLIBS += -lmmapi
-windows: LDFLAGS += -L../
+%.dll: export CC = x86_64-w64-mingw32-gcc
+%.dll: LDLIBS += -lmmapi
+%.dll: LDFLAGS += -L../
+%.dll: CFLAGS += -Wno-format -Wno-pointer-sign
 windows: CFLAGS += -Wno-format -Wno-pointer-sign
+windows: export CC = x86_64-w64-mingw32-gcc
 windows: ../libmmapi.a $(BACKEND_LIB) $(WINDOWS_BACKENDS)
 
 full: $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS)

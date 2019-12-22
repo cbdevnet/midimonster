@@ -94,7 +94,7 @@ size_t json_obj_offset(char* json, char* key);
 size_t json_array_offset(char* json, uint64_t key);
 
 /*
- * Check for for a key within a JSON object / index within an array
+ * Check for a key within a JSON object / index within an array
  * Assumes a zero-terminated, validated JSON object / array as input
  * Returns type of value
  */

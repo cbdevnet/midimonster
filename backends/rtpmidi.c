@@ -1,3 +1,5 @@
+#define BACKEND_NAME "rtpmidi"
+
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -6,8 +8,6 @@
 
 #include "libmmbackend.h"
 #include "rtpmidi.h"
-
-#define BACKEND_NAME "rtpmidi"
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
@@ -38,12 +38,12 @@ MM_PLUGIN_API int init(){
 	};
 
 	if(sizeof(rtpmidi_channel_ident) != sizeof(uint64_t)){
-		fprintf(stderr, "rtpmidi channel identification union out of bounds\n");
+		LOG("Channel identification union out of bounds");
 		return 1;
 	}
 
 	if(mm_backend_register(rtpmidi)){
-		fprintf(stderr, "Failed to register rtpmidi backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 
@@ -55,33 +55,33 @@ static int rtpmidi_configure(char* option, char* value){
 
 	if(!strcmp(option, "mdns-name")){
 		if(cfg.mdns_name){
-			fprintf(stderr, "Duplicate mdns-name assignment\n");
+			LOG("Duplicate mdns-name assignment");
 			return 1;
 		}
 
 		cfg.mdns_name = strdup(value);
 		if(!cfg.mdns_name){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 		return 0;
 	}
 	else if(!strcmp(option, "mdns-bind")){
 		if(cfg.mdns_fd >= 0){
-			fprintf(stderr, "Only one mDNS discovery bind is supported\n");
+			LOG( "Only one mDNS discovery bind is supported");
 			return 1;
 		}
 
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, NULL);
 
 		if(!host){
-			fprintf(stderr, "Not a valid mDNS bind address: %s\n", value);
+			LOGPF("Not a valid mDNS bind address: %s", value);
 			return 1;
 		}
 
 		cfg.mdns_fd = mmbackend_socket(host, (port ? port : RTPMIDI_MDNS_PORT), SOCK_DGRAM, 1, 1);
 		if(cfg.mdns_fd < 0){
-			fprintf(stderr, "Failed to bind mDNS interface: %s\n", value);
+			LOGPF("Failed to bind mDNS interface: %s", value);
 			return 1;
 		}
 		return 0;
@@ -94,7 +94,7 @@ static int rtpmidi_configure(char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown rtpmidi backend option %s\n", option);
+	LOGPF("Unknown backend configuration option %s", option);
 	return 1;
 }
 
@@ -114,14 +114,14 @@ static int rtpmidi_bind_instance(rtpmidi_instance_data* data, char* host, char* 
 	//bind control port
 	if(data->mode == apple){
 		if(getsockname(data->fd, (struct sockaddr*) &sock_addr, &sock_len)){
-			fprintf(stderr, "Failed to fetch data port information: %s\n", strerror(errno));
+			LOGPF("Failed to fetch data port information: %s", strerror(errno));
 			return 1;
 		}
 
 		snprintf(control_port, sizeof(control_port), "%d", be16toh(((struct sockaddr_in*)&sock_addr)->sin_port) - 1);
 		data->control_fd = mmbackend_socket(host, control_port, SOCK_DGRAM, 1, 0);
 		if(data->control_fd < 0){
-			fprintf(stderr, "Failed to bind control port %s\n", control_port);
+			LOGPF("Failed to bind control port %s", control_port);
 			return 1;
 		}
 	}
@@ -141,7 +141,7 @@ static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storag
 
 	data->peer = realloc(data->peer, (data->peers + 1) * sizeof(rtpmidi_peer));
 	if(!data->peer){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		data->peers = 0;
 		return 1;
 	}
@@ -167,7 +167,7 @@ static int rtpmidi_push_invite(instance* inst, char* peer){
 	if(u == cfg.announces){
 		cfg.announce = realloc(cfg.announce, (cfg.announces + 1) * sizeof(rtpmidi_announce));
 		if(!cfg.announce){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			cfg.announces = 0;
 			return 1;
 		}
@@ -189,7 +189,7 @@ static int rtpmidi_push_invite(instance* inst, char* peer){
 	//extend the invite list
 	cfg.announce[u].invite = realloc(cfg.announce[u].invite, (cfg.announce[u].invites + 1) * sizeof(char*));
 	if(!cfg.announce[u].invite){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		cfg.announce[u].invites = 0;
 		return 1;
 	}
@@ -197,7 +197,7 @@ static int rtpmidi_push_invite(instance* inst, char* peer){
 	//append the new invitee
 	cfg.announce[u].invite[p] = strdup(peer);
 	if(!cfg.announce[u].invite[p]){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return 1;
 	}
 
@@ -220,26 +220,26 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 			data->mode = apple;
 			return 0;
 		}
-		fprintf(stderr, "Unknown rtpmidi instance mode %s for instance %s\n", value, inst->name);
+		LOGPF("Unknown instance mode %s for instance %s", value, inst->name);
 		return 1;
 	}
 	else if(!strcmp(option, "ssrc")){
 		data->ssrc = strtoul(value, NULL, 0);
 		if(!data->ssrc){
-			fprintf(stderr, "Random SSRC will be generated for rtpmidi instance %s\n", inst->name);
+			LOGPF("Random SSRC will be generated for instance %s", inst->name);
 		}
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
 		if(data->mode == unconfigured){
-			fprintf(stderr, "Please specify mode for instance %s before setting bind host\n", inst->name);
+			LOGPF("Please specify mode for instance %s before setting bind host", inst->name);
 			return 1;
 		}
 
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, NULL);
 
 		if(!host){
-			fprintf(stderr, "Could not parse bind host specification %s for instance %s\n", value, inst->name);
+			LOGPF("Could not parse bind host specification %s for instance %s", value, inst->name);
 			return 1;
 		}
 
@@ -247,7 +247,7 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 	}
 	else if(!strcmp(option, "learn")){
 		if(data->mode != direct){
-			fprintf(stderr, "The rtpmidi 'learn' option is only valid for direct mode instances\n");
+			LOG("'learn' option is only valid for direct mode instances");
 			return 1;
 		}
 		data->learn_peers = 0;
@@ -257,14 +257,14 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 		return 0;
 	}
 	else if(!strcmp(option, "peer")){
-		mmbackend_parse_hostspec(value, &host, &port);
+		mmbackend_parse_hostspec(value, &host, &port, NULL);
 		if(!host || !port){
-			fprintf(stderr, "Invalid peer %s configured on rtpmidi instance %s\n", value, inst->name);
+			LOGPF("Invalid peer %s configured on instance %s", value, inst->name);
 			return 1;
 		}
 
 		if(mmbackend_parse_sockaddr(host, port, &sock_addr, &sock_len)){
-			fprintf(stderr, "Failed to resolve peer %s configured on rtpmidi instance %s\n", value, inst->name);
+			LOGPF("Failed to resolve peer %s on instance %s", value, inst->name);
 			return 1;
 		}
 
@@ -272,20 +272,20 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 	}
 	else if(!strcmp(option, "session")){
 		if(data->mode != apple){
-			fprintf(stderr, "The rtpmidi 'session' option is only valid for apple mode instances\n");
+			LOG("'session' option is only valid for apple mode instances");
 			return 1;
 		}
 		free(data->session_name);
 		data->session_name = strdup(value);
 		if(!data->session_name){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 		return 0;
 	}
 	else if(!strcmp(option, "invite")){
 		if(data->mode != apple){
-			fprintf(stderr, "The rtpmidi 'invite' option is only valid for apple mode instances\n");
+			LOG("'invite' option is only valid for apple mode instances");
 			return 1;
 		}
 
@@ -293,19 +293,19 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 	}
 	else if(!strcmp(option, "join")){
 		if(data->mode != apple){
-			fprintf(stderr, "The rtpmidi 'join' option is only valid for apple mode instances\n");
+			LOG("'join' option is only valid for apple mode instances");
 			return 1;
 		}
 		free(data->accept);
 		data->accept = strdup(value);
 		if(!data->accept){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown rtpmidi instance option %s\n", option);
+	LOGPF("Unknown instance configuration option %s on instance %s", option, inst->name);
 	return 1;
 }
 
@@ -319,7 +319,7 @@ static instance* rtpmidi_instance(){
 
 	data = calloc(1, sizeof(rtpmidi_instance_data));
 	if(!data){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 	data->fd = -1;
@@ -342,18 +342,18 @@ static channel* rtpmidi_channel(instance* inst, char* spec, uint8_t flags){
 		}
 	}
 	else{
-		fprintf(stderr, "Invalid rtpmidi channel specification %s\n", spec);
+		LOGPF("Invalid channel specification %s", spec);
 		return NULL;
 	}
 
 	ident.fields.channel = strtoul(next_token, &next_token, 10);
 	if(ident.fields.channel > 15){
-		fprintf(stderr, "rtpmidi channel out of range in channel spec %s\n", spec);
+		LOGPF("Channel out of range in channel spec %s", spec);
 		return NULL;
 	}
 
 	if(*next_token != '.'){
-		fprintf(stderr, "rtpmidi channel specification %s does not conform to channel<X>.<control><Y>\n", spec);
+		LOGPF("Channel specification %s does not conform to channel<X>.<control><Y>", spec);
 		return NULL;
 	}
 
@@ -378,7 +378,7 @@ static channel* rtpmidi_channel(instance* inst, char* spec, uint8_t flags){
 		ident.fields.type = aftertouch;
 	}
 	else{
-		fprintf(stderr, "Unknown rtpmidi channel control type in spec %s\n", spec);
+		LOGPF("Unknown control type in spec %s", spec);
 		return NULL;
 	}
 
@@ -483,7 +483,7 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 		//ignore
 	}
 	else{
-		fprintf(stderr, "Unknown AppleMIDI session command %02X %02X\n", command->command[0], command->command[1]);
+		LOGPF("Unknown AppleMIDI session command %02X %02X", command->command[0], command->command[1]);
 	}
 
 	return 0;
@@ -500,12 +500,12 @@ static int rtpmidi_handle_data(instance* inst){
 
 	//TODO receive until EAGAIN
 	if(bytes_recv < 0){
-		fprintf(stderr, "rtpmidi failed to receive for instance %s\n", inst->name);
+		LOGPF("Failed to receive for instance %s", inst->name);
 		return 1;
 	}
 
 	if(bytes_recv < sizeof(rtpmidi_header)){
-		fprintf(stderr, "Skipping short packet on rtpmidi instance %s\n", inst->name);
+		LOGPF("Skipping short packet on instance %s", inst->name);
 		return 0;
 	}
 
@@ -514,7 +514,7 @@ static int rtpmidi_handle_data(instance* inst){
 		return rtpmidi_handle_applemidi(inst, data->fd, frame, bytes_recv, &sock_addr, sock_len);
 	}
 	else if(rtp_header->vpxcc != RTPMIDI_HEADER_MAGIC || RTPMIDI_GET_TYPE(rtp_header->mpt) != RTPMIDI_HEADER_TYPE){
-		fprintf(stderr, "rtpmidi instance %s received frame with invalid header magic\n", inst->name);
+		LOGPF("Frame with invalid header magic on %s", inst->name);
 		return 0;
 	}
 
@@ -530,7 +530,7 @@ static int rtpmidi_handle_data(instance* inst){
 		}
 
 		if(u == data->peers){
-			fprintf(stderr, "rtpmidi instance %s learned new peer\n", inst->name);
+			LOGPF("Learned new peer on %s", inst->name);
 			return rtpmidi_push_peer(data, sock_addr, sock_len);
 		}
 	}
@@ -545,13 +545,13 @@ static int rtpmidi_handle_control(instance* inst){
 	ssize_t bytes_recv = recvfrom(data->control_fd, frame, sizeof(frame), 0, (struct sockaddr*) &sock_addr, &sock_len);
 
 	if(bytes_recv < 0){
-		fprintf(stderr, "rtpmidi failed to receive for instance %s\n", inst->name);
+		LOGPF("Failed to receive on control socket for instance %s", inst->name);
 		return 1;
 	}
 
 	//the shortest applemidi packet is still larger than the rtpmidi header, so use that as bar
 	if(bytes_recv < sizeof(rtpmidi_header)){
-		fprintf(stderr, "Skipping short packet on rtpmidi instance %s\n", inst->name);
+		LOGPF("Skipping short packet on control socket of instance %s", inst->name);
 		return 0;
 	}
 
@@ -559,7 +559,7 @@ static int rtpmidi_handle_control(instance* inst){
 		return rtpmidi_handle_applemidi(inst, data->control_fd, frame, bytes_recv, &sock_addr, sock_len);
 	}
 
-	fprintf(stderr, "Unknown session protocol frame received on rtpmidi instance %s\n", inst->name);
+	LOGPF("Unknown session protocol frame received on instance %s", inst->name);
 	return 0;
 }
 
@@ -590,7 +590,7 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 				rv |=  rtpmidi_handle_control(inst);
 			}
 			else{
-				fprintf(stderr, "rtpmidi signaled descriptor not recognized\n");
+				LOG("Signaled for unknown descriptor");
 			}
 		}
 	}
@@ -613,20 +613,20 @@ static int rtpmidi_start(size_t n, instance** inst){
 	//register mdns fd to core
 	if(cfg.mdns_fd >= 0){
 		if(mm_manage_fd(cfg.mdns_fd, BACKEND_NAME, 1, NULL)){
-			fprintf(stderr, "rtpmidi failed to register mDNS socket with core\n");
+			LOG("Failed to register mDNS socket with core");
 			return 1;
 		}
 		fds++;
 	}
 	else{
-		fprintf(stderr, "No mDNS discovery interface bound, AppleMIDI session discovery disabled\n");
+		LOG("No mDNS discovery interface bound, AppleMIDI session discovery disabled");
 	}
 
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
 		//check whether instances are explicitly configured to a mode
 		if(data->mode == unconfigured){
-			fprintf(stderr, "rtpmidi instance %s is missing a mode configuration\n", inst[u]->name);
+			LOGPF("Instance %s is missing a mode configuration", inst[u]->name);
 			return 1;
 		}
 
@@ -637,19 +637,19 @@ static int rtpmidi_start(size_t n, instance** inst){
 
 		//if not bound, bind to default
 		if(data->fd < 0 && rtpmidi_bind_instance(data, RTPMIDI_DEFAULT_HOST, NULL)){
-			fprintf(stderr, "Failed to bind default sockets for rtpmidi instance %s\n", inst[u]->name);
+			LOGPF("Failed to bind default sockets for instance %s", inst[u]->name);
 			return 1;
 		}
 
 		//register fds to core
 		if(mm_manage_fd(data->fd, BACKEND_NAME, 1, inst[u]) || (data->control_fd >= 0 && mm_manage_fd(data->control_fd, BACKEND_NAME, 1, inst[u]))){
-			fprintf(stderr, "rtpmidi failed to register instance socket with core\n");
+			LOGPF("Failed to register descriptor for instance %s with core", inst[u]->name);
 			return 1;
 		}
 		fds += (data->control_fd >= 0) ? 2 : 1;
 	}
 
-	fprintf(stderr, "rtpmidi backend registered %" PRIsize_t " descriptors to core\n", fds);
+	LOGPF("Registered %" PRIsize_t " descriptors to core", fds);
 	return 0;
 }
 
@@ -687,5 +687,6 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 		close(cfg.mdns_fd);
 	}
 
+	LOG("Backend shut down");
 	return 0;
 }

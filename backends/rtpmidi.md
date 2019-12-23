@@ -13,7 +13,9 @@ selectable per-instance, with some methods requiring additional global configura
 * Direct connection with peer learning: The instance will send and receive data from peers
 	configured in the instance configuration as well as previously unknown peers that
 	voluntarily send data to the instance.
-* AppleMIDI session management:
+* AppleMIDI session management: The instance will be able to communicate (either as participant
+	or initiator) in an AppleMIDI session, which can optionally be announced via mDNS (better
+	known as "Bonjour" to Apple users).
 
 Note that instances that receive data from multiple peers will combine all inputs into one
 stream, which may lead to inconsistencies during playback.
@@ -50,7 +52,7 @@ Common instance configuration parameters
 | `bind`	| `10.1.2.1 9001`	| `:: <random>`		| Local network address to bind to (note that AppleMIDI requires two consecutive port numbers to be allocated) |
 | `session`	| `Just Jamming`	| `MIDIMonster`		| Session name to announce via mDNS |
 | `invite`	| `pad`			| none			| Devices to send invitations to when discovered (the special value `*` invites all discovered peers). Setting this option makes the instance a session initiator. May be specified multiple times |
-| `join`	| `Just Jamming`	| none			| Session for which to accept invitations (the special value `*` accepts all invitations). Setting this option makes the instance a session participant |
+| `join`	| `Just Jamming`	| none			| Session for which to accept invitations (the special value `*` accepts the first invitation seen). Setting this option makes the instance a session participant |
 | `peer`	| `10.1.2.3 9001`	| none			| Configure a direct session peer, bypassing AppleMIDI discovery. May be specified multiple times |
 
 Note that AppleMIDI session discovery requires mDNS functionality, thus the `mdns-name` global parameter

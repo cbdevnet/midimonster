@@ -19,13 +19,7 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 #define RTPMIDI_HEADER_MAGIC 0x80
 #define RTPMIDI_HEADER_TYPE 0x61
 #define RTPMIDI_GET_TYPE(a) ((a) & 0x7F)
-
-#define APPLEMIDI_INVITE "IN"
-#define APPLEMIDI_ACCEPT "OK"
-#define APPLEMIDI_REJECT "NO"
-#define APPLEMIDI_LEAVE "BY"
-#define APPLEMIDI_SYNC "CK"
-#define APPLEMIDI_FEEDBACK "RS"
+#define RTPMIDI_DEFAULT_NAME "MIDIMonster"
 
 enum /*_rtpmidi_channel_type*/ {
 	none = 0,
@@ -55,7 +49,8 @@ typedef union {
 typedef struct /*_rtpmidi_peer*/ {
 	struct sockaddr_storage dest;
 	socklen_t dest_len;
-	uint32_t ssrc;
+	//uint32_t ssrc;
+	uint8_t inactive;
 } rtpmidi_peer;
 
 typedef struct /*_rtmidi_instance_data*/ {
@@ -70,8 +65,8 @@ typedef struct /*_rtmidi_instance_data*/ {
 	uint16_t sequence;
 
 	//apple-midi config
-	char* session_name;
-	char* accept;
+	char* session_name; /* initiator only */
+	char* accept; /* participant only */
 
 	//direct mode config
 	uint8_t learn_peers;
@@ -83,10 +78,19 @@ typedef struct /*rtpmidi_announced_instance*/ {
 	char** invite;
 } rtpmidi_announce;
 
+enum applemidi_command {
+	apple_invite = 0x494E, //IN
+	apple_accept = 0x4F4B, //OK
+	apple_reject = 0x4E4F, //NO
+	apple_leave = 0x4259, //BY
+	apple_sync = 0x434B, //CK
+	apple_feedback = 0x5253 //RS
+};
+
 #pragma pack(push, 1)
 typedef struct /*_apple_session_command*/ {
 	uint16_t res1;
-	uint8_t command[2];
+	uint16_t command;
 	uint32_t version;
 	uint32_t token;
 	uint32_t ssrc;
@@ -95,19 +99,19 @@ typedef struct /*_apple_session_command*/ {
 
 typedef struct /*_apple_session_sync*/ {
 	uint16_t res1;
-	uint8_t command[2];
+	uint16_t command;
 	uint32_t ssrc;
 	uint8_t count;
 	uint8_t res2[3];
 	uint64_t timestamp[3];
-} apple_sync;
+} apple_sync_frame;
 
 typedef struct /*_apple_session_feedback*/ {
 	uint16_t res1;
 	uint8_t command[2];
 	uint32_t ssrc;
 	uint32_t sequence;
-} apple_feedback;
+} apple_journal_feedback;
 
 typedef struct /*_rtp_midi_header*/ {
 	uint8_t vpxcc;

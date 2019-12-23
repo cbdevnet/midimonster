@@ -1,4 +1,5 @@
 #define BACKEND_NAME "rtpmidi"
+#define DEBUG
 
 #include <string.h>
 #include <errno.h>
@@ -8,6 +9,9 @@
 
 #include "libmmbackend.h"
 #include "rtpmidi.h"
+
+//TODO learn peer ssrcs
+//TODO participants need to initiate clock sync at some point
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
@@ -130,26 +134,35 @@ static int rtpmidi_bind_instance(rtpmidi_instance_data* data, char* host, char* 
 }
 
 static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storage sock_addr, socklen_t sock_len){
-	size_t u;
+	size_t u, p = data->peers;
 
 	for(u = 0; u < data->peers; u++){
 		//check whether the peer is already in the list
-		if(sock_len == data->peer[u].dest_len && !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
+		if(!data->peer[u].inactive
+				&& sock_len == data->peer[u].dest_len
+				&& !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
 			return 0;
+		}
+
+		if(data->peer[u].inactive){
+			p = u;
 		}
 	}
 
-	data->peer = realloc(data->peer, (data->peers + 1) * sizeof(rtpmidi_peer));
-	if(!data->peer){
-		LOG("Failed to allocate memory");
-		data->peers = 0;
-		return 1;
+	if(p == data->peers){
+		data->peer = realloc(data->peer, (data->peers + 1) * sizeof(rtpmidi_peer));
+		if(!data->peer){
+			LOG("Failed to allocate memory");
+			data->peers = 0;
+			return 1;
+		}
+		data->peers++;
+		DBGPF("Extending peer registry to %" PRIsize_t " entries", data->peers);
 	}
 
-	data->peer[data->peers].dest = sock_addr;
-	data->peer[data->peers].dest_len = sock_len;
-
-	data->peers++;
+	data->peer[p].inactive = 0;
+	data->peer[p].dest = sock_addr;
+	data->peer[p].dest_len = sock_len;
 	return 0;
 }
 
@@ -445,7 +458,9 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	//TODO journal section
 
 	for(u = 0; u < data->peers; u++){
-		sendto(data->fd, frame, offset, 0, (struct sockaddr*) &data->peer[u].dest, data->peer[u].dest_len);
+		if(!data->peer[u].inactive){
+			sendto(data->fd, frame, offset, 0, (struct sockaddr*) &data->peer[u].dest, data->peer[u].dest_len);
+		}
 	}
 
 	return 0;
@@ -453,37 +468,141 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 
 static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size_t bytes, struct sockaddr_storage* peer, socklen_t peer_len){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	uint8_t response[RTPMIDI_PACKET_BUFFER] = "";
 	apple_command* command = (apple_command*) frame;
-	size_t u;
+	char* session_name = (char*) frame + sizeof(apple_command);
+	size_t u, n;
+
+	command->command = be16toh(command->command);
+
+	//check command version (except for clock sync and receiver feedback)
+	if(command->command != apple_sync && command->command != apple_feedback
+			&& be32toh(command->version) != 2){
+		LOGPF("Invalid AppleMIDI command version %" PRIu32 " on instance %s", be32toh(command->version), inst->name);
+		return 0;
+	}
 
 	//find peer if already in list
 	for(u = 0; u < data->peers; u++){
-		if(data->peer[u].dest_len == peer_len
+		if(!data->peer[u].inactive
+				&& data->peer[u].dest_len == peer_len
 				&& !memcmp(&data->peer[u].dest, peer, peer_len)){
 			break;
 		}
 	}
 
-	if(!strncmp((char*) command->command, APPLEMIDI_INVITE, 2)){
-		//TODO check whether the session is in the accept list
+	if(command->command == apple_invite){
+		//check session name
+		for(n = sizeof(apple_command); n < bytes; n++){
+			if(!frame[n]){
+				break;
+			}
+
+			if(!isprint(frame[n])){
+				session_name = NULL;
+				break;
+			}
+		}
+
+		//unterminated string
+		if(n == bytes){
+			session_name = NULL;
+		}
+
+		//FIXME if already in session, reject the invitation
+		if(data->accept &&
+				(!strcmp(data->accept, "*") || (session_name && !strcmp(session_name, data->accept)))){
+			//accept the invitation
+			LOGPF("Instance %s accepting invitation to session %s%s", inst->name, session_name ? session_name : "UNNAMED", (fd == data->control_fd) ? " (control)":"");
+			//send accept message
+			apple_command* accept = (apple_command*) response;
+			accept->res1 = 0xFFFF;
+			accept->command = htobe16(apple_accept);
+			accept->version = htobe32(2);
+			accept->token = command->token;
+			accept->ssrc = htobe32(data->ssrc);
+			//add local name to response
+			//FIXME might want to use the session name in case it is set
+			if(cfg.mdns_name){
+				memcpy(response + sizeof(apple_command), cfg.mdns_name, strlen(cfg.mdns_name) + 1);
+			}
+			else{
+				memcpy(response + sizeof(apple_command), RTPMIDI_DEFAULT_NAME, strlen(RTPMIDI_DEFAULT_NAME) + 1);
+			}
+			sendto(fd, response, sizeof(apple_command) + strlen(cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
+
+			//push peer
+			if(fd != data->control_fd){
+				return rtpmidi_push_peer(data, *peer, peer_len);
+			}
+			return 0;
+		}
+		else{
+			//send reject message
+			LOGPF("Instance %s rejecting invitation to session %s", inst->name, session_name ? session_name : "UNNAMED");
+			apple_command reject = {
+				.res1 = 0xFFFF,
+				.command = htobe16(apple_reject),
+				.version = htobe32(2),
+				.token = command->token,
+				.ssrc = htobe32(data->ssrc)
+			};
+			sendto(fd, (uint8_t*) &reject, sizeof(apple_command), 0, (struct sockaddr*) peer, peer_len);
+		}
 	}
-	else if(!strncmp((char*) command->command, APPLEMIDI_ACCEPT, 2)){
-		//TODO mark peer as in-session, start timesync
+	else if(command->command == apple_accept){
+		if(fd != data->control_fd){
+			return rtpmidi_push_peer(data, *peer, peer_len);
+			//FIXME store ssrc, start timesync
+		}
+		else{
+			//TODO send invite on data fd
+
+		}
 	}
-	else if(!strncmp((char*) command->command, APPLEMIDI_REJECT, 2)){
-		//TODO mark peer as rejected (or retry invitation)
+	else if(command->command == apple_reject){
+		//just ignore this for now and retry the invitation
 	}
-	else if(!strncmp((char*) command->command, APPLEMIDI_LEAVE, 2)){
-		//TODO mark peer as disconnected, retry invitation
+	else if(command->command == apple_leave){
+		//remove peer from list
+		if(u != data->peers){
+			data->peer[u].inactive = 1;
+		}
 	}
-	else if(!strncmp((char*) command->command, APPLEMIDI_SYNC, 2)){
-		//TODO respond with sync answer
+	else if(command->command == apple_sync){
+		//respond with sync answer
+		memcpy(response, frame, bytes);
+		apple_sync_frame* sync = (apple_sync_frame*) response;
+		DBGPF("Incoming sync on instance %s (%d)", inst->name, sync->count);
+		sync->command = htobe16(apple_sync);
+		sync->ssrc = htobe32(data->ssrc);
+		switch(sync->count){
+			case 0:
+				//this happens if we're a participant
+				sync->count++;
+				sync->timestamp[1] = htobe64(mm_timestamp() * 10);
+				break;
+			case 1:
+				//this happens if we're an initiator
+				sync->count++;
+				sync->timestamp[2] = htobe64(mm_timestamp() * 10);
+				break;
+			default:
+				//ignore this one
+				return 0;
+		}
+
+		sendto(fd, response, sizeof(apple_sync_frame), 0, (struct sockaddr*) peer, peer_len);
+		return 0;
 	}
-	else if(!strncmp((char*) command->command, APPLEMIDI_FEEDBACK, 2)){
-		//ignore
+	else if(command->command == apple_feedback){
+		if(u != data->peers){
+			//TODO store this somewhere to properly update the recovery journal
+			LOGPF("Feedback on instance %s", inst->name);
+		}
 	}
 	else{
-		LOGPF("Unknown AppleMIDI session command %02X %02X", command->command[0], command->command[1]);
+		LOGPF("Unknown AppleMIDI session command %04X", command->command);
 	}
 
 	return 0;
@@ -523,7 +642,8 @@ static int rtpmidi_handle_data(instance* inst){
 	//try to learn peers
 	if(data->learn_peers){
 		for(u = 0; u < data->peers; u++){
-			if(data->peer[u].dest_len == sock_len
+			if(!data->peer[u].inactive
+					&& data->peer[u].dest_len == sock_len
 					&& !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
 				break;
 			}
@@ -632,7 +752,7 @@ static int rtpmidi_start(size_t n, instance** inst){
 
 		//generate random ssrc's
 		if(!data->ssrc){
-			data->ssrc = rand() << 16 | rand();
+			data->ssrc = ((uint32_t) rand()) << 16 | rand();
 		}
 
 		//if not bound, bind to default

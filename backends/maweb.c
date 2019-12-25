@@ -752,7 +752,7 @@ static ssize_t maweb_handle_ws(instance* inst, ssize_t bytes_read){
 
 static int maweb_handle_fd(instance* inst){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
-	ssize_t bytes_read, bytes_left = data->allocated - data->offset, bytes_handled;
+	ssize_t bytes_read, bytes_left = data->allocated - data->offset, bytes_handled = 0;
 
 	if(bytes_left < 3){
 		data->buffer = realloc(data->buffer, (data->allocated + MAWEB_RECV_CHUNK) * sizeof(uint8_t));

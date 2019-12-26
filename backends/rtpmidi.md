@@ -36,7 +36,7 @@ Common instance configuration parameters
 |---------------|-----------------------|-----------------------|-----------------------|
 | `ssrc`	| `0xDEADBEEF`		| Randomly generated	| 32-bit synchronization source identifier |
 | `mode`	| `direct`		| none			| Instance session management mode (`direct` or `apple`) |
-| `peer`	| `10.1.2.3 9001`	| none			| MIDI session peer, may be specified multiple times. Bypasses session discovery protocols |
+| `peer`	| `10.1.2.3 9001`	| none			| MIDI session peer, may be specified multiple times. Bypasses session discovery (but still performs session negotiation) |
 
 `direct` mode instance configuration parameters
 

@@ -12,6 +12,7 @@
 
 //TODO learn peer ssrcs
 //TODO participants need to initiate clock sync at some point
+//TODO applemode peers still need session negotiation (peer option should only bypass discovery)
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
@@ -523,12 +524,7 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 			accept->ssrc = htobe32(data->ssrc);
 			//add local name to response
 			//FIXME might want to use the session name in case it is set
-			if(cfg.mdns_name){
-				memcpy(response + sizeof(apple_command), cfg.mdns_name, strlen(cfg.mdns_name) + 1);
-			}
-			else{
-				memcpy(response + sizeof(apple_command), RTPMIDI_DEFAULT_NAME, strlen(RTPMIDI_DEFAULT_NAME) + 1);
-			}
+			memcpy(response + sizeof(apple_command), cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME, strlen((cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME)) + 1);
 			sendto(fd, response, sizeof(apple_command) + strlen(cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
 
 			//push peer
@@ -552,12 +548,24 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 	}
 	else if(command->command == apple_accept){
 		if(fd != data->control_fd){
+			LOGPF("Instance %s negotiated new peer\n", inst->name);
 			return rtpmidi_push_peer(data, *peer, peer_len);
 			//FIXME store ssrc, start timesync
 		}
 		else{
-			//TODO send invite on data fd
-
+			//send invite on data fd
+			LOGPF("Instance %s peer accepted on control port, inviting data port\n", inst->name);
+			//FIXME limit max length of session name
+			apple_command* invite = (apple_command*) response;
+			invite->res1 = 0xFFFF;
+			invite->command = htobe16(apple_invite);
+			invite->version = htobe32(2);
+			invite->token = command->token;
+			invite->ssrc = htobe32(data->ssrc);
+			memcpy(response + sizeof(apple_command), data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME, strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1);
+			//calculate data port
+			((struct sockaddr_in*) peer)->sin_port++;
+			sendto(data->fd, response, sizeof(apple_command) + strlen(data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
 		}
 	}
 	else if(command->command == apple_reject){
@@ -775,7 +783,7 @@ static int rtpmidi_start(size_t n, instance** inst){
 
 static int rtpmidi_shutdown(size_t n, instance** inst){
 	rtpmidi_instance_data* data = NULL;
-	size_t u;
+	size_t u, p;
 
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
@@ -801,8 +809,18 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 		inst[u]->impl = NULL;
 	}
 
-	//TODO free announces
+	for(u = 0; u < cfg.announces; u++){
+		for(p = 0; p < cfg.announce[u].invites; p++){
+			free(cfg.announce[u].invite[p]);
+		}
+		free(cfg.announce[u].invite);
+	}
+	free(cfg.announce);
+	cfg.announce = NULL;
+	cfg.announces = 0;
+
 	free(cfg.mdns_name);
+	cfg.mdns_name = NULL;
 	if(cfg.mdns_fd >= 0){
 		close(cfg.mdns_fd);
 	}

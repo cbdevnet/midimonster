@@ -134,6 +134,22 @@ static int rtpmidi_bind_instance(rtpmidi_instance_data* data, char* host, char* 
 	return 0;
 }
 
+static char* rtpmidi_type_name(uint8_t type){
+	switch(type){
+		case note:
+			return "note";
+		case cc:
+			return "cc";
+		case pressure:
+			return "pressure";
+		case aftertouch:
+			return "aftertouch";
+		case pitchbend:
+			return "pitch";
+	}
+	return "unknown";
+}
+
 static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storage sock_addr, socklen_t sock_len){
 	size_t u, p = data->peers;
 
@@ -616,14 +632,145 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 	return 0;
 }
 
+static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
+	uint16_t length = 0;
+	size_t offset = 1, decode_time = 0, command_bytes = 0;
+	uint8_t midi_status = 0;
+	rtpmidi_channel_ident ident;
+	channel_value val;
+	channel* chan = NULL;
+
+	if(!bytes){
+		LOGPF("No command section in data on instance %s", inst->name);
+		return 1;
+	}
+
+	//calculate midi command section length
+	length = frame[0] & 0x0F;
+	if(frame[0] & 0x80){
+		//extended header
+		if(bytes < 2){
+			LOGPF("Short command section (%" PRIsize_t " bytes) on %s, missing extended header", bytes, inst->name);
+			return 1;
+		}
+		length <<= 8;
+		length |= frame[1];
+		offset = 2;
+	}
+
+	command_bytes = offset + length;
+	DBGPF("%u/%" PRIsize_t " bytes of command section on %s, %s header, %s initial dtime",
+			length, bytes, inst->name,
+			(frame[0] & 0x80) ? "extended" : "normal",
+			(frame[0] & 0x20) ? "has" : "no");
+
+	if(command_bytes > bytes){
+		LOGPF("Short command section on %s, indicated %" PRIsize_t ", had %" PRIsize_t, inst->name, command_bytes, bytes);
+		return 1;
+	}
+
+	if(frame[0] & 0x20){
+		decode_time = 1;
+	}
+
+	do{
+		//decode delta-time
+		if(decode_time){
+			for(; offset < command_bytes && frame[offset] & 0x80; offset++){
+			}
+			offset++;
+		}
+
+		//section 3 of rfc6295 states that the first dtime as well as the last command may be omitted
+		//this may make sense on a low-speed serial line, but on a network... come on.
+		if(offset >= command_bytes){
+			break;
+		}
+
+		//check for a status byte
+		//TODO filter sysex
+		if(frame[offset] & 0x80){
+			midi_status = frame[offset];
+			offset++;
+		}
+
+		//having variable encoding in each and every component is super annoying to check for...
+		if(offset >= command_bytes){
+			break;
+		}
+
+		ident.label = 0;
+		ident.fields.type = midi_status & 0xF0;
+		ident.fields.channel = midi_status & 0x0F;
+
+		//single byte command
+		if(ident.fields.type == aftertouch){
+			ident.fields.control = 0;
+			val.normalised = (double) frame[offset] / 127.0;
+			offset++;
+		}
+		//two-byte command
+		else{
+			offset++;
+			if(offset >= command_bytes){
+				break;
+			}
+
+			if(ident.fields.type == pitchbend){
+				ident.fields.control = 0;
+				val.normalised = (double)((frame[offset] << 7) | frame[offset - 1]) / 16384.0;
+			}
+			else{
+				ident.fields.control = frame[offset - 1];
+				val.normalised = (double) frame[offset] / 127.0;
+			}
+
+			//fix-up note off events
+			if(ident.fields.type == 0x80){
+				ident.fields.type = note;
+				val.normalised = 0;
+			}
+
+			offset++;
+		}
+
+		DBGPF("Decoded command type %02X channel %d control %d value %f",
+				ident.fields.type, ident.fields.channel, ident.fields.control, val.normalised);
+
+		if(cfg.detect){
+			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch){
+				LOGPF("Incoming data on channel %s.ch%d.%s, value %f",
+						inst->name, ident.fields.channel,
+						rtpmidi_type_name(ident.fields.type), val.normalised);
+			}
+			else{
+				LOGPF("Incoming data on channel %s.ch%d.%s%d, value %f",
+						inst->name, ident.fields.channel,
+						rtpmidi_type_name(ident.fields.type),
+						ident.fields.control, val.normalised);
+			}
+		}
+
+		//find channel
+		chan = mm_channel(inst, ident.label, 0);
+		if(chan){
+			mm_channel_event(chan, val);
+		}
+
+		decode_time = 1;
+	} while(offset < command_bytes);
+
+	return 0;
+}
+
 static int rtpmidi_handle_data(instance* inst){
-	size_t u;
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
 	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
 	struct sockaddr_storage sock_addr;
 	socklen_t sock_len = sizeof(sock_addr);
 	rtpmidi_header* rtp_header = (rtpmidi_header*) frame;
 	ssize_t bytes_recv = recvfrom(data->fd, frame, sizeof(frame), 0, (struct sockaddr*) &sock_addr, &sock_len);
+	size_t u;
 
 	//TODO receive until EAGAIN
 	if(bytes_recv < 0){
@@ -645,7 +792,11 @@ static int rtpmidi_handle_data(instance* inst){
 		return 0;
 	}
 
-	//TODO parse data
+	//parse data
+	if(rtpmidi_parse(inst, frame + sizeof(rtpmidi_header), bytes_recv - sizeof(rtpmidi_header))){
+		//returning errors here fails the core loop, so just return 0 to have some logging
+		return 0;
+	}
 
 	//try to learn peers
 	if(data->learn_peers){

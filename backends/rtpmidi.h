@@ -20,6 +20,7 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 #define RTPMIDI_HEADER_TYPE 0x61
 #define RTPMIDI_GET_TYPE(a) ((a) & 0x7F)
 #define RTPMIDI_DEFAULT_NAME "MIDIMonster"
+#define RTPMIDI_SERVICE_INTERVAL 1000
 
 enum /*_rtpmidi_channel_type*/ {
 	none = 0,
@@ -50,7 +51,9 @@ typedef struct /*_rtpmidi_peer*/ {
 	struct sockaddr_storage dest;
 	socklen_t dest_len;
 	//uint32_t ssrc;
-	uint8_t inactive;
+	uint8_t active; //marked for reuse
+	uint8_t learned; //learned / configured peer
+	uint8_t connected; //currently in active session
 } rtpmidi_peer;
 
 typedef struct /*_rtmidi_instance_data*/ {

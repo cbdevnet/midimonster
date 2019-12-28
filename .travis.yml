@@ -180,7 +180,8 @@ install:
 
 before_install:
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
- - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install ccache ola lua openssl jack; fi
+# 'brew install' sometimes returns non-zero for some arcane reason. Executing 'true' resets the exit code and allows Travis to continue building...
+ - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install ccache ola lua openssl jack; true; fi
 # OpenSSL is not a proper install due to some Apple bull, so provide additional locations via the environment...
 # Additionally, newer versions of this "recipe" seem to use the name 'openssl@1.1' instead of plain 'openssl' and there seems to be
 # no way to programmatically get the link and include paths. Genius! Hardcoding the new version for the time being...

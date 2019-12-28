@@ -106,7 +106,7 @@ UPDATER-PREP () {
 		printf "\nInitializing repository...\n"
 		cd $tmp_path
 		git init $tmp_path
-		printf "Sucessfully imported settings from %s\n" "$updater_file"
+		printf "Successfully imported settings from %s\n" "$updater_file"
 	)
 	NIGHTLY_CHECK
 	printf "Preparation successful\n\n"

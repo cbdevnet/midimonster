@@ -189,7 +189,7 @@ void channels_free(){
 	size_t u;
 	for(u = 0; u < nchannels; u++){
 		DBGPF("Destroying channel %lu on instance %s\n", channels[u]->ident, channels[u]->instance->name);
-		if(channels[u]->impl){
+		if(channels[u]->impl && channels[u]->instance->backend->channel_free){
 			channels[u]->instance->backend->channel_free(channels[u]);
 		}
 		free(channels[u]);

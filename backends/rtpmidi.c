@@ -1,5 +1,5 @@
 #define BACKEND_NAME "rtpmidi"
-#define DEBUG
+//#define DEBUG
 
 #include <string.h>
 #include <errno.h>
@@ -164,6 +164,8 @@ static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storag
 		if(data->peer[u].active
 				&& sock_len == data->peer[u].dest_len
 				&& !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
+			//if yes, update connection flag (but not learned flag because that doesnt change)
+			data->peer[u].connected = connected;
 			return 0;
 		}
 
@@ -574,13 +576,13 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 	}
 	else if(command->command == apple_accept){
 		if(fd != data->control_fd){
-			LOGPF("Instance %s negotiated new peer\n", inst->name);
+			LOGPF("Instance %s negotiated new peer", inst->name);
 			return rtpmidi_push_peer(data, *peer, peer_len, 1, 1);
 			//FIXME store ssrc, start timesync
 		}
 		else{
 			//send invite on data fd
-			LOGPF("Instance %s peer accepted on control port, inviting data port\n", inst->name);
+			LOGPF("Instance %s peer accepted on control port, inviting data port", inst->name);
 			//FIXME limit max length of session name
 			apple_command* invite = (apple_command*) response;
 			invite->res1 = 0xFFFF;
@@ -865,12 +867,70 @@ static int rtpmidi_handle_control(instance* inst){
 }
 
 static int rtpmidi_service(){
+	size_t n, u, p;
+	instance** inst = NULL;
+	rtpmidi_instance_data* data = NULL;
+	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+	struct sockaddr_storage control_peer;
 
+	//prepare commands
+	apple_sync_frame sync = {
+		.res1 = 0xFFFF,
+		.command = htobe16(apple_sync),
+		.ssrc = 0,
+		.count = 0,
+		.timestamp = {
+			mm_timestamp() * 10
+		}
+	};
+	apple_command* invite = (apple_command*) &frame;
+	invite->res1 = 0xFFFF;
+	invite->command = htobe16(apple_invite);
+	invite->version = htobe32(2);
+	invite->token = ((uint32_t) rand()) << 16 | rand();
+
+	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
+		LOG("Failed to fetch instances");
+		return 1;
+	}
+
+	//mdns discovery
 	if(cfg.mdns_fd >= 0){
 		//TODO send applemidi discovery packets
 	}
-	//TODO send sync packets for all connected applemidi peers
-	//TODO try to invite pre-defined unconnected applemidi peers
+
+	for(u = 0; u < n; u++){
+		data = (rtpmidi_instance_data*) inst[u]->impl;
+
+		if(data->mode == apple){
+			for(p = 0; p < data->peers; p++){
+				if(data->peer[p].active && data->peer[p].connected){
+					//apple sync
+					DBGPF("Instance %s initializing sync on peer %" PRIsize_t, inst[u]->name, p);
+					sync.ssrc = htobe32(data->ssrc);
+					//calculate remote control port from data port
+					memcpy(&control_peer, &(data->peer[u].dest), sizeof(control_peer));
+					((struct sockaddr_in*) &control_peer)->sin_port = be16toh(htobe16(((struct sockaddr_in*) &control_peer)->sin_port) - 1);
+
+					sendto(data->control_fd, &sync, sizeof(apple_sync_frame), 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
+				}
+				else if(data->peer[p].active && !data->peer[p].learned){
+					//try to invite pre-defined unconnected applemidi peers
+					DBGPF("Instance %s inviting configured peer %" PRIsize_t, inst[u]->name, p);
+					invite->ssrc = htobe32(data->ssrc);
+					//calculate remote control port from data port
+					memcpy(&control_peer, &(data->peer[u].dest), sizeof(control_peer));
+					((struct sockaddr_in*) &control_peer)->sin_port = be16toh(htobe16(((struct sockaddr_in*) &control_peer)->sin_port) - 1);
+					//append session name to packet
+					memcpy(frame + sizeof(apple_command), data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME, strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1);
+
+					sendto(data->control_fd, invite, sizeof(apple_command) + strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1, 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
+				}
+			}
+		}
+	}
+
+	free(inst);
 	return 0;
 }
 
@@ -883,7 +943,9 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 	//handle service tasks (mdns, clock sync, peer connections)
 	if(mm_timestamp() - cfg.last_service > RTPMIDI_SERVICE_INTERVAL){
 		DBGPF("Performing service tasks, delta %" PRIu64, mm_timestamp() - cfg.last_service);
-		rtpmidi_service();
+		if(rtpmidi_service()){
+			return 1;
+		}
 		cfg.last_service = mm_timestamp();
 	}
 

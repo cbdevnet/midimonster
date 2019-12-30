@@ -200,3 +200,13 @@ before_install:
 
 after_script:
   - if [ "$TASK" = "coverity" ]; then tail -n 10000 ${TRAVIS_BUILD_DIR}/cov-int/build-log.txt; cat ${TRAVIS_BUILD_DIR}/cov-int/scm_log.txt; fi
+
+deploy:
+ provider: releases
+ api_key: $GITHUB_TOKEN
+file:
+  - "./deployment/*"
+  skip_cleanup: true
+  draft: true
+  on:
+    tags: true

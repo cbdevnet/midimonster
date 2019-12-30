@@ -88,7 +88,7 @@ elif [[ $TASK = 'windows' ]]; then
     cp -r ./configs ./deployment/
     cd ./deployment
     zip -r "./midimonster-$(git describe)-windows.zip" "./"
-    rm -v !("*.zip")
+    rm -v !(*.zip)
   fi
 
 
@@ -107,7 +107,7 @@ if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
   cp ./backends/*.md ./deployment/docs/
   cp -r ./configs ./deployment/
   cd ./deployment
-  tar czf "midimonster-$(git describe)-linux64.tgz" *
+  tar czf "midimonster-$(git describe)-$TRAVIS_OS_NAME.tgz" *
   rm -v !("*.tgz")
   fi
 

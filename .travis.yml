@@ -204,9 +204,8 @@ after_script:
 deploy:
  provider: releases
  api_key: $GITHUB_TOKEN
-file:
-  - "./deployment/*"
-  skip_cleanup: true
-  draft: true
-  on:
-    tags: true
+ file: ./deployment/*
+ skip_cleanup: true
+ draft: true
+ on:
+  tags: true

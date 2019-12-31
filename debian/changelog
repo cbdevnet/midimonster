@@ -1,3 +1,14 @@
+midimonster (0.3-1) unstable; urgency=medium
+
+  * Bugfixes to the jack, maweb, evdev and sacn backends
+  * New commandline option -v to query version
+  * Create basic manpage
+  * 'local' mode for sACN descriptors
+  * Updates to example configuration
+  * New 'layering' example configuration
+
+ -- cbdev <cb@cbcdn.com>  Tue, 31 Dec 2019 11:03:56 +0100
+
 midimonster (0.2-1) unstable; urgency=low
 
   * Initial release (Closes: #nnnn)

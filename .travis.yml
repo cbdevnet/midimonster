@@ -204,6 +204,7 @@ after_script:
 
 deploy:
  provider: releases
+ file_glob: true
  api_key: $GITHUB_TOKEN
  file: ./deployment/*
  skip_cleanup: true

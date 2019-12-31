@@ -7,11 +7,11 @@ MM_PLUGIN_API int init();
 static int artnet_configure(char* option, char* value);
 static int artnet_configure_instance(instance* instance, char* option, char* value);
 static instance* artnet_instance();
-static channel* artnet_channel(instance* instance, char* spec);
+static channel* artnet_channel(instance* instance, char* spec, uint8_t flags);
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int artnet_handle(size_t num, managed_fd* fds);
-static int artnet_start();
-static int artnet_shutdown();
+static int artnet_start(size_t n, instance** inst);
+static int artnet_shutdown(size_t n, instance** inst);
 
 #define ARTNET_PORT "6454"
 #define ARTNET_VERSION 14

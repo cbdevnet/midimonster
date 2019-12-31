@@ -1,3 +1,5 @@
+#define BACKEND_NAME "jack"
+
 #include <string.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -8,7 +10,6 @@
 #include <jack/midiport.h>
 #include <jack/metadata.h>
 
-#define BACKEND_NAME "jack"
 #define JACKEY_SIGNAL_TYPE "http://jackaudio.org/metadata/signal-type"
 
 #ifdef __APPLE__
@@ -41,20 +42,20 @@ MM_PLUGIN_API int init(){
 	};
 
 	if(sizeof(mmjack_channel_ident) != sizeof(uint64_t)){
-		fprintf(stderr, "jack channel identification union out of bounds\n");
+		LOG("Channel identification union out of bounds");
 		return 1;
 	}
 
 	//register backend
 	if(mm_backend_register(mmjack)){
-		fprintf(stderr, "Failed to register jack backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 	return 0;
 }
 
 static void mmjack_message_print(const char* msg){
-	fprintf(stderr, "JACK message: %s\n", msg);
+	LOGPF("JACK message: %s", msg);
 }
 
 static void mmjack_message_ignore(const char* msg){
@@ -66,7 +67,7 @@ static int mmjack_midiqueue_append(mmjack_port* port, mmjack_channel_ident ident
 		//extend the queue
 		port->queue = realloc(port->queue, (port->queue_len + JACK_MIDIQUEUE_CHUNK) * sizeof(mmjack_midiqueue));
 		if(!port->queue){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 		port->queue_alloc += JACK_MIDIQUEUE_CHUNK;
@@ -75,7 +76,7 @@ static int mmjack_midiqueue_append(mmjack_port* port, mmjack_channel_ident ident
 	port->queue[port->queue_len].ident.label = ident.label;
 	port->queue[port->queue_len].raw = value;
 	port->queue_len++;
-	DBGPF("Appended event to queue for %s, now at %" PRIsize_t " entries\n", port->name, port->queue_len);
+	DBGPF("Appended event to queue for %s, now at %" PRIsize_t " entries", port->name, port->queue_len);
 	return 0;
 }
 
@@ -90,7 +91,7 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 
 	if(port->input){
 		if(event_count){
-			DBGPF("Reading %u MIDI events from jack port %s\n", event_count, port->name);
+			DBGPF("Reading %u MIDI events from port %s", event_count, port->name);
 			for(u = 0; u < event_count; u++){
 				ident.label = 0;
 				//read midi data from stream
@@ -98,19 +99,19 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 				//ident.fields.port set on output in mmjack_handle_midi
 				ident.fields.sub_channel = event.buffer[0] & 0x0F;
 				ident.fields.sub_type = event.buffer[0] & 0xF0;
+				ident.fields.sub_control = event.buffer[1];
+				value = event.buffer[2];
 				if(ident.fields.sub_type == 0x80){
 					ident.fields.sub_type = midi_note;
 					value = 0;
 				}
 				else if(ident.fields.sub_type == midi_pitchbend){
+					ident.fields.sub_control = 0;
 					value = event.buffer[1] | (event.buffer[2] << 7);
 				}
 				else if(ident.fields.sub_type == midi_aftertouch){
+					ident.fields.sub_control = 0;
 					value = event.buffer[1];
-				}
-				else{
-					ident.fields.sub_control = event.buffer[1];
-					value = event.buffer[2];
 				}
 				//append midi data
 				mmjack_midiqueue_append(port, ident, value);
@@ -128,7 +129,7 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 			ident.label = port->queue[u].ident.label;
 			event_data = jack_midi_event_reserve(buffer, u, (ident.fields.sub_type == midi_aftertouch) ? 2 : 3);
 			if(!event_data){
-				fprintf(stderr, "Failed to reserve MIDI stream data\n");
+				LOG("Failed to reserve MIDI stream data");
 				return 1;
 			}
 			event_data[0] = ident.fields.sub_channel | ident.fields.sub_type;
@@ -146,7 +147,7 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 		}
 
 		if(port->queue_len){
-			DBGPF("Wrote %" PRIsize_t " MIDI events to jack port %s\n", port->queue_len, port->name);
+			DBGPF("Wrote %" PRIsize_t " MIDI events to port %s", port->queue_len, port->name);
 		}
 		port->queue_len = 0;
 	}
@@ -180,21 +181,21 @@ static int mmjack_process(jack_nframes_t nframes, void* instp){
 	size_t p, mark = 0;
 	int rv = 0;
 
-	//DBGPF("jack callback for %d frames on %s\n", nframes, inst->name);
+	//DBGPF("jack callback for %d frames on %s", nframes, inst->name);
 
 	for(p = 0; p < data->ports; p++){
 		pthread_mutex_lock(&data->port[p].lock);
 		switch(data->port[p].type){
 			case port_midi:
-				//DBGPF("Handling MIDI port %s.%s\n", inst->name, data->port[p].name);
+				//DBGPF("Handling MIDI port %s.%s", inst->name, data->port[p].name);
 				rv |= mmjack_process_midi(inst, data->port + p, nframes, &mark);
 				break;
 			case port_cv:
-				//DBGPF("Handling CV port %s.%s\n", inst->name, data->port[p].name);
+				//DBGPF("Handling CV port %s.%s", inst->name, data->port[p].name);
 				rv |= mmjack_process_cv(inst, data->port + p, nframes, &mark);
 				break;
 			default:
-				fprintf(stderr, "Unhandled jack port type in processing callback\n");
+				LOG("Unhandled port type in processing callback");
 				pthread_mutex_unlock(&data->port[p].lock);
 				return 1;
 		}
@@ -203,14 +204,14 @@ static int mmjack_process(jack_nframes_t nframes, void* instp){
 
 	//notify the main thread
 	if(mark){
-		DBGPF("Notifying handler thread for jack instance %s\n", inst->name);
+		DBGPF("Notifying handler thread for instance %s", inst->name);
 		send(data->fd, "c", 1, 0);
 	}
 	return rv;
 }
 
 static void mmjack_server_shutdown(void* inst){
-	fprintf(stderr, "jack server shutdown notification\n");
+	LOG("Server shut down");
 	config.jack_shutdown = 1;
 }
 
@@ -232,7 +233,7 @@ static int mmjack_configure(char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown jack backend option %s\n", option);
+	LOGPF("Unknown backend option %s", option);
 	return 1;
 }
 
@@ -258,7 +259,7 @@ static int mmjack_parse_portconfig(mmjack_port* port, char* spec){
 		else if(!strcmp(token, "max")){
 			token = strtok(NULL, " ");
 			if(!token){
-				fprintf(stderr, "jack port %s configuration missing argument\n", port->name);
+				LOGPF("Port %s configuration missing argument", port->name);
 				return 1;
 			}
 			port->max = strtod(token, NULL);
@@ -266,19 +267,19 @@ static int mmjack_parse_portconfig(mmjack_port* port, char* spec){
 		else if(!strcmp(token, "min")){
 			token = strtok(NULL, " ");
 			if(!token){
-				fprintf(stderr, "jack port %s configuration missing argument\n", port->name);
+				LOGPF("Port %s configuration missing argument", port->name);
 				return 1;
 			}
 			port->min = strtod(token, NULL);
 		}
 		else{
-			fprintf(stderr, "Unknown jack channel configuration token %s on port %s\n", token, port->name);
+			LOGPF("Unknown channel configuration token %s on port %s", token, port->name);
 			return 1;
 		}
 	}
 
 	if(port->type == port_none){
-		fprintf(stderr, "jack channel %s assigned no port type\n", port->name);
+		LOGPF("Channel %s assigned no port type", port->name);
 		return 1;
 	}
 	return 0;
@@ -306,24 +307,24 @@ static int mmjack_configure_instance(instance* inst, char* option, char* value){
 	//register new port, first check for unique name
 	for(p = 0; p < data->ports; p++){
 		if(!strcmp(data->port[p].name, option)){
-			fprintf(stderr, "jack instance %s has duplicate port %s\n", inst->name, option);
+			LOGPF("Instance %s has duplicate port %s", inst->name, option);
 			return 1;
 		}
 	}
 	if(strchr(option, '.')){
-		fprintf(stderr, "Invalid jack channel spec %s.%s\n", inst->name, option);
+		LOGPF("Invalid channel spec %s.%s", inst->name, option);
 	}
 
 	//add port to registry
 	//TODO for OSC ports we need to configure subchannels for each message
 	data->port = realloc(data->port, (data->ports + 1) * sizeof(mmjack_port));
 	if(!data->port){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return 1;
 	}
 	data->port[data->ports].name = strdup(option);
 	if(!data->port[data->ports].name){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return 1;
 	}
 	if(mmjack_parse_portconfig(data->port + p, value)){
@@ -341,7 +342,7 @@ static instance* mmjack_instance(){
 
 	inst->impl = calloc(1, sizeof(mmjack_instance_data));
 	if(!inst->impl){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -359,18 +360,18 @@ static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){
 	}
 
 	if(!next_token){
-		fprintf(stderr, "Invalid jack MIDI spec %s\n", spec);
+		LOGPF("Invalid MIDI spec %s", spec);
 		return 1;
 	}
 
 	ident->fields.sub_channel = strtoul(next_token, &next_token, 10);
 	if(ident->fields.sub_channel > 15){
-		fprintf(stderr, "Invalid jack MIDI spec %s, channel out of range\n", spec);
+		LOGPF("Invalid MIDI spec %s, channel out of range", spec);
 		return 1;
 	}
 
 	if(*next_token != '.'){
-		fprintf(stderr, "Invalid jack MIDI spec %s\n", spec);
+		LOGPF("Invalid MIDI spec %s", spec);
 		return 1;
 	}
 
@@ -395,7 +396,7 @@ static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){
 		ident->fields.sub_type = midi_aftertouch;
 	}
 	else{
-		fprintf(stderr, "Unknown jack MIDI control type in spec %s\n", spec);
+		LOGPF("Unknown MIDI control type in spec %s", spec);
 		return 1;
 	}
 
@@ -403,13 +404,13 @@ static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){
 
 	if(ident->fields.sub_type == midi_none
 			|| ident->fields.sub_control > 127){
-		fprintf(stderr, "Invalid jack MIDI spec %s\n", spec);
+		LOGPF("Invalid MIDI spec %s", spec);
 		return 1;
 	}
 	return 0;
 }
 
-static channel* mmjack_channel(instance* inst, char* spec){
+static channel* mmjack_channel(instance* inst, char* spec, uint8_t flags){
 	mmjack_instance_data* data = (mmjack_instance_data*) inst->impl;
 	mmjack_channel_ident ident = {
 		.label = 0
@@ -425,7 +426,7 @@ static channel* mmjack_channel(instance* inst, char* spec){
 	}
 
 	if(u == data->ports){
-		fprintf(stderr, "jack port %s.%s not found\n", inst->name, spec);
+		LOGPF("Tried to map unknown port %s.%s", inst->name, spec);
 		return NULL;
 	}
 
@@ -456,7 +457,7 @@ static int mmjack_set(instance* inst, size_t num, channel** c, channel_value* v)
 		ident.label = c[u]->ident;
 
 		if(data->port[ident.fields.port].input){
-			fprintf(stderr, "jack port %s.%s is an input port, no output is possible\n", inst->name, data->port[ident.fields.port].name);
+			LOGPF("Port %s.%s is an input port, no output is possible", inst->name, data->port[ident.fields.port].name);
 			continue;
 		}
 		range = data->port[ident.fields.port].max - data->port[ident.fields.port].min;
@@ -466,7 +467,7 @@ static int mmjack_set(instance* inst, size_t num, channel** c, channel_value* v)
 			case port_cv:
 				//scale value to given range
 				data->port[ident.fields.port].last = (range * v[u].normalised) + data->port[ident.fields.port].min;
-				DBGPF("CV port %s updated to %f\n", data->port[ident.fields.port].name, data->port[ident.fields.port].last);
+				DBGPF("CV port %s updated to %f", data->port[ident.fields.port].name, data->port[ident.fields.port].last);
 				break;
 			case port_midi:
 				value = v[u].normalised * 127.0;
@@ -479,7 +480,7 @@ static int mmjack_set(instance* inst, size_t num, channel** c, channel_value* v)
 				}
 				break;
 			default:
-				fprintf(stderr, "No handler implemented for jack port type %s.%s\n", inst->name, data->port[ident.fields.port].name);
+				LOGPF("No handler implemented for port type %s.%s", inst->name, data->port[ident.fields.port].name);
 				break;
 		}
 		pthread_mutex_unlock(&data->port[ident.fields.port].lock);
@@ -503,7 +504,7 @@ static void mmjack_handle_midi(instance* inst, size_t index, mmjack_port* port){
 			else{
 				val.normalised = ((double)port->queue[u].raw) / 127.0;
 			}
-			DBGPF("Pushing MIDI channel %d type %02X control %d value %f raw %d label %" PRIu64 "\n",
+			DBGPF("Pushing MIDI channel %d type %02X control %d value %f raw %d label %" PRIu64,
 					port->queue[u].ident.fields.sub_channel,
 					port->queue[u].ident.fields.sub_type,
 					port->queue[u].ident.fields.sub_control,
@@ -511,13 +512,13 @@ static void mmjack_handle_midi(instance* inst, size_t index, mmjack_port* port){
 					port->queue[u].raw,
 					port->queue[u].ident.label);
 			if(mm_channel_event(chan, val)){
-				fprintf(stderr, "Failed to push MIDI event to core on jack port %s.%s\n", inst->name, port->name);
+				LOGPF("Failed to push MIDI event to core on port %s.%s", inst->name, port->name);
 			}
 		}
 	}
 
 	if(port->queue_len){
-		DBGPF("Pushed %" PRIsize_t " MIDI events to core for jack port %s.%s\n", port->queue_len, inst->name, port->name);
+		DBGPF("Pushed %" PRIsize_t " MIDI events to core for port %s.%s", port->queue_len, inst->name, port->name);
 	}
 	port->queue_len = 0;
 }
@@ -532,7 +533,7 @@ static void mmjack_handle_cv(instance* inst, size_t index, mmjack_port* port){
 	channel* chan = mm_channel(inst, ident.label, 0);
 	if(!chan){
 		//this might happen if a channel is registered but not mapped
-		DBGPF("Failed to match jack CV channel %s.%s to core channel\n", inst->name, port->name);
+		DBGPF("Failed to match CV channel %s.%s to core channel", inst->name, port->name);
 		return;
 	}
 
@@ -541,9 +542,9 @@ static void mmjack_handle_cv(instance* inst, size_t index, mmjack_port* port){
 	val.normalised = port->last - port->min;
 	val.normalised /= range;
 	val.normalised = clamp(val.normalised, 1.0, 0.0);
-	DBGPF("Pushing CV channel %s value %f raw %f min %f max %f\n", port->name, val.normalised, port->last, port->min, port->max);
+	DBGPF("Pushing CV channel %s value %f raw %f min %f max %f", port->name, val.normalised, port->last, port->min, port->max);
 	if(mm_channel_event(chan, val)){
-		fprintf(stderr, "Failed to push CV event to core for %s.%s\n", inst->name, port->name);
+		LOGPF("Failed to push CV event to core for %s.%s", inst->name, port->name);
 	}
 }
 
@@ -560,7 +561,7 @@ static int mmjack_handle(size_t num, managed_fd* fds){
 			data = (mmjack_instance_data*) inst->impl;
 			bytes = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
 			if(bytes < 0){
-				fprintf(stderr, "Failed to receive on feedback socket for instance %s\n", inst->name);
+				LOGPF("Failed to receive on feedback socket for instance %s", inst->name);
 				return 1;
 			}
 
@@ -575,7 +576,7 @@ static int mmjack_handle(size_t num, managed_fd* fds){
 							mmjack_handle_midi(inst, p, data->port + p);
 							break;
 						default:
-							fprintf(stderr, "Output handler not implemented for unknown jack channel type on %s.%s\n", inst->name, data->port[p].name);
+							LOGPF("Output handler not implemented for unknown channel type on %s.%s", inst->name, data->port[p].name);
 							break;
 					}
 
@@ -587,16 +588,15 @@ static int mmjack_handle(size_t num, managed_fd* fds){
 	}
 	
 	if(config.jack_shutdown){
-		fprintf(stderr, "JACK server disconnected\n");
+		LOG("Server disconnected");
 		return 1;
 	}
 	return 0;
 }
 
-static int mmjack_start(){
+static int mmjack_start(size_t n, instance** inst){
 	int rv = 1, feedback_fd[2];
-	size_t n, u, p;
-	instance** inst = NULL;
+	size_t u, p;
 	pthread_mutexattr_t mutex_attr;
 	mmjack_instance_data* data = NULL;
 	jack_status_t error;
@@ -614,13 +614,7 @@ static int mmjack_start(){
 	//prepare mutex attributes because the initializer macro for adaptive mutexes is a GNU extension...
 	if(pthread_mutexattr_init(&mutex_attr)
 			|| pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ADAPTIVE_NP)){
-		fprintf(stderr, "Failed to initialize mutex attributes\n");
-		goto bail;
-	}
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
+		LOG("Failed to initialize mutex attributes");
 		goto bail;
 	}
 
@@ -635,19 +629,19 @@ static int mmjack_start(){
 
 		if(!data->client){
 			//TODO pretty-print failures
-			fprintf(stderr, "jack backend failed to connect to server, return status %u\n", error);
+			LOGPF("Failed to connect to server, return status %u", error);
 			goto bail;
 		}
 
 		//set up the feedback fd
 		if(socketpair(AF_LOCAL, SOCK_DGRAM, 0, feedback_fd)){
-			fprintf(stderr, "Failed to create feedback socket pair\n");
+			LOG("Failed to create feedback socket pair");
 			goto bail;
 		}
 
 		data->fd = feedback_fd[0];
 		if(mm_manage_fd(feedback_fd[1], BACKEND_NAME, 1, inst[u])){
-			fprintf(stderr, "jack backend failed to register feedback fd with core\n");
+			LOG("Failed to register feedback FD with core");
 			goto bail;
 		}
 
@@ -655,12 +649,12 @@ static int mmjack_start(){
 		jack_set_process_callback(data->client, mmjack_process, inst[u]);
 		jack_on_shutdown(data->client, mmjack_server_shutdown, inst[u]);
 
-		fprintf(stderr, "jack instance %s assigned client name %s\n", inst[u]->name, jack_get_client_name(data->client));
+		LOGPF("Instance %s assigned client name %s", inst[u]->name, jack_get_client_name(data->client));
 
 		//create and initialize jack ports
 		for(p = 0; p < data->ports; p++){
 			if(pthread_mutex_init(&(data->port[p].lock), &mutex_attr)){
-				fprintf(stderr, "Failed to create port mutex\n");
+				LOG("Failed to create port mutex");
 				goto bail;
 			}
 
@@ -673,35 +667,28 @@ static int mmjack_start(){
 			jack_set_property(data->client, jack_port_uuid(data->port[p].port), JACKEY_SIGNAL_TYPE, "CV", "text/plain");
 
 			if(!data->port[p].port){
-				fprintf(stderr, "Failed to create jack port %s.%s\n", inst[u]->name, data->port[p].name);
+				LOGPF("Failed to create port %s.%s", inst[u]->name, data->port[p].name);
 				goto bail;
 			}
 		}
 
 		//do the thing
 		if(jack_activate(data->client)){
-			fprintf(stderr, "Failed to activate jack client for instance %s\n", inst[u]->name);
+			LOGPF("Failed to activate client for instance %s", inst[u]->name);
 			goto bail;
 		}
 	}
 
-	fprintf(stderr, "jack backend registered %" PRIsize_t " descriptors to core\n", n);
+	LOGPF("Registered %" PRIsize_t " descriptors to core", n);
 	rv = 0;
 bail:
 	pthread_mutexattr_destroy(&mutex_attr);
-	free(inst);
 	return rv;
 }
 
-static int mmjack_shutdown(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int mmjack_shutdown(size_t n, instance** inst){
+	size_t u, p;
 	mmjack_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (mmjack_instance_data*) inst[u]->impl;
@@ -739,10 +726,10 @@ static int mmjack_shutdown(){
 		data->client_name = NULL;
 		close(data->fd);
 		data->fd = -1;
+
+		free(inst[u]->impl);
 	}
 
-	free(inst);
-
-	fprintf(stderr, "jack backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

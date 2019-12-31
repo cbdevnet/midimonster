@@ -22,13 +22,15 @@
 
 /* 
  * Parse spec as host specification in the form
- *	host port
+ *	host port [options]
  * into its constituent parts.
  * Returns offsets into the original string and modifies it.
  * Returns NULL in *port if none given.
  * Returns NULL in both *port and *host if spec was an empty string.
+ * Returns a pointer after the port in *options if options is non-NULL
+ * and the port was not followed by \0
  */
-void mmbackend_parse_hostspec(char* spec, char** host, char** port);
+void mmbackend_parse_hostspec(char* spec, char** host, char** port, char** options);
 
 /* 
  * Parse a given host / port combination into a sockaddr_storage
@@ -92,7 +94,7 @@ size_t json_obj_offset(char* json, char* key);
 size_t json_array_offset(char* json, uint64_t key);
 
 /*
- * Check for for a key within a JSON object / index within an array
+ * Check for a key within a JSON object / index within an array
  * Assumes a zero-terminated, validated JSON object / array as input
  * Returns type of value
  */

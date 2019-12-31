@@ -1,5 +1,6 @@
-#include "lua.h"
+#define BACKEND_NAME "lua"
 
+#include "lua.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -7,7 +8,6 @@
 #include <sys/timerfd.h>
 #endif
 
-#define BACKEND_NAME "lua"
 #define LUA_REGISTRY_KEY "_midimonster_lua_instance"
 
 static size_t timers = 0;
@@ -37,7 +37,7 @@ MM_PLUGIN_API int init(){
 
 	//register backend
 	if(mm_backend_register(lua)){
-		fprintf(stderr, "Failed to register lua backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 
@@ -45,7 +45,7 @@ MM_PLUGIN_API int init(){
 	//create the timer to expire intervals
 	timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 	if(timer_fd < 0){
-		fprintf(stderr, "Failed to create timer for Lua backend\n");
+		LOG("Failed to create timer");
 		return 1;
 	}
 	#endif
@@ -130,7 +130,7 @@ static int lua_callback_output(lua_State* interpreter){
 	lua_instance_data* data = NULL;
 
 	if(lua_gettop(interpreter) != 2){
-		fprintf(stderr, "Lua output function called with %d arguments, expected 2 (string, number)\n", lua_gettop(interpreter));
+		LOGPF("Output function called with %d arguments, expected 2 (string, number)", lua_gettop(interpreter));
 		return 0;
 	}
 
@@ -157,7 +157,7 @@ static int lua_callback_output(lua_State* interpreter){
 		}
 	}
 
-	fprintf(stderr, "Tried to set unknown channel %s.%s\n", inst->name, channel_name);
+	LOGPF("Tried to set unknown channel %s.%s", inst->name, channel_name);
 	return 0;
 }
 
@@ -167,7 +167,7 @@ static int lua_callback_interval(lua_State* interpreter){
 	int reference = LUA_NOREF;
 
 	if(lua_gettop(interpreter) != 2){
-		fprintf(stderr, "Lua output function called with %d arguments, expected 2 (string, number)\n", lua_gettop(interpreter));
+		LOGPF("Interval function called with %d arguments, expected 2 (function, number)", lua_gettop(interpreter));
 		return 0;
 	}
 
@@ -217,7 +217,7 @@ static int lua_callback_interval(lua_State* interpreter){
 		//append new timer
 		timer = realloc(timer, (timers + 1) * sizeof(lua_timer));
 		if(!timer){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			timers = 0;
 			return 0;
 		}
@@ -240,7 +240,7 @@ static int lua_callback_value(lua_State* interpreter, uint8_t input){
 	const char* channel_name = NULL;
 
 	if(lua_gettop(interpreter) != 1){
-		fprintf(stderr, "Lua get_value function called with %d arguments, expected 1 (string)\n", lua_gettop(interpreter));
+		LOGPF("get_value function called with %d arguments, expected 1 (string)", lua_gettop(interpreter));
 		return 0;
 	}
 
@@ -261,7 +261,7 @@ static int lua_callback_value(lua_State* interpreter, uint8_t input){
 		}
 	}
 
-	fprintf(stderr, "Tried to get unknown channel %s.%s\n", inst->name, channel_name);
+	LOGPF("Tried to get unknown channel %s.%s", inst->name, channel_name);
 	return 0;
 }
 
@@ -274,7 +274,7 @@ static int lua_callback_output_value(lua_State* interpreter){
 }
 
 static int lua_configure(char* option, char* value){
-	fprintf(stderr, "The lua backend does not take any global configuration\n");
+	LOG("No backend configuration possible");
 	return 1;
 }
 
@@ -284,13 +284,13 @@ static int lua_configure_instance(instance* inst, char* option, char* value){
 	//load a lua file into the interpreter
 	if(!strcmp(option, "script") || !strcmp(option, "source")){
 		if(luaL_dofile(data->interpreter, value)){
-			fprintf(stderr, "Failed to load lua source file %s for instance %s: %s\n", value, inst->name, lua_tostring(data->interpreter, -1));
+			LOGPF("Failed to load source file %s for instance %s: %s", value, inst->name, lua_tostring(data->interpreter, -1));
 			return 1;
 		}
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown configuration parameter %s for lua instance %s\n", option, inst->name);
+	LOGPF("Unknown instance configuration parameter %s for instance %s", option, inst->name);
 	return 1;
 }
 
@@ -302,14 +302,14 @@ static instance* lua_instance(){
 
 	lua_instance_data* data = calloc(1, sizeof(lua_instance_data));
 	if(!data){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
 	//load the interpreter
 	data->interpreter = luaL_newstate();
 	if(!data->interpreter){
-		fprintf(stderr, "Failed to initialize LUA\n");
+		LOG("Failed to initialize interpreter");
 		free(data);
 		return NULL;
 	}
@@ -330,7 +330,7 @@ static instance* lua_instance(){
 	return inst;
 }
 
-static channel* lua_channel(instance* inst, char* spec){
+static channel* lua_channel(instance* inst, char* spec, uint8_t flags){
 	size_t u;
 	lua_instance_data* data = (lua_instance_data*) inst->impl;
 
@@ -348,7 +348,7 @@ static channel* lua_channel(instance* inst, char* spec){
 		data->input = realloc(data->input, (u + 1) * sizeof(double));
 		data->output = realloc(data->output, (u + 1) * sizeof(double));
 		if(!data->channel_name || !data->reference || !data->input || !data->output){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return NULL;
 		}
 
@@ -356,7 +356,7 @@ static channel* lua_channel(instance* inst, char* spec){
 		data->input[u] = data->output[u] = 0.0;
 		data->channel_name[u] = strdup(spec);
 		if(!data->channel_name[u]){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return NULL;
 		}
 		data->channels++;
@@ -377,7 +377,7 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 			lua_rawgeti(data->interpreter, LUA_REGISTRYINDEX, data->reference[c[n]->ident]);
 			lua_pushnumber(data->interpreter, v[n].normalised);
 			if(lua_pcall(data->interpreter, 1, 0, 0) != LUA_OK){
-				fprintf(stderr, "Failed to call handler for %s.%s: %s\n", inst->name, data->channel_name[c[n]->ident], lua_tostring(data->interpreter, -1));
+				LOGPF("Failed to call handler for %s.%s: %s", inst->name, data->channel_name[c[n]->ident], lua_tostring(data->interpreter, -1));
 				lua_pop(data->interpreter, 1);
 			}
 		}
@@ -397,7 +397,7 @@ static int lua_handle(size_t num, managed_fd* fds){
 
 	//read the timer iteration to acknowledge the fd
 	if(read(timer_fd, read_buffer, sizeof(read_buffer)) < 0){
-		fprintf(stderr, "Failed to read from Lua timer: %s\n", strerror(errno));
+		LOGPF("Failed to read timer: %s", strerror(errno));
 		return 1;
 	}
 	#else
@@ -428,16 +428,9 @@ static int lua_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int lua_start(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int lua_start(size_t n, instance** inst){
+	size_t u, p;
 	lua_instance_data* data = NULL;
-
-	//fetch all defined instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	//resolve channels to their handler functions
 	for(u = 0; u < n; u++){
@@ -457,11 +450,9 @@ static int lua_start(){
 		}
 	}
 
-	free(inst);
-
 	#ifdef MMBACKEND_LUA_TIMERFD
 	//register the timer with the core
-	fprintf(stderr, "Lua backend registering 1 descriptor to core\n");
+	LOG("Registering 1 descriptor to core");
 	if(mm_manage_fd(timer_fd, BACKEND_NAME, 1, NULL)){
 		return 1;
 	}
@@ -469,16 +460,9 @@ static int lua_start(){
 	return 0;
 }
 
-static int lua_shutdown(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int lua_shutdown(size_t n, instance** inst){
+	size_t u, p;
 	lua_instance_data* data = NULL;
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (lua_instance_data*) inst[u]->impl;
@@ -495,7 +479,6 @@ static int lua_shutdown(){
 		free(inst[u]->impl);
 	}
 
-	free(inst);
 	//free module-global data
 	free(timer);
 	timer = NULL;
@@ -505,6 +488,6 @@ static int lua_shutdown(){
 	timer_fd = -1;
 	#endif
 
-	fprintf(stderr, "Lua backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

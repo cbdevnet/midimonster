@@ -3,14 +3,22 @@ OBJS = config.o backend.o plugin.o
 
 PREFIX ?= /usr
 PLUGIN_INSTALL = $(PREFIX)/lib/midimonster
+EXAMPLES ?= $(PREFIX)/share/midimonster
 SYSTEM := $(shell uname -s)
+GITVERSION = $(shell git describe)
 
+# Default compilation CFLAGS
 CFLAGS ?= -g -Wall -Wpedantic
+#CFLAGS += -DDEBUG
 # Hide all non-API symbols for export
 CFLAGS += -fvisibility=hidden
 
-#CFLAGS += -DDEBUG
 midimonster: LDLIBS = -ldl
+# Replace version string with current git-describe if possible
+ifneq "$(GITVERSION)" ""
+midimonster: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
+midimonster.exe: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
+endif
 
 # Work around strange linker passing convention differences in Linux and OSX
 ifeq ($(SYSTEM),Linux)
@@ -64,14 +72,14 @@ run:
 	valgrind --leak-check=full --show-leak-kinds=all ./midimonster
 
 install:
-		install -d "$(DESTDIR)$(PREFIX)/bin"
-		install -m 0755 midimonster "$(DESTDIR)$(PREFIX)/bin"
-		install -d "$(DESTDIR)$(PLUGIN_INSTALL)"
-		install -m 0755 backends/*.so "$(DESTDIR)$(PLUGIN_INSTALL)"
-		install -d "$(DESTDIR)$(PREFIX)/share/midimonster"
-		install -m 0644 configs/* "$(DESTDIR)$(PREFIX)/share/midimonster"
+	install -d "$(DESTDIR)$(PREFIX)/bin"
+	install -m 0755 midimonster "$(DESTDIR)$(PREFIX)/bin"
+	install -d "$(DESTDIR)$(PLUGIN_INSTALL)"
+	install -m 0755 backends/*.so "$(DESTDIR)$(PLUGIN_INSTALL)"
+	install -d "$(DESTDIR)$(EXAMPLES)"
+	install -m 0644 configs/* "$(DESTDIR)$(EXAMPLES)"
 ifdef DEFAULT_CFG
-		install -Dm 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
+	install -Dm 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
 endif
 
 sanitize: export CC = clang

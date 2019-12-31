@@ -4,11 +4,11 @@ MM_PLUGIN_API int init();
 static int winmidi_configure(char* option, char* value);
 static int winmidi_configure_instance(instance* inst, char* option, char* value);
 static instance* winmidi_instance();
-static channel* winmidi_channel(instance* inst, char* spec);
+static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags);
 static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int winmidi_handle(size_t num, managed_fd* fds);
-static int winmidi_start();
-static int winmidi_shutdown();
+static int winmidi_start(size_t n, instance** inst);
+static int winmidi_shutdown(size_t n, instance** inst);
 
 typedef struct /*_winmidi_instance_data*/ {
 	char* read;
@@ -19,11 +19,11 @@ typedef struct /*_winmidi_instance_data*/ {
 
 enum /*_winmidi_channel_type*/ {
 	none = 0,
-	note,
-	cc,
-	pressure,
-	aftertouch,
-	pitchbend
+	note = 0x90,
+	cc = 0xB0,
+	pressure = 0xA0,
+	aftertouch = 0xD0,
+	pitchbend = 0xE0
 };
 
 typedef union {

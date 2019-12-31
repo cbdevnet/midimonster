@@ -1,3 +1,5 @@
+#define BACKEND_NAME "ola"
+
 #include "ola.h"
 #include <cstring>
 #include <ola/DmxBuffer.h>
@@ -7,7 +9,6 @@
 #include <ola/io/SelectServer.h>
 #include <ola/network/Socket.h>
 
-#define BACKEND_NAME "ola"
 static ola::io::SelectServer* ola_select = NULL;
 static ola::OlaCallbackClient* ola_client = NULL;
 
@@ -26,7 +27,7 @@ MM_PLUGIN_API int init(){
 
 	//register backend
 	if(mm_backend_register(ola)){
-		fprintf(stderr, "Failed to register OLA backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 
@@ -35,7 +36,7 @@ MM_PLUGIN_API int init(){
 }
 
 static int ola_configure(char* option, char* value){
-	fprintf(stderr, "Unknown OLA backend option %s\n", option);
+	LOGPF("Unknown backend option %s", option);
 	return 1;
 }
 
@@ -48,7 +49,7 @@ static instance* ola_instance(){
 
 	data = (ola_instance_data*)calloc(1, sizeof(ola_instance_data));
 	if(!data){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -64,11 +65,11 @@ static int ola_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown OLA option %s for instance %s\n", option, inst->name);
+	LOGPF("Unknown instance configuration option %s for instance %s", option, inst->name);
 	return 1;
 }
 
-static channel* ola_channel(instance* inst, char* spec){
+static channel* ola_channel(instance* inst, char* spec, uint8_t flags){
 	ola_instance_data* data = (ola_instance_data*) inst->impl;
 	char* spec_next = spec;
 	unsigned chan_a = strtoul(spec, &spec_next, 10);
@@ -76,7 +77,7 @@ static channel* ola_channel(instance* inst, char* spec){
 
 	//primary channel sanity check
 	if(!chan_a || chan_a > 512){
-		fprintf(stderr, "Invalid OLA channel specification %s\n", spec);
+		LOGPF("Invalid channel specification %s", spec);
 		return NULL;
 	}
 	chan_a--;
@@ -85,14 +86,14 @@ static channel* ola_channel(instance* inst, char* spec){
 	if(*spec_next == '+'){
 		chan_b = strtoul(spec_next + 1, NULL, 10);
 		if(!chan_b || chan_b > 512){
-			fprintf(stderr, "Invalid wide-channel spec %s\n", spec);
+			LOGPF("Invalid wide-channel spec %s", spec);
 			return NULL;
 		}
 		chan_b--;
 
 		//if mapped mode differs, bail
 		if(IS_ACTIVE(data->data.map[chan_b]) && data->data.map[chan_b] != (MAP_FINE | chan_a)){
-			fprintf(stderr, "Fine channel already mapped for OLA spec %s\n", spec);
+			LOGPF("Fine channel already mapped for spec %s", spec);
 			return NULL;
 		}
 
@@ -103,7 +104,7 @@ static channel* ola_channel(instance* inst, char* spec){
 	if(IS_ACTIVE(data->data.map[chan_a])){
 		if((*spec_next == '+' && data->data.map[chan_a] != (MAP_COARSE | chan_b))
 				|| (*spec_next != '+' && data->data.map[chan_a] != (MAP_SINGLE | chan_a))){
-			fprintf(stderr, "Primary OLA channel already mapped at differing mode: %s\n", spec);
+			LOGPF("Primary channel already mapped at differing mode: %s", spec);
 			return NULL;
 		}
 	}
@@ -189,7 +190,7 @@ static void ola_data_receive(unsigned int universe, const ola::DmxBuffer& ola_dm
 			}
 			
 			if(!chan){
-				fprintf(stderr, "Active channel %zu on %s not known to core\n", p, inst->name);
+				LOGPF("Active channel %" PRIsize_t " on %s not known to core", p, inst->name);
 				return;
 			}
 
@@ -207,7 +208,7 @@ static void ola_data_receive(unsigned int universe, const ola::DmxBuffer& ola_dm
 			}
 
 			if(mm_channel_event(chan, val)){
-				fprintf(stderr, "Failed to push OLA channel event to core\n");
+				LOG("Failed to push event to core");
 				return;
 			}
 		}
@@ -216,50 +217,37 @@ static void ola_data_receive(unsigned int universe, const ola::DmxBuffer& ola_dm
 
 static void ola_register_callback(const std::string &error) {
 	if(!error.empty()){
-		fprintf(stderr, "OLA backend failed to register for universe: %s\n", error.c_str());
+		LOGPF("Failed to register for universe: %s", error.c_str());
 	}
 }
 
-static int ola_start(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int ola_start(size_t n, instance** inst){
+	size_t u, p;
 	ola_instance_data* data = NULL;
 
 	ola_select = new ola::io::SelectServer();
 	ola::network::IPV4SocketAddress ola_server(ola::network::IPV4Address::Loopback(), ola::OLA_DEFAULT_PORT);
 	ola::network::TCPSocket* ola_socket = ola::network::TCPSocket::Connect(ola_server);
 	if(!ola_socket){
-		fprintf(stderr, "Failed to connect to OLA server\n");
+		LOG("Failed to connect to server");
 		return 1;
 	}
 
 	ola_client = new ola::OlaCallbackClient(ola_socket);
 
 	if(!ola_client->Setup()){
-		fprintf(stderr, "Failed to start OLA client\n");
+		LOG("Failed to start client");
 		goto bail;
 	}
 
 	ola_select->AddReadDescriptor(ola_socket);
 
-	fprintf(stderr, "OLA backend registering connection descriptor to core\n");
+	LOG("Registering connection descriptor to core");
 	if(mm_manage_fd(ola_socket->ReadDescriptor(), BACKEND_NAME, 1, NULL)){
 		goto bail;
 	}
 
 	ola_client->SetDmxCallback(ola::NewCallback(&ola_data_receive));
-
-	//fetch all defined instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		goto bail;
-	}
-
-	//this should not happen anymore (backends without instances are not started anymore)
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (ola_instance_data*) inst[u]->impl;
@@ -268,7 +256,7 @@ static int ola_start(){
 		//check for duplicate instances (using the same universe)
 		for(p = 0; p < u; p++){
 			if(inst[u]->ident == inst[p]->ident){
-				fprintf(stderr, "OLA universe used in multiple instances, use one instance: %s - %s\n", inst[u]->name, inst[p]->name);
+				LOGPF("Universe used in multiple instances, use one instance: %s - %s", inst[u]->name, inst[p]->name);
 				goto bail;
 			}
 		}
@@ -277,10 +265,8 @@ static int ola_start(){
 
 	//run the ola select implementation to run all commands
 	ola_select->RunOnce();
-	free(inst);
 	return 0;
 bail:
-	free(inst);
 	delete ola_client;
 	ola_client = NULL;
 	delete ola_select;
@@ -288,18 +274,12 @@ bail:
 	return 1;
 }
 
-static int ola_shutdown(){
-	size_t n, p;
-	instance** inst = NULL;
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
+static int ola_shutdown(size_t n, instance** inst){
+	size_t p;
 
 	for(p = 0; p < n; p++){
 		free(inst[p]->impl);
 	}
-	free(inst);
 
 	if(ola_client){
 		ola_client->Stop();
@@ -313,6 +293,6 @@ static int ola_shutdown(){
 		ola_select = NULL;
 	}
 
-	fprintf(stderr, "OLA backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

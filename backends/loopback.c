@@ -1,7 +1,7 @@
+#define BACKEND_NAME "loopback"
+
 #include <string.h>
 #include "loopback.h"
-
-#define BACKEND_NAME "loopback"
 
 MM_PLUGIN_API int init(){
 	backend loopback = {
@@ -18,7 +18,7 @@ MM_PLUGIN_API int init(){
 
 	//register backend
 	if(mm_backend_register(loopback)){
-		fprintf(stderr, "Failed to register loopback backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 	return 0;
@@ -42,14 +42,14 @@ static instance* loopback_instance(){
 
 	i->impl = calloc(1, sizeof(loopback_instance_data));
 	if(!i->impl){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
 	return i;
 }
 
-static channel* loopback_channel(instance* inst, char* spec){
+static channel* loopback_channel(instance* inst, char* spec, uint8_t flags){
 	size_t u;
 	loopback_instance_data* data = (loopback_instance_data*) inst->impl;
 
@@ -64,13 +64,13 @@ static channel* loopback_channel(instance* inst, char* spec){
 	if(u == data->n){
 		data->name = realloc(data->name, (u + 1) * sizeof(char*));
 		if(!data->name){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return NULL;
 		}
 
 		data->name[u] = strdup(spec);
 		if(!data->name[u]){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return NULL;
 		}
 		data->n++;
@@ -92,19 +92,13 @@ static int loopback_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int loopback_start(){
+static int loopback_start(size_t n, instance** inst){
 	return 0;
 }
 
-static int loopback_shutdown(){
-	size_t n, u, p;
-	instance** inst = NULL;
+static int loopback_shutdown(size_t n, instance** inst){
+	size_t u, p;
 	loopback_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (loopback_instance_data*) inst[u]->impl;
@@ -115,8 +109,6 @@ static int loopback_shutdown(){
 		free(inst[u]->impl);
 	}
 
-	free(inst);
-
-	fprintf(stderr, "Loopback backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

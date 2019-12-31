@@ -1,3 +1,5 @@
+#define BACKEND_NAME "evdev"
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <errno.h>
@@ -15,8 +17,6 @@
 
 #include "midimonster.h"
 #include "evdev.h"
-
-#define BACKEND_NAME "evdev"
 
 static struct {
 	uint8_t detect;
@@ -38,12 +38,12 @@ MM_PLUGIN_API int init(){
 	};
 
 	if(sizeof(evdev_channel_ident) != sizeof(uint64_t)){
-		fprintf(stderr, "evdev channel identification union out of bounds\n");
+		LOG("Channel identification union out of bounds");
 		return 1;
 	}
 
 	if(mm_backend_register(evdev)){
-		fprintf(stderr, "Failed to register evdev backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 
@@ -59,7 +59,7 @@ static int evdev_configure(char* option, char* value) {
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown configuration option %s for evdev backend\n", option);
+	LOGPF("Unknown backend configuration option %s", option);
 	return 1;
 }
 
@@ -71,7 +71,7 @@ static instance* evdev_instance(){
 
 	evdev_instance_data* data = calloc(1, sizeof(evdev_instance_data));
 	if(!data){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -79,7 +79,7 @@ static instance* evdev_instance(){
 #ifndef EVDEV_NO_UINPUT
 	data->output_proto = libevdev_new();
 	if(!data->output_proto){
-		fprintf(stderr, "Failed to initialize libevdev output prototype device\n");
+		LOG("Failed to initialize libevdev output prototype device");
 		free(data);
 		return NULL;
 	}
@@ -91,25 +91,25 @@ static instance* evdev_instance(){
 
 static int evdev_attach(instance* inst, evdev_instance_data* data, char* node){
 	if(data->input_fd >= 0){
-		fprintf(stderr, "Instance %s already was assigned an input device\n", inst->name);
+		LOGPF("Instance %s already assigned an input device", inst->name);
 		return 1;
 	}
 
 	data->input_fd = open(node, O_RDONLY | O_NONBLOCK);
 	if(data->input_fd < 0){
-		fprintf(stderr, "Failed to open evdev input device node %s: %s\n", node, strerror(errno));
+		LOGPF("Failed to open input device node %s: %s", node, strerror(errno));
 		return 1;
 	}
 
 	if(libevdev_new_from_fd(data->input_fd, &data->input_ev)){
-		fprintf(stderr, "Failed to initialize libevdev for %s\n", node);
+		LOGPF("Failed to initialize libevdev for %s", node);
 		close(data->input_fd);
 		data->input_fd = -1;
 		return 1;
 	}
 
 	if(data->exclusive && libevdev_grab(data->input_ev, LIBEVDEV_GRAB)){
-		fprintf(stderr, "Failed to obtain exclusive device access on %s\n", node);
+		LOGPF("Failed to obtain exclusive device access on %s", node);
 	}
 
 	return 0;
@@ -123,7 +123,7 @@ static char* evdev_find(char* name){
 	char device_name[UINPUT_MAX_NAME_SIZE], *result = NULL;
 
 	if(!nodes){
-		fprintf(stderr, "Failed to query input device nodes in %s: %s", INPUT_NODES, strerror(errno));
+		LOGPF("Failed to query input device nodes in %s: %s", INPUT_NODES, strerror(errno));
 		return NULL;
 	}
 
@@ -133,12 +133,12 @@ static char* evdev_find(char* name){
 
 			fd = open(file_path, O_RDONLY);
 			if(fd < 0){
-				fprintf(stderr, "Failed to access %s: %s\n", file_path, strerror(errno));
+				LOGPF("Failed to access %s: %s", file_path, strerror(errno));
 				continue;
 			}
 
 			if(ioctl(fd, EVIOCGNAME(sizeof(device_name)), device_name) < 0){
-				fprintf(stderr, "Failed to read name for %s: %s\n", file_path, strerror(errno));
+				LOGPF("Failed to read name for %s: %s", file_path, strerror(errno));
 				close(fd);
 				continue;
 			}
@@ -146,7 +146,7 @@ static char* evdev_find(char* name){
 			close(fd);
 
 			if(!strncmp(device_name, name, strlen(name))){
-				fprintf(stderr, "Matched name %s for %s: %s\n", device_name, name, file_path);
+				LOGPF("Matched name %s for %s: %s", device_name, name, file_path);
 				break;
 			}
 		}
@@ -178,7 +178,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 	else if(!strcmp(option, "input")){
 		next_token = evdev_find(value);
 		if(!next_token){
-			fprintf(stderr, "Failed to find evdev input device with name %s for instance %s\n", value, inst->name);
+			LOGPF("Failed to match input device with name %s for instance %s", value, inst->name);
 			return 1;
 		}
 		if(evdev_attach(inst, data, next_token)){
@@ -190,7 +190,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 	}
 	else if(!strcmp(option, "exclusive")){
 		if(data->input_fd >= 0 && libevdev_grab(data->input_ev, LIBEVDEV_GRAB)){
-			fprintf(stderr, "Failed to obtain exclusive device access on %s\n", inst->name);
+			LOGPF("Failed to obtain exclusive device access on %s", inst->name);
 		}
 		data->exclusive = 1;
 		return 0;
@@ -198,7 +198,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 	else if(!strncmp(option, "relaxis.", 8)){
 		data->relative_axis = realloc(data->relative_axis, (data->relative_axes + 1) * sizeof(evdev_relaxis_config));
 		if(!data->relative_axis){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 		data->relative_axis[data->relative_axes].inverted = 0;
@@ -208,9 +208,12 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 			data->relative_axis[data->relative_axes].max *= -1;
 			data->relative_axis[data->relative_axes].inverted = 1;
 		}
+		else if(data->relative_axis[data->relative_axes].max == 0){
+			LOGPF("Relative axis configuration for %s.%s has invalid range", inst->name, option + 8);
+		}
 		data->relative_axis[data->relative_axes].current = strtoul(next_token, NULL, 0);
 		if(data->relative_axis[data->relative_axes].code < 0){
-			fprintf(stderr, "Failed to configure relative axis extents for %s.%s\n", inst->name, option + 8);
+			LOGPF("Failed to configure relative axis extents for %s.%s", inst->name, option + 8);
 			return 1;
 		}
 		data->relative_axes++;
@@ -239,17 +242,17 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 		abs_info.flat = strtol(next_token, &next_token, 0);
 		abs_info.resolution = strtol(next_token, &next_token, 0);
 		if(libevdev_enable_event_code(data->output_proto, EV_ABS, libevdev_event_code_from_name(EV_ABS, option + 5), &abs_info)){
-			fprintf(stderr, "Failed to enable absolute axis %s for output\n", option + 5);
+			LOGPF("Failed to enable absolute axis %s.%s for output", inst->name, option + 5);
 			return 1;
 		}
 		return 0;
 	}
 #endif
-	fprintf(stderr, "Unknown instance configuration parameter %s for evdev instance %s\n", option, inst->name);
+	LOGPF("Unknown instance configuration parameter %s for instance %s", option, inst->name);
 	return 1;
 }
 
-static channel* evdev_channel(instance* inst, char* spec){
+static channel* evdev_channel(instance* inst, char* spec, uint8_t flags){
 #ifndef EVDEV_NO_UINPUT
 	evdev_instance_data* data = (evdev_instance_data*) inst->impl;
 #endif
@@ -259,14 +262,14 @@ static channel* evdev_channel(instance* inst, char* spec){
 	};
 
 	if(!separator){
-		fprintf(stderr, "Invalid evdev channel specification %s\n", spec);
+		LOGPF("Invalid channel specification %s", spec);
 		return NULL;
 	}
 
 	*(separator++) = 0;
 
 	if(libevdev_event_type_from_name(spec) < 0){
-		fprintf(stderr, "Invalid evdev type specification: %s", spec);
+		LOGPF("Invalid type specification: %s", spec);
 		return NULL;
 	}
 	ident.fields.type = libevdev_event_type_from_name(spec);
@@ -275,7 +278,7 @@ static channel* evdev_channel(instance* inst, char* spec){
 		ident.fields.code = libevdev_event_code_from_name(ident.fields.type, separator);
 	}
 	else{
-		fprintf(stderr, "evdev Code name not recognized, using as number: %s\n", separator);
+		LOGPF("Code name not recognized, using as number: %s.%s", inst->name, separator);
 		ident.fields.code = strtoul(separator, NULL, 10);
 	}
 
@@ -285,7 +288,7 @@ static channel* evdev_channel(instance* inst, char* spec){
 			//enable the event on the device
 			//the previous check is necessary to not fail while enabling axes, which require additional information
 			if(libevdev_enable_event_code(data->output_proto, ident.fields.type, ident.fields.code, NULL)){
-				fprintf(stderr, "Failed to enable output event %s.%s%s\n",
+				LOGPF("Failed to enable output event %s.%s%s",
 						libevdev_event_type_get_name(ident.fields.type),
 						libevdev_event_code_get_name(ident.fields.type, ident.fields.code),
 						(ident.fields.type == EV_ABS) ? ": To output absolute axes, specify their details in the configuration":"");
@@ -339,13 +342,13 @@ static int evdev_push_event(instance* inst, evdev_instance_data* data, struct in
 		}
 
 		if(mm_channel_event(chan, val)){
-			fprintf(stderr, "Failed to push evdev channel event to core\n");
+			LOG("Failed to push channel event to core");
 			return 1;
 		}
 	}
 
 	if(evdev_config.detect){
-		fprintf(stderr, "Incoming evdev data for channel %s.%s.%s\n", inst->name, libevdev_event_type_get_name(event.type), libevdev_event_code_get_name(event.type, event.code));
+		LOGPF("Incoming data for channel %s.%s.%s", inst->name, libevdev_event_type_get_name(event.type), libevdev_event_code_get_name(event.type, event.code));
 	}
 
 	return 0;
@@ -366,7 +369,7 @@ static int evdev_handle(size_t num, managed_fd* fds){
 	for(fd = 0; fd < num; fd++){
 		inst = (instance*) fds[fd].impl;
 		if(!inst){
-			fprintf(stderr, "evdev backend signaled for unknown fd\n");
+			LOG("Signaled for unknown FD");
 			continue;
 		}
 
@@ -393,20 +396,9 @@ static int evdev_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int evdev_start(){
-	size_t n, u, fds = 0;
-	instance** inst = NULL;
+static int evdev_start(size_t n, instance** inst){
+	size_t u, fds = 0;
 	evdev_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	if(!n){
-		free(inst);
-		return 0;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (evdev_instance_data*) inst[u]->impl;
@@ -414,32 +406,29 @@ static int evdev_start(){
 #ifndef EVDEV_NO_UINPUT
 		if(data->output_enabled){
 			if(libevdev_uinput_create_from_device(data->output_proto, LIBEVDEV_UINPUT_OPEN_MANAGED, &data->output_ev)){
-				fprintf(stderr, "Failed to create evdev output device: %s\n", strerror(errno));
-				free(inst);
+				LOGPF("Failed to create output device: %s", strerror(errno));
 				return 1;
 			}
-			fprintf(stderr, "Created device node %s for instance %s\n", libevdev_uinput_get_devnode(data->output_ev), inst[u]->name);
+			LOGPF("Created device node %s for instance %s", libevdev_uinput_get_devnode(data->output_ev), inst[u]->name);
 		}
 #endif
 
 		inst[u]->ident = data->input_fd;
 		if(data->input_fd >= 0){
 			if(mm_manage_fd(data->input_fd, BACKEND_NAME, 1, inst[u])){
-				fprintf(stderr, "Failed to register event input descriptor for instance %s\n", inst[u]->name);
-				free(inst);
+				LOGPF("Failed to register input descriptor for instance %s", inst[u]->name);
 				return 1;
 			}
 			fds++;
 		}
 
 		if(data->input_fd <= 0 && !data->output_ev){
-			fprintf(stderr, "Instance %s has neither input nor output device set up\n", inst[u]->name);
+			LOGPF("Instance %s has neither input nor output device set up", inst[u]->name);
 		}
 
 	}
 
-	fprintf(stderr, "evdev backend registered %zu descriptors to core\n", fds);
-	free(inst);
+	LOGPF("Registered %zu descriptors to core", fds);
 	return 0;
 }
 
@@ -458,7 +447,7 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 	}
 
 	if(!data->output_enabled){
-		fprintf(stderr, "Instance %s not enabled for output\n", inst->name);
+		LOGPF("Instance %s not enabled for output (%" PRIsize_t " channel events)", inst->name, num);
 		return 0;
 	}
 
@@ -494,36 +483,30 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 		}
 
 		if(libevdev_uinput_write_event(data->output_ev, ident.fields.type, ident.fields.code, value)){
-			fprintf(stderr, "Failed to output event on instance %s\n", inst->name);
+			LOGPF("Failed to output event on instance %s", inst->name);
 			return 1;
 		}
 	}
 
 	//send syn event to publish all events
 	if(libevdev_uinput_write_event(data->output_ev, EV_SYN, SYN_REPORT, 0)){
-		fprintf(stderr, "Failed to output sync event on instance %s\n", inst->name);
+		LOGPF("Failed to output sync event on instance %s", inst->name);
 		return 1;
 	}
 
 	return 0;
 #else
-	fprintf(stderr, "The evdev backend does not support output on this platform\n");
+	LOG("No output support on this platform");
 	return 1;
 #endif
 }
 
-static int evdev_shutdown(){
+static int evdev_shutdown(size_t n, instance** inst){
 	evdev_instance_data* data = NULL;
-	instance** instances = NULL;
-	size_t n, u;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &instances)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
+	size_t u;
 
 	for(u = 0; u < n; u++){
-		data = (evdev_instance_data*) instances[u]->impl;
+		data = (evdev_instance_data*) inst[u]->impl;
 
 		if(data->input_fd >= 0){
 			libevdev_free(data->input_ev);
@@ -539,10 +522,9 @@ static int evdev_shutdown(){
 #endif
 		data->relative_axes = 0;
 		free(data->relative_axis);
-		free(data);
+		free(inst[u]->impl);
 	}
 
-	free(instances);
-	fprintf(stderr, "evdev backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

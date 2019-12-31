@@ -4,11 +4,11 @@ MM_PLUGIN_API int init();
 static int maweb_configure(char* option, char* value);
 static int maweb_configure_instance(instance* inst, char* option, char* value);
 static instance* maweb_instance();
-static channel* maweb_channel(instance* inst, char* spec);
+static channel* maweb_channel(instance* inst, char* spec, uint8_t flags);
 static int maweb_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int maweb_handle(size_t num, managed_fd* fds);
-static int maweb_start();
-static int maweb_shutdown();
+static int maweb_start(size_t n, instance** inst);
+static int maweb_shutdown(size_t n, instance** inst);
 static uint32_t maweb_interval();
 
 //Default login password: MD5("midimonster")

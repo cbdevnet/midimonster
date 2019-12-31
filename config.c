@@ -175,7 +175,7 @@ static int config_glob_scan(instance* inst, channel_spec* spec){
 	return 0;
 }
 
-static channel* config_glob_resolve(instance* inst, channel_spec* spec, uint64_t n){
+static channel* config_glob_resolve(instance* inst, channel_spec* spec, uint64_t n, uint8_t map_direction){
 	size_t glob = 0, glob_length;
 	ssize_t bytes = 0;
 	uint64_t current_value = 0;
@@ -216,7 +216,7 @@ static channel* config_glob_resolve(instance* inst, channel_spec* spec, uint64_t
 		}
 	}
 
-	result = inst->backend->channel(inst, resolved_spec);
+	result = inst->backend->channel(inst, resolved_spec, map_direction);
 	if(spec->globs && !result){
 		fprintf(stderr, "Failed to match multichannel evaluation %s to a channel\n", resolved_spec);
 	}
@@ -294,8 +294,8 @@ static int config_map(char* to_raw, char* from_raw){
 	//iterate, resolve globs and map
 	rv = 0;
 	for(n = 0; !rv && n < max(spec_from.channels, spec_to.channels); n++){
-		channel_from = config_glob_resolve(instance_from, &spec_from, min(n, spec_from.channels));
-		channel_to = config_glob_resolve(instance_to, &spec_to, min(n, spec_to.channels));
+		channel_from = config_glob_resolve(instance_from, &spec_from, min(n, spec_from.channels), mmchannel_input);
+		channel_to = config_glob_resolve(instance_to, &spec_to, min(n, spec_to.channels), mmchannel_output);
 		
 		if(!channel_from || !channel_to){
 			rv = 1;
@@ -317,6 +317,7 @@ int config_read(char* cfg_filepath){
 	size_t line_alloc = 0;
 	ssize_t status;
 	map_type mapping_type = map_rtl;
+	FILE* source = NULL;
 	char* line_raw = NULL, *line, *separator;
 
 	//create heap copy of file name because original might be in readonly memory
@@ -346,7 +347,7 @@ int config_read(char* cfg_filepath){
 		source_file = source_dir;
 	}
 
-	FILE* source = fopen(source_file, "r");
+	source = fopen(source_file, "r");
 
 	if(!source){
 		fprintf(stderr, "Failed to open configuration file for reading\n");

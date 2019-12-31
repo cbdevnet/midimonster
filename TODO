@@ -1,15 +1,7 @@
-winmidi
-rename
-release
-
-MIDI NRPN
 keepalive channels per backend?
-mm_backend_start might get some arguments so they don't have to fetch them all the time
-mm_channel_resolver might get additional info about the mapping direction
 Note source in channel value struct
 Optimize core channel search (store backend offset)
-
-mm_managed_fd.impl is not freed currently
-
-rtpmidi mode=peer
-	mode=initiator
+udp backends may ignore MTU
+mm_managed_fd.impl is not freed currently (and is heaped most of the time anyway) -> documentation
+make event collectors threadsafe to stop marshalling data...
+collect & check backend API version

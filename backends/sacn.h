@@ -4,11 +4,11 @@ MM_PLUGIN_API int init();
 static int sacn_configure(char* option, char* value);
 static int sacn_configure_instance(instance* instance, char* option, char* value);
 static instance* sacn_instance();
-static channel* sacn_channel(instance* instance, char* spec);
+static channel* sacn_channel(instance* instance, char* spec, uint8_t flags);
 static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int sacn_handle(size_t num, managed_fd* fds);
-static int sacn_start();
-static int sacn_shutdown();
+static int sacn_start(size_t n, instance** inst);
+static int sacn_shutdown(size_t n, instance** inst);
 
 #define SACN_PORT "5568"
 #define SACN_RECV_BUF 8192
@@ -56,7 +56,6 @@ typedef union /*_sacn_instance_id*/ {
 
 typedef struct /*_sacn_socket*/ {
 	int fd;
-	uint8_t flags;
 	size_t universes;
 	uint16_t* universe;
 	uint64_t* last_frame;

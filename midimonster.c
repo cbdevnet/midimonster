@@ -223,8 +223,12 @@ static void event_free(){
 	}
 }
 
+static void version(){
+	printf("MIDIMonster %s\n", MIDIMONSTER_VERSION);
+}
+
 static int usage(char* fn){
-	fprintf(stderr, "MIDIMonster v0.2\n");
+	version();
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "\t%s <configfile>\n", fn);
 	return EXIT_FAILURE;
@@ -263,6 +267,21 @@ static int platform_initialize(){
 	return 0;
 }
 
+static int args_parse(int argc, char** argv, char** cfg_file){
+	size_t u;
+	for(u = 1; u < argc; u++){
+		if(!strcmp(argv[u], "-v") || !strcmp(argv[u], "--version")){
+			version();
+			return 1;
+		}
+
+		//if nothing else matches, it's probably the configuration file
+		*cfg_file = argv[u];
+	}
+
+	return 0;
+}
+
 int main(int argc, char** argv){
 	fd_set all_fds, read_fds;
 	event_collection* secondary = NULL;
@@ -271,8 +290,10 @@ int main(int argc, char** argv){
 	managed_fd* signaled_fds = NULL;
 	int rv = EXIT_FAILURE, error, maxfd = -1;
 	char* cfg_file = DEFAULT_CFG;
-	if(argc > 1){
-		cfg_file = argv[1];
+
+	//parse commandline arguments
+	if(args_parse(argc, argv, &cfg_file)){
+		return EXIT_FAILURE;
 	}
 
 	if(platform_initialize()){

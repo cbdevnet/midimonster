@@ -76,9 +76,39 @@ elif [[ $TASK = 'windows' ]]; then
   travis_fold start "make_windows"
   make windows;
   travis_fold end "make_windows"
+  travis_fold start "deploy_windows"
+  if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
+    mkdir ./deployment
+    mkdir ./deployment/backends
+    mkdir ./deployment/docs
+    cp ./midimonster.exe ./deployment/
+    cp ./backends/*.dll ./deployment/backends/
+    cp ./monster.cfg ./deployment/monster.cfg
+    cp ./backends/*.md ./deployment/docs/
+    cp -r ./configs ./deployment/
+    cd ./deployment
+    zip -r "./midimonster-$(git describe)-windows.zip" "./"
+    find . ! -iname '*.zip' -delete
+  fi
+  travis_fold end "deploy_windows"
 else
   # Otherwise compile as normal
   travis_fold start "make"
   make full;
   travis_fold end "make"
+  travis_fold start "deploy_unix"
+  if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
+   mkdir ./deployment
+   mkdir ./deployment/backends
+   mkdir ./deployment/docs
+   cp ./midimonster ./deployment/
+   cp ./backends/*.so ./deployment/backends/
+   cp ./monster.cfg ./deployment/monster.cfg
+   cp ./backends/*.md ./deployment/docs/
+   cp -r ./configs ./deployment/
+   cd ./deployment
+   tar czf "midimonster-$(git describe)-$TRAVIS_OS_NAME.tgz" *
+   find . ! -iname '*.tgz' -delete
+  fi
+  travis_fold end "deploy_unix"
 fi

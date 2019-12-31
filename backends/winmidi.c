@@ -1,11 +1,11 @@
+#define BACKEND_NAME "winmidi"
+
 #include <string.h>
 
 #include "libmmbackend.h"
 #include <mmsystem.h>
 
 #include "winmidi.h"
-
-#define BACKEND_NAME "winmidi"
 
 static struct {
 	uint8_t list_devices;
@@ -37,13 +37,13 @@ MM_PLUGIN_API int init(){
 	};
 
 	if(sizeof(winmidi_channel_ident) != sizeof(uint64_t)){
-		fprintf(stderr, "winmidi channel identification union out of bounds\n");
+		LOG("Channel identification union out of bounds");
 		return 1;
 	}
 
 	//register backend
 	if(mm_backend_register(winmidi)){
-		fprintf(stderr, "Failed to register winmidi backend\n");
+		LOG("Failed to register backend");
 		return 1;
 	}
 
@@ -68,7 +68,7 @@ static int winmidi_configure(char* option, char* value){
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown winmidi backend option %s\n", option);
+	LOGPF("Unknown backend option %s", option);
 	return 1;
 }
 
@@ -76,7 +76,7 @@ static int winmidi_configure_instance(instance* inst, char* option, char* value)
 	winmidi_instance_data* data = (winmidi_instance_data*) inst->impl;
 	if(!strcmp(option, "read")){
 		if(data->read){
-			fprintf(stderr, "winmidi instance %s already connected to an input device\n", inst->name);
+			LOGPF("Instance %s already connected to an input device", inst->name);
 			return 1;
 		}
 		data->read = strdup(value);
@@ -84,14 +84,14 @@ static int winmidi_configure_instance(instance* inst, char* option, char* value)
 	}
 	if(!strcmp(option, "write")){
 		if(data->write){
-			fprintf(stderr, "winmidi instance %s already connected to an output device\n", inst->name);
+			LOGPF("Instance %s already connected to an output device", inst->name);
 			return 1;
 		}
 		data->write = strdup(value);
 		return 0;
 	}
 
-	fprintf(stderr, "Unknown winmidi instance option %s\n", option);
+	LOGPF("Unknown instance configuration option %s on instance %s", option, inst->name);
 	return 1;
 }
 
@@ -103,14 +103,14 @@ static instance* winmidi_instance(){
 
 	i->impl = calloc(1, sizeof(winmidi_instance_data));
 	if(!i->impl){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
 	return i;
 }
 
-static channel* winmidi_channel(instance* inst, char* spec){
+static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){
 	char* next_token = NULL;
 	winmidi_channel_ident ident = {
 		.label = 0
@@ -124,18 +124,18 @@ static channel* winmidi_channel(instance* inst, char* spec){
 	}
 	
 	if(!next_token){
-		fprintf(stderr, "Invalid winmidi channel specification %s\n", spec);
+		LOGPF("Invalid channel specification %s", spec);
 		return NULL;
 	}
 
 	ident.fields.channel = strtoul(next_token, &next_token, 10);
 	if(ident.fields.channel > 15){
-		fprintf(stderr, "MIDI channel out of range in winmidi channel spec %s\n", spec);
+		LOGPF("MIDI channel out of range in spec %s", spec);
 		return NULL;
 	}
 
 	if(*next_token != '.'){
-		fprintf(stderr, "winmidi channel specification %s does not conform to channel<X>.<control><Y>\n", spec);
+		LOGPF("Channel specification %s does not conform to channel<X>.<control><Y>", spec);
 		return NULL;
 	}
 
@@ -160,7 +160,7 @@ static channel* winmidi_channel(instance* inst, char* spec){
 		ident.fields.type = aftertouch;
 	}
 	else{
-		fprintf(stderr, "Unknown winmidi channel control type in %s\n", spec);
+		LOGPF("Unknown control type in %s", spec);
 		return NULL;
 	}
 
@@ -196,42 +196,24 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	}
 
 	if(!data->device_out){
-		fprintf(stderr, "winmidi instance %s has no output device\n", inst->name);
+		LOGPF("Instance %s has no output device", inst->name);
 		return 0;
 	}
 
 	for(u = 0; u < num; u++){
 		ident.label = c[u]->ident;
 
-		switch(ident.fields.type){
-			case note:
-				output.components.status = 0x90 | ident.fields.channel;
-				output.components.data1 = ident.fields.control;
-				output.components.data2 = v[u].normalised * 127.0;
-				break;
-			case cc:
-				output.components.status = 0xB0 | ident.fields.channel;
-				output.components.data1 = ident.fields.control;
-				output.components.data2 = v[u].normalised * 127.0;
-				break;
-			case pressure:
-				output.components.status = 0xA0 | ident.fields.channel;
-				output.components.data1 = ident.fields.control;
-				output.components.data2 = v[u].normalised * 127.0;
-				break;
-			case aftertouch:
-				output.components.status = 0xD0 | ident.fields.channel;
-				output.components.data1 = v[u].normalised * 127.0;
-				output.components.data2 = 0;
-				break;
-			case pitchbend:
-				output.components.status = 0xE0 | ident.fields.channel;
-				output.components.data1 = ((int)(v[u].normalised * 16384.0)) & 0x7F;
-				output.components.data2 = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
-				break;
-			default:
-				fprintf(stderr, "Unknown winmidi channel type %d\n", ident.fields.type);
-				continue;
+		//build output message
+		output.components.status = ident.fields.type | ident.fields.channel;
+		output.components.data1 = ident.fields.control;
+		output.components.data2 = v[u].normalised * 127.0;
+		if(ident.fields.type == pitchbend){
+			output.components.data1 = ((int)(v[u].normalised * 16384.0)) & 0x7F;
+			output.components.data2 = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
+		}
+		else if(ident.fields.type == aftertouch){
+			output.components.data1 = v[u].normalised * 127.0;
+			output.components.data2 = 0;
 		}
 
 		midiOutShortMsg(data->device_out, output.dword);
@@ -277,14 +259,14 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 			//pretty-print channel-wide events
 			if(backend_config.event[u].channel.fields.type == pitchbend
 					|| backend_config.event[u].channel.fields.type == aftertouch){
-				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s, value %f\n",
+				LOGPF("Incoming data on channel %s.ch%d.%s, value %f",
 						backend_config.event[u].inst->name,
 						backend_config.event[u].channel.fields.channel,
 						winmidi_type_name(backend_config.event[u].channel.fields.type),
 						backend_config.event[u].value);
 			}
 			else{
-				fprintf(stderr, "Incoming MIDI data on channel %s.ch%d.%s%d, value %f\n",
+				LOGPF("Incoming data on channel %s.ch%d.%s%d, value %f",
 						backend_config.event[u].inst->name,
 						backend_config.event[u].channel.fields.channel,
 						winmidi_type_name(backend_config.event[u].channel.fields.type),
@@ -297,7 +279,7 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 			mm_channel_event(chan, backend_config.event[u].value);
 		}
 	}
-	DBGPF("winmidi flushed %" PRIsize_t " wakeups, handled %" PRIsize_t " events\n", bytes, backend_config.events_active);
+	DBGPF("Flushed %" PRIsize_t " wakeups, handled %" PRIsize_t " events", bytes, backend_config.events_active);
 	backend_config.events_active = 0;
 	LeaveCriticalSection(&backend_config.push_events);
 	return 0;
@@ -321,7 +303,7 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 	};
 
 	//callbacks may run on different threads, so we queue all events and alert the main thread via the feedback socket
-	DBGPF("winmidi input callback on thread %ld\n", GetCurrentThreadId());
+	DBGPF("Input callback on thread %ld", GetCurrentThreadId());
 
 	switch(message){
 		case MIM_MOREDATA:
@@ -330,40 +312,21 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 			//param1 has the message
 			input.dword = param1;
 			ident.fields.channel = input.components.status & 0x0F;
-			switch(input.components.status & 0xF0){
-				case 0x80:
-					ident.fields.type = note;
-					ident.fields.control = input.components.data1;
-					val.normalised = 0.0;
-					break;
-				case 0x90:
-					ident.fields.type = note;
-					ident.fields.control = input.components.data1;
-					val.normalised = (double) input.components.data2 / 127.0;
-					break;
-				case 0xA0:
-					ident.fields.type = pressure;
-					ident.fields.control = input.components.data1;
-					val.normalised = (double) input.components.data2 / 127.0;
-					break;
-				case 0xB0:
-					ident.fields.type = cc;
-					ident.fields.control = input.components.data1;
-					val.normalised = (double) input.components.data2 / 127.0;
-					break;
-				case 0xD0:
-					ident.fields.type = aftertouch;
-					ident.fields.control = 0;
-					val.normalised = (double) input.components.data1 / 127.0;
-					break;
-				case 0xE0:
-					ident.fields.type = pitchbend;
-					ident.fields.control = 0;
-					val.normalised = (double)((input.components.data2 << 7) | input.components.data1) / 16384.0;
-					break;
-				default:
-					fprintf(stderr, "winmidi unhandled status byte %02X\n", input.components.status);
-					return;
+			ident.fields.type = input.components.status & 0xF0;
+			ident.fields.control = input.components.data1;
+			val.normalised = (double) input.components.data2 / 127.0;
+			
+			if(ident.fields.type == 0x80){
+				ident.fields.type = note;
+				val.normalised = 0;
+			}
+			else if(ident.fields.type == pitchbend){
+				ident.fields.control = 0;
+				val.normalised = (double)((input.components.data2 << 7) | input.components.data1) / 16384.0;
+			}
+			else if(ident.fields.type == aftertouch){
+				ident.fields.control = 0;
+				val.normalised = (double) input.components.data1 / 127.0;
 			}
 			break;
 		case MIM_LONGDATA:
@@ -371,7 +334,7 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 			return;
 		case MIM_ERROR:
 			//error in input stream
-			fprintf(stderr, "winmidi warning: error in input stream\n");
+			LOG("Error in input stream");
 			return;
 		case MIM_OPEN:
 		case MIM_CLOSE:
@@ -380,14 +343,14 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 		
 	}
 
-	DBGPF("winmidi incoming message type %d channel %d control %d value %f\n",
+	DBGPF("Incoming message type %d channel %d control %d value %f",
 			ident.fields.type, ident.fields.channel, ident.fields.control, val.normalised);
 
 	EnterCriticalSection(&backend_config.push_events);
 	if(backend_config.events_alloc <= backend_config.events_active){
 		backend_config.event = realloc((void*) backend_config.event, (backend_config.events_alloc + 1) * sizeof(winmidi_event));
 		if(!backend_config.event){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			backend_config.events_alloc = 0;
 			backend_config.events_active = 0;
 			LeaveCriticalSection(&backend_config.push_events);
@@ -408,7 +371,7 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 }
 
 static void CALLBACK winmidi_output_callback(HMIDIOUT device, unsigned message, DWORD_PTR inst, DWORD param1, DWORD param2){
-	DBGPF("winmidi output callback on thread %ld\n", GetCurrentThreadId());
+	DBGPF("Output callback on thread %ld", GetCurrentThreadId());
 }
 
 static int winmidi_match_input(char* prefix){
@@ -418,13 +381,13 @@ static int winmidi_match_input(char* prefix){
 	size_t n;
 
 	if(!prefix){
-		fprintf(stderr, "winmidi detected %u input devices\n", inputs);
+		LOGPF("Detected %u input devices", inputs);
 	}
 	else{
 		n = strtoul(prefix, &next_token, 10);
 		if(!(*next_token) && n < inputs){
 			midiInGetDevCaps(n, &input_caps, sizeof(MIDIINCAPS));
-			fprintf(stderr, "winmidi selected input device %s for ID %d\n", input_caps.szPname, n);
+			LOGPF("Selected input device %s for ID %d", input_caps.szPname, n);
 			return n;
 		}
 	}
@@ -433,10 +396,10 @@ static int winmidi_match_input(char* prefix){
 	for(n = 0; n < inputs; n++){
 		midiInGetDevCaps(n, &input_caps, sizeof(MIDIINCAPS));
 		if(!prefix){
-			printf("\tID %d: %s\n", n, input_caps.szPname);
+			printf("\tID %d: %s", n, input_caps.szPname);
 		}
 		else if(!strncmp(input_caps.szPname, prefix, strlen(prefix))){
-			fprintf(stderr, "winmidi selected input device %s (ID %" PRIsize_t ") for name %s\n", input_caps.szPname, n, prefix);
+			LOGPF("Selected input device %s (ID %" PRIsize_t ") for name %s", input_caps.szPname, n, prefix);
 			return n;
 		}
 	}
@@ -451,13 +414,13 @@ static int winmidi_match_output(char* prefix){
 	size_t n;
 
 	if(!prefix){
-		fprintf(stderr, "winmidi detected %u output devices\n", outputs);
+		LOGPF("Detected %u output devices", outputs);
 	}
 	else{
 		n = strtoul(prefix, &next_token, 10);
 		if(!(*next_token) && n < outputs){
 			midiOutGetDevCaps(n, &output_caps, sizeof(MIDIOUTCAPS));
-			fprintf(stderr, "winmidi selected output device %s for ID %d\n", output_caps.szPname, n);
+			LOGPF("Selected output device %s for ID %d", output_caps.szPname, n);
 			return n;
 		}
 	}
@@ -466,10 +429,10 @@ static int winmidi_match_output(char* prefix){
 	for(n = 0; n < outputs; n++){
 		midiOutGetDevCaps(n, &output_caps, sizeof(MIDIOUTCAPS));
 		if(!prefix){
-			printf("\tID %d: %s\n", n, output_caps.szPname);
+			printf("\tID %d: %s", n, output_caps.szPname);
 		}
 		else if(!strncmp(output_caps.szPname, prefix, strlen(prefix))){
-			fprintf(stderr, "winmidi selected output device %s (ID %" PRIsize_t " for name %s\n", output_caps.szPname, n, prefix);
+			LOGPF("Selected output device %s (ID %" PRIsize_t " for name %s", output_caps.szPname, n, prefix);
 			return n;
 		}
 	}
@@ -477,10 +440,9 @@ static int winmidi_match_output(char* prefix){
 	return -1;
 }
 
-static int winmidi_start(){
-	size_t n = 0, p;
+static int winmidi_start(size_t n, instance** inst){
+	size_t p;
 	int device, rv = -1;
-	instance** inst = NULL;
 	winmidi_instance_data* data = NULL;
 	struct sockaddr_storage sockadd = {
 		0
@@ -488,19 +450,7 @@ static int winmidi_start(){
 	//this really should be a size_t but getsockname specifies int* for some reason
 	int sockadd_len = sizeof(sockadd);
 	char* error = NULL;
-	DBGPF("winmidi main thread ID is %ld\n", GetCurrentThreadId());
-
-	//fetch all instances
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
-
-	//no instances, we're done
-	if(!n){
-		free(inst);
-		return 0;
-	}
+	DBGPF("Main thread ID is %ld", GetCurrentThreadId());
 
 	//output device list if requested
 	if(backend_config.list_devices){
@@ -512,13 +462,13 @@ static int winmidi_start(){
 	//for some reason the feedback connection fails to work on 'real' windows with ipv6
 	backend_config.socket_pair[0] = mmbackend_socket("127.0.0.1", "0", SOCK_DGRAM, 1, 0);
 	if(backend_config.socket_pair[0] < 0){
-		fprintf(stderr, "winmidi failed to open feedback socket\n");
+		LOG("Failed to open feedback socket");
 		return 1;
 	}
 	if(getsockname(backend_config.socket_pair[0], (struct sockaddr*) &sockadd, &sockadd_len)){
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-		fprintf(stderr, "winmidi failed to query feedback socket information: %s\n", error);
+		LOGPF("Failed to query feedback socket information: %s", error);
 		LocalFree(error);
 		return 1;
 	}
@@ -534,15 +484,15 @@ static int winmidi_start(){
 //			((struct sockaddr_in6*) &sockadd)->sin6_addr = in6addr_any;
 //			break;
 		default:
-			fprintf(stderr, "winmidi invalid feedback socket family\n");
+			LOG("Invalid feedback socket family");
 			return 1;
 	}
-	DBGPF("winmidi feedback socket family %d port %d\n", sockadd.ss_family, be16toh(((struct sockaddr_in*)&sockadd)->sin_port));
+	DBGPF("Feedback socket family %d port %d", sockadd.ss_family, be16toh(((struct sockaddr_in*)&sockadd)->sin_port));
 	backend_config.socket_pair[1] = socket(sockadd.ss_family, SOCK_DGRAM, IPPROTO_UDP);
 	if(backend_config.socket_pair[1] < 0 || connect(backend_config.socket_pair[1], (struct sockaddr*) &sockadd, sockadd_len)){
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-		fprintf(stderr, "winmidi failed to connect to feedback socket: %s\n", error);
+		LOGPF("Failed to connect to feedback socket: %s", error);
 		LocalFree(error);
 		return 1;
 	}
@@ -556,11 +506,11 @@ static int winmidi_start(){
 		if(data->read){
 			device = winmidi_match_input(data->read);
 			if(device < 0){
-				fprintf(stderr, "Failed to match input device %s for instance %s\n", data->read, inst[p]->name);
+				LOGPF("Failed to match input device %s for instance %s", data->read, inst[p]->name);
 				goto bail;
 			}
 			if(midiInOpen(&(data->device_in), device, (DWORD_PTR) winmidi_input_callback, (DWORD_PTR) inst[p], CALLBACK_FUNCTION | MIDI_IO_STATUS) != MMSYSERR_NOERROR){
-				fprintf(stderr, "Failed to open input device for instance %s\n", inst[p]->name);
+				LOGPF("Failed to open input device for instance %s", inst[p]->name);
 				goto bail;
 			}
 			//start midi input callbacks
@@ -571,37 +521,30 @@ static int winmidi_start(){
 		if(data->write){
 			device = winmidi_match_output(data->write);
 			if(device < 0){
-				fprintf(stderr, "Failed to match output device %s for instance %s\n", data->read, inst[p]->name);
+				LOGPF("Failed to match output device %s for instance %s", data->read, inst[p]->name);
 				goto bail;
 			}
 			if(midiOutOpen(&(data->device_out), device, (DWORD_PTR) winmidi_output_callback, (DWORD_PTR) inst[p], CALLBACK_FUNCTION) != MMSYSERR_NOERROR){
-				fprintf(stderr, "Failed to open output device for instance %s\n", inst[p]->name);
+				LOGPF("Failed to open output device for instance %s", inst[p]->name);
 				goto bail;
 			}
 		}
 	}
 
 	//register the feedback socket to the core
-	fprintf(stderr, "winmidi backend registering 1 descriptor to core\n");
+	LOG("Registering 1 descriptor to core");
 	if(mm_manage_fd(backend_config.socket_pair[0], BACKEND_NAME, 1, NULL)){
 		goto bail;
 	}
 
 	rv = 0;
 bail:
-	free(inst);
 	return rv;
 }
 
-static int winmidi_shutdown(){
-	size_t n, u;
-	instance** inst = NULL;
+static int winmidi_shutdown(size_t n, instance** inst){
+	size_t u;
 	winmidi_instance_data* data = NULL;
-
-	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
-		fprintf(stderr, "Failed to fetch instance list\n");
-		return 1;
-	}
 
 	for(u = 0; u < n; u++){
 		data = (winmidi_instance_data*) inst[u]->impl;
@@ -621,9 +564,10 @@ static int winmidi_shutdown(){
 			midiOutClose(data->device_out);
 			data->device_out = NULL;
 		}
+
+		free(inst[u]->impl);
 	}
 
-	free(inst);
 	closesocket(backend_config.socket_pair[0]);
 	closesocket(backend_config.socket_pair[1]);
 
@@ -635,6 +579,6 @@ static int winmidi_shutdown(){
 	LeaveCriticalSection(&backend_config.push_events);
 	DeleteCriticalSection(&backend_config.push_events);
 
-	fprintf(stderr, "winmidi backend shut down\n");
+	LOG("Backend shut down");
 	return 0;
 }

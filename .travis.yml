@@ -34,7 +34,6 @@ addons:
      - *core_build
      - mingw-w64
 
-
 matrix:
   fast_finish: true
   include:
@@ -179,6 +178,8 @@ install:
   - if [ "$TASK" = "codespell" ]; then pip install --user git+https://github.com/codespell-project/codespell.git; fi
 
 before_install:
+# Travis clones with --branch, which omits tags. Since we use them for the version string at build time, fetch them
+ - git pull --tags
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
 # 'brew install' sometimes returns non-zero for some arcane reason. Executing 'true' resets the exit code and allows Travis to continue building...
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install ccache ola lua openssl jack; true; fi

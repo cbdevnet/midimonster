@@ -1,5 +1,5 @@
 #define BACKEND_NAME "rtpmidi"
-//#define DEBUG
+#define DEBUG
 
 #include <string.h>
 #include <errno.h>
@@ -11,8 +11,6 @@
 #include "rtpmidi.h"
 
 //TODO learn peer ssrcs
-//TODO participants need to initiate clock sync at some point
-//TODO applemode peers still need session negotiation (peer option should only bypass discovery)
 //TODO default session join?
 //TODO default mode?
 //TODO internal loop mode
@@ -164,7 +162,7 @@ static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storag
 		if(data->peer[u].active
 				&& sock_len == data->peer[u].dest_len
 				&& !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
-			//if yes, update connection flag (but not learned flag because that doesnt change)
+			//if yes, update connection flag (but not learned flag because that doesn't change)
 			data->peer[u].connected = connected;
 			return 0;
 		}
@@ -914,7 +912,7 @@ static int rtpmidi_service(){
 
 					sendto(data->control_fd, &sync, sizeof(apple_sync_frame), 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
 				}
-				else if(data->peer[p].active && !data->peer[p].learned){
+				else if(data->peer[p].active && !data->peer[p].learned && (mm_timestamp() / 1000) % 10 == 0){
 					//try to invite pre-defined unconnected applemidi peers
 					DBGPF("Instance %s inviting configured peer %" PRIsize_t, inst[u]->name, p);
 					invite->ssrc = htobe32(data->ssrc);

@@ -75,6 +75,7 @@ elif [[ $TASK = 'windows' ]]; then
   # Run sanitized compile
   travis_fold start "make_windows"
   make windows;
+  make -C backends lua.dll
   travis_fold end "make_windows"
   travis_fold start "deploy_windows"
   if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then

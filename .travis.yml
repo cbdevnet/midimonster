@@ -198,6 +198,8 @@ before_install:
 #OS X uses something other than $CXX variable
  - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) ]; then $CXX --version; fi
  - if [ "$TASK" == "spellintian" -o "$TASK" == "spellintian-duplicates" ]; then wget "http://archive.ubuntu.com/ubuntu/pool/main/l/lintian/lintian_2.5.104_all.deb"; sudo dpkg -i lintian_*.deb; sudo apt-get install -f -y; fi # Install a later lintian
+# Download libraries to link with on Windows
+ - if [ "$TASK" == "windows" ]; then mkdir libs; wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip; unzip lua53.zip lua53.dll; mv lua53.dll libs; fi
 
 after_script:
   - if [ "$TASK" = "coverity" ]; then tail -n 10000 ${TRAVIS_BUILD_DIR}/cov-int/build-log.txt; cat ${TRAVIS_BUILD_DIR}/cov-int/scm_log.txt; fi

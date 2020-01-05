@@ -21,6 +21,8 @@ typedef enum {
 
 static backend* current_backend = NULL;
 static instance* current_instance = NULL;
+static size_t noverrides = 0;
+static config_override* overrides = NULL;
 
 #ifdef _WIN32
 #define GETLINE_BUFFER 4096
@@ -312,13 +314,179 @@ done:
 	return rv;
 }
 
+static int config_line(char* line){
+	map_type mapping_type = map_rtl;
+	char* separator = NULL;
+	size_t u;
+
+	line = config_trim_line(line);
+	if(*line == ';' || strlen(line) == 0){
+		//skip comments
+		return 0;
+	}
+	if(*line == '[' && line[strlen(line) - 1] == ']'){
+		if(!strncmp(line, "[backend ", 9)){
+			//backend configuration
+			parser_state = backend_cfg;
+			line[strlen(line) - 1] = 0;
+			current_backend = backend_match(line + 9);
+
+			if(!current_backend){
+				fprintf(stderr, "Cannot configure unknown backend %s\n", line + 9);
+				return 1;
+			}
+
+			//apply overrides
+			for(u = 0; u < noverrides; u++){
+				if(!overrides[u].handled && overrides[u].type == override_backend
+					       && !strcmp(overrides[u].target, current_backend->name)){
+					if(current_backend->conf(overrides[u].option, overrides[u].value)){
+						fprintf(stderr, "Configuration override for %s failed for backend %s\n",
+								overrides[u].option, current_backend->name);
+						return 1;
+					}
+					overrides[u].handled = 1;
+				}
+			}
+		}
+		else if(!strcmp(line, "[map]")){
+			//mapping configuration
+			parser_state = map;
+		}
+		else{
+			//backend instance configuration
+			parser_state = instance_cfg;
+			
+			//trim braces
+			line[strlen(line) - 1] = 0;
+			line++;
+
+			//find separating space and terminate
+			for(separator = line; *separator && *separator != ' '; separator++){
+			}
+			if(!*separator){
+				fprintf(stderr, "No instance name specified for backend %s\n", line);
+				return 1;
+			}
+			*separator = 0;
+			separator++;
+
+			current_backend = backend_match(line);
+			if(!current_backend){
+				fprintf(stderr, "No such backend %s\n", line);
+				return 1;
+			}
+
+			if(instance_match(separator)){
+				fprintf(stderr, "Duplicate instance name %s\n", separator);
+				return 1;
+			}
+
+			//validate instance name
+			if(strchr(separator, ' ') || strchr(separator, '.')){
+				fprintf(stderr, "Invalid instance name %s\n", separator);
+				return 1;
+			}
+
+			current_instance = current_backend->create();
+			if(!current_instance){
+				fprintf(stderr, "Failed to instantiate backend %s\n", line);
+				return 1;
+			}
+
+			current_instance->name = strdup(separator);
+			current_instance->backend = current_backend;
+			fprintf(stderr, "Created %s instance %s\n", line, separator);
+
+			//apply overrides
+			for(u = 0; u < noverrides; u++){
+				if(!overrides[u].handled && overrides[u].type == override_instance
+					       && !strcmp(overrides[u].target, current_instance->name)){
+					if(current_backend->conf_instance(current_instance, overrides[u].option, overrides[u].value)){
+						fprintf(stderr, "Configuration override for %s failed for instance %s\n",
+								overrides[u].option, current_instance->name);
+						return 1;
+					}
+					overrides[u].handled = 1;
+				}
+			}
+		}
+	}
+	else if(parser_state == map){
+		mapping_type = map_rtl;
+		//find separator
+		for(separator = line; *separator && *separator != '<' && *separator != '>'; separator++){
+		}
+
+		switch(*separator){
+			case '>':
+				mapping_type = map_ltr;
+				//fall through
+			case '<': //default
+				*separator = 0;
+				separator++;
+				break;
+			case 0:
+			default:
+				fprintf(stderr, "Not a channel mapping: %s\n", line);
+				return 1;
+		}
+
+		if((mapping_type == map_ltr && *separator == '<')
+				|| (mapping_type == map_rtl && *separator == '>')){
+			mapping_type = map_bidir;
+			separator++;
+		}
+
+		line = config_trim_line(line);
+		separator = config_trim_line(separator);
+
+		if(mapping_type == map_ltr || mapping_type == map_bidir){
+			if(config_map(separator, line)){
+				fprintf(stderr, "Failed to map channel %s to %s\n", line, separator);
+				return 1;
+			}
+		}
+		if(mapping_type == map_rtl || mapping_type == map_bidir){
+			if(config_map(line, separator)){
+				fprintf(stderr, "Failed to map channel %s to %s\n", separator, line);
+				return 1;
+			}
+		}
+	}
+	else{
+		//pass to parser
+		//find separator
+		separator = strchr(line, '=');
+		if(!separator){
+			fprintf(stderr, "Not an assignment: %s\n", line);
+			return 1;
+		}
+
+		*separator = 0;
+		separator++;
+		line = config_trim_line(line);
+		separator = config_trim_line(separator);
+
+		if(parser_state == backend_cfg && current_backend->conf(line, separator)){
+			fprintf(stderr, "Failed to configure backend %s\n", current_backend->name);
+			return 1;
+		}
+		else if(parser_state == instance_cfg && current_backend->conf_instance(current_instance, line, separator)){
+			fprintf(stderr, "Failed to configure instance %s\n", current_instance->name);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 int config_read(char* cfg_filepath){
 	int rv = 1;
 	size_t line_alloc = 0;
 	ssize_t status;
-	map_type mapping_type = map_rtl;
 	FILE* source = NULL;
-	char* line_raw = NULL, *line, *separator;
+	char* line_raw = NULL;
 
 	//create heap copy of file name because original might be in readonly memory
 	char* source_dir = strdup(cfg_filepath), *source_file = NULL;
@@ -355,139 +523,12 @@ int config_read(char* cfg_filepath){
 	}
 
 	for(status = getline(&line_raw, &line_alloc, source); status >= 0; status = getline(&line_raw, &line_alloc, source)){
-		line = config_trim_line(line_raw);
-		if(*line == ';' || strlen(line) == 0){
-			//skip comments
-			continue;
-		}
-		if(*line == '[' && line[strlen(line) - 1] == ']'){
-			if(!strncmp(line, "[backend ", 9)){
-				//backend configuration
-				parser_state = backend_cfg;
-				line[strlen(line) - 1] = 0;
-				current_backend = backend_match(line + 9);
-
-				if(!current_backend){
-					fprintf(stderr, "Cannot configure unknown backend %s\n", line + 9);
-					goto bail;
-				}
-			}
-			else if(!strcmp(line, "[map]")){
-				//mapping configuration
-				parser_state = map;
-			}
-			else{
-				//backend instance configuration
-				parser_state = instance_cfg;
-				
-				//trim braces
-				line[strlen(line) - 1] = 0;
-				line++;
-
-				//find separating space and terminate
-				for(separator = line; *separator && *separator != ' '; separator++){
-				}
-				if(!*separator){
-					fprintf(stderr, "No instance name specified for backend %s\n", line);
-					goto bail;
-				}
-				*separator = 0;
-				separator++;
-
-				current_backend = backend_match(line);
-				if(!current_backend){
-					fprintf(stderr, "No such backend %s\n", line);
-					goto bail;
-				}
-
-				if(instance_match(separator)){
-					fprintf(stderr, "Duplicate instance name %s\n", separator);
-					goto bail;
-				}
-
-				//validate instance name
-				if(strchr(separator, ' ') || strchr(separator, '.')){
-					fprintf(stderr, "Invalid instance name %s\n", separator);
-					goto bail;
-				}
-
-				current_instance = current_backend->create();
-				if(!current_instance){
-					fprintf(stderr, "Failed to instantiate backend %s\n", line);
-					goto bail;
-				}
-
-				current_instance->name = strdup(separator);
-				current_instance->backend = current_backend;
-				fprintf(stderr, "Created %s instance %s\n", line, separator);
-			}
-		}
-		else if(parser_state == map){
-			mapping_type = map_rtl;
-			//find separator
-			for(separator = line; *separator && *separator != '<' && *separator != '>'; separator++){
-			}
-
-			switch(*separator){
-				case '>':
-					mapping_type = map_ltr;
-					//fall through
-				case '<': //default
-					*separator = 0;
-					separator++;
-					break;
-				case 0:
-				default:
-					fprintf(stderr, "Not a channel mapping: %s\n", line);
-					goto bail;
-			}
-
-			if((mapping_type == map_ltr && *separator == '<')
-					|| (mapping_type == map_rtl && *separator == '>')){
-				mapping_type = map_bidir;
-				separator++;
-			}
-
-			line = config_trim_line(line);
-			separator = config_trim_line(separator);
-
-			if(mapping_type == map_ltr || mapping_type == map_bidir){
-				if(config_map(separator, line)){
-					fprintf(stderr, "Failed to map channel %s to %s\n", line, separator);
-					goto bail;
-				}
-			}
-			if(mapping_type == map_rtl || mapping_type == map_bidir){
-				if(config_map(line, separator)){
-					fprintf(stderr, "Failed to map channel %s to %s\n", separator, line);
-					goto bail;
-				}
-			}
-		}
-		else{
-			//pass to parser
-			//find separator
-			separator = strchr(line, '=');
-			if(!separator){
-				fprintf(stderr, "Not an assignment: %s\n", line);
-				goto bail;
-			}
-
-			*separator = 0;
-			separator++;
-			line = config_trim_line(line);
-			separator = config_trim_line(separator);
-
-			if(parser_state == backend_cfg && current_backend->conf(line, separator)){
-				fprintf(stderr, "Failed to configure backend %s\n", current_backend->name);
-				goto bail;
-			}
-			else if(parser_state == instance_cfg && current_backend->conf_instance(current_instance, line, separator)){
-				fprintf(stderr, "Failed to configure instance %s\n", current_instance->name);
-				goto bail;
-			}
+		if(config_line(line_raw)){
+			goto bail;
 		}
 	}
+
+	//TODO check whether all overrides have been applied
 
 	rv = 0;
 bail:
@@ -497,4 +538,73 @@ bail:
 	}
 	free(line_raw);
 	return rv;
+}
+
+int config_add_override(override_type type, char* data_raw){
+	int rv = 1;
+	//heap a copy because the original data is probably not writable
+	char* data = strdup(data_raw);
+
+	if(!data){
+		fprintf(stderr, "Failed to allocate memory\n");
+		goto bail;
+	}
+
+	char* option = strchr(data, '.');
+	char* value = strchr(data, '=');
+
+	if(!option || !value){
+		fprintf(stderr, "Override %s is not a valid assignment\n", data_raw);
+		goto bail;
+	}
+
+	//terminate strings
+	*option = 0;
+	option++;
+
+	*value = 0;
+	value++;
+
+	config_override new = {
+		.type = type,
+		.handled = 0,
+		.target = strdup(config_trim_line(data)),
+		.option = strdup(config_trim_line(option)),
+		.value = strdup(config_trim_line(value))
+	};
+
+	if(!new.target || !new.option || !new.value){
+		fprintf(stderr, "Failed to allocate memory\n");
+		goto bail;
+	}
+
+	overrides = realloc(overrides, (noverrides + 1) * sizeof(config_override));
+	if(!overrides){
+		noverrides = 0;
+		fprintf(stderr, "Failed to allocate memory\n");
+		goto bail;
+	}
+	overrides[noverrides] = new;
+	noverrides++;
+
+	rv = 0;
+bail:
+	free(data);
+	return rv;
+}
+
+void config_free(){
+	size_t u;
+
+	for(u = 0; u < noverrides; u++){
+		free(overrides[u].target);
+		free(overrides[u].option);
+		free(overrides[u].value);
+	}
+
+	noverrides = 0;
+	free(overrides);
+	overrides = NULL;
+
+	parser_state = none;
 }

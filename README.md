@@ -48,6 +48,8 @@ The MIDImonster takes as it's first argument the name of an optional configurati
 to use (`monster.cfg` is used as default if none is specified). The configuration
 file syntax is explained in the next section.
 
+The current MIDIMonster version can be queried by passing *-v* as command-line argument.
+
 ## Configuration
 
 Each protocol supported by MIDIMonster is implemented by a *backend*, which takes
@@ -75,6 +77,11 @@ section for that particular backend can be omitted.
 To make an instance available for mapping channels, it requires at least the
 `[<backend-name> <instance-name>]` configuration stanza. Most backends require
 additional configuration for their instances.
+
+Backend and instance configuration options can also be overriden via command line
+arguments using the syntax `-b <backend>.<option>=<value>` for backend options
+and `-i <instance>.<option>=<value>` for instance options. These overrides
+are applied when the backend/instance is first mentioned in the configuration file.
 
 ### Channel mapping
 

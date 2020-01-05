@@ -274,9 +274,30 @@ static int args_parse(int argc, char** argv, char** cfg_file){
 			version();
 			return 1;
 		}
-
-		//if nothing else matches, it's probably the configuration file
-		*cfg_file = argv[u];
+		else if(!strcmp(argv[u], "-i")){
+			if(!argv[u + 1]){
+				fprintf(stderr, "Missing instance override specification\n");
+				return 1;
+			}
+			if(config_add_override(override_instance, argv[u + 1])){
+				return 1;
+			}
+			u++;
+		}
+		else if(!strcmp(argv[u], "-b")){
+			if(!argv[u + 1]){
+				fprintf(stderr, "Missing backend override specification\n");
+				return 1;
+			}
+			if(config_add_override(override_backend, argv[u + 1])){
+				return 1;
+			}
+			u++;
+		}
+		else{
+			//if nothing else matches, it's probably the configuration file
+			*cfg_file = argv[u];
+		}
 	}
 
 	return 0;
@@ -317,6 +338,7 @@ int main(int argc, char** argv){
 		map_free();
 		fds_free();
 		plugins_close();
+		config_free();
 		return usage(argv[0]);
 	}
 	
@@ -403,6 +425,7 @@ bail:
 	fds_free();
 	event_free();
 	plugins_close();
+	config_free();
 
 	return rv;
 }

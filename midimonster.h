@@ -189,29 +189,6 @@ typedef struct _backend_instance {
 	char* name;
 } instance;
 
-/*
- * Channel specification glob
- */
-typedef struct /*_mm_channel_glob*/ {
-	size_t offset[2];
-	union {
-		void* impl;
-		uint64_t u64[2];
-	} limits;
-	uint64_t values;
-} channel_glob;
-
-/*
- * (Multi-)Channel specification
- */
-typedef struct /*_mm_channel_spec*/ {
-	char* spec;
-	uint8_t internal;
-	size_t channels;
-	size_t globs;
-	channel_glob* glob;
-} channel_spec;
-
 /* 
  * Instance channel structure
  * Backends may either manage their own channel registry
@@ -283,7 +260,6 @@ MM_API instance* mm_instance_find(char* backend, uint64_t ident);
  * function.
  */
 MM_API channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
-//TODO channel* mm_channel_find()
 
 /*
  * Register (manage = 1) or unregister (manage = 0) a file descriptor

@@ -78,7 +78,7 @@ To make an instance available for mapping channels, it requires at least the
 `[<backend-name> <instance-name>]` configuration stanza. Most backends require
 additional configuration for their instances.
 
-Backend and instance configuration options can also be overriden via command line
+Backend and instance configuration options can also be overridden via command line
 arguments using the syntax `-b <backend>.<option>=<value>` for backend options
 and `-i <instance>.<option>=<value>` for instance options. These overrides
 are applied when the backend/instance is first mentioned in the configuration file.

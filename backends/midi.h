@@ -3,7 +3,7 @@
 MM_PLUGIN_API int init();
 static int midi_configure(char* option, char* value);
 static int midi_configure_instance(instance* instance, char* option, char* value);
-static instance* midi_instance();
+static int midi_instance(instance* inst);
 static channel* midi_channel(instance* instance, char* spec, uint8_t flags);
 static int midi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int midi_handle(size_t num, managed_fd* fds);

@@ -279,7 +279,7 @@ static int config_map(char* to_raw, char* from_raw){
 			|| config_glob_scan(instance_from, &spec_from)){
 		goto done;
 	}
-	
+
 	if((spec_to.channels != spec_from.channels && spec_from.channels != 1 && spec_to.channels != 1)
 			|| spec_to.channels == 0
 			|| spec_from.channels == 0){
@@ -298,7 +298,7 @@ static int config_map(char* to_raw, char* from_raw){
 	for(n = 0; !rv && n < max(spec_from.channels, spec_to.channels); n++){
 		channel_from = config_glob_resolve(instance_from, &spec_from, min(n, spec_from.channels), mmchannel_input);
 		channel_to = config_glob_resolve(instance_to, &spec_to, min(n, spec_to.channels), mmchannel_output);
-		
+
 		if(!channel_from || !channel_to){
 			rv = 1;
 			goto done;
@@ -356,7 +356,7 @@ static int config_line(char* line){
 		else{
 			//backend instance configuration
 			parser_state = instance_cfg;
-			
+
 			//trim braces
 			line[strlen(line) - 1] = 0;
 			line++;
@@ -388,9 +388,13 @@ static int config_line(char* line){
 				return 1;
 			}
 
-			current_instance = current_backend->create();
+			current_instance = mm_instance();
 			if(!current_instance){
-				fprintf(stderr, "Failed to instantiate backend %s\n", line);
+				return 1;
+			}
+
+			if(current_backend->create(current_instance)){
+				fprintf(stderr, "Failed to create %s instance %s\n", line, separator);
 				return 1;
 			}
 

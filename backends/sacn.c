@@ -195,19 +195,14 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static instance* sacn_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int sacn_instance(instance* inst){
 	inst->impl = calloc(1, sizeof(sacn_instance_data));
 	if(!inst->impl){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
-	return inst;
+	return 0;
 }
 
 static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){

@@ -205,16 +205,11 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static instance* maweb_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int maweb_instance(instance* inst){
 	maweb_instance_data* data = calloc(1, sizeof(maweb_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
 	data->fd = -1;
@@ -222,12 +217,12 @@ static instance* maweb_instance(){
 	if(!data->buffer){
 		LOG("Failed to allocate memory");
 		free(data);
-		return NULL;
+		return 1;
 	}
 	data->allocated = MAWEB_RECV_CHUNK;
 
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){

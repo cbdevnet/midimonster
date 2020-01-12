@@ -34,19 +34,14 @@ static int loopback_configure_instance(instance* inst, char* option, char* value
 	return 0;
 }
 
-static instance* loopback_instance(){
-	instance* i = mm_instance();
-	if(!i){
-		return NULL;
-	}
-
-	i->impl = calloc(1, sizeof(loopback_instance_data));
-	if(!i->impl){
+static int loopback_instance(instance* inst){
+	inst->impl = calloc(1, sizeof(loopback_instance_data));
+	if(!inst->impl){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
-	return i;
+	return 0;
 }
 
 static channel* loopback_channel(instance* inst, char* spec, uint8_t flags){

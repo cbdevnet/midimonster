@@ -341,7 +341,7 @@ int main(int argc, char** argv){
 		config_free();
 		return usage(argv[0]);
 	}
-	
+
 	//load an initial timestamp
 	update_timestamp();
 

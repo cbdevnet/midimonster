@@ -95,19 +95,14 @@ static int winmidi_configure_instance(instance* inst, char* option, char* value)
 	return 1;
 }
 
-static instance* winmidi_instance(){
-	instance* i = mm_instance();
-	if(!i){
-		return NULL;
-	}
-
-	i->impl = calloc(1, sizeof(winmidi_instance_data));
-	if(!i->impl){
+static int winmidi_instance(instance* inst){
+	inst->impl = calloc(1, sizeof(winmidi_instance_data));
+	if(!inst->impl){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
-	return i;
+	return 0;
 }
 
 static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){

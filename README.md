@@ -1,7 +1,7 @@
 # The MIDIMonster
 
-Named for its scary math, the MIDIMonster is a universal translation
-tool between multi-channel absolute-value-based control and/or bus protocols.
+Named for its scary math, the MIDIMonster is a universal control and translation
+tool for multi-channel absolute-value-based control and/or bus protocols.
 
 Currently, the MIDIMonster supports the following protocols:
 
@@ -18,7 +18,7 @@ Currently, the MIDIMonster supports the following protocols:
 
 with additional flexibility provided by a [Lua scripting environment](backends/lua.md).
 
-The MIDIMonster allows the user to translate any channel on one protocol into channel(s)
+With these features, the MIDIMonster allows the user to translate any channel on one protocol into channel(s)
 on any other (or the same) supported protocol, for example to:
 
 * Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))

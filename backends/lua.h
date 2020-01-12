@@ -12,7 +12,7 @@
 MM_PLUGIN_API int init();
 static int lua_configure(char* option, char* value);
 static int lua_configure_instance(instance* inst, char* option, char* value);
-static instance* lua_instance();
+static int lua_instance(instance* inst);
 static channel* lua_channel(instance* inst, char* spec, uint8_t flags);
 static int lua_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int lua_handle(size_t num, managed_fd* fds);

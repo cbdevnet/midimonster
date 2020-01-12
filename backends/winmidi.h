@@ -3,7 +3,7 @@
 MM_PLUGIN_API int init();
 static int winmidi_configure(char* option, char* value);
 static int winmidi_configure_instance(instance* inst, char* option, char* value);
-static instance* winmidi_instance();
+static int winmidi_instance(instance* inst);
 static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags);
 static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int winmidi_handle(size_t num, managed_fd* fds);

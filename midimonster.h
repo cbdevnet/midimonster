@@ -93,8 +93,9 @@ struct _managed_fd;
  * 		Parse backend-global configuration options from the user-supplied
  * 		configuration file. Returning a non-zero value fails config parsing.
  * 	* mmbackend_instance
- * 		Allocate space for a backend instance. Returning NULL signals an out-of-memory
- * 		condition and terminates the program.
+ * 		Allocate the backend-specific data parts of the supplied instance
+ * 		structure. Returning non-zero signals an error condition and
+ * 		terminates the program.
  * 	* mmbackend_configure_instance
  * 		Parse instance configuration from the user-supplied configuration
  * 		file. Returning a non-zero value fails config parsing.
@@ -135,7 +136,7 @@ struct _managed_fd;
  *		Return value is currently ignored.
  */
 typedef int (*mmbackend_handle_event)(struct _backend_instance* inst, size_t channels, struct _backend_channel** c, struct _channel_value* v);
-typedef struct _backend_instance* (*mmbackend_create_instance)();
+typedef int (*mmbackend_create_instance)(struct _backend_instance* inst);
 typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_instance* instance, char* spec, uint8_t flags);
 typedef void (*mmbackend_free_channel)(struct _backend_channel* c);
 typedef int (*mmbackend_configure)(char* option, char* value);
@@ -221,20 +222,6 @@ typedef struct /*_mm_channel_mapping*/ {
  * Register a new backend.
  */
 MM_API int mm_backend_register(backend b);
-
-/*
- * Provides a pointer to a newly (zero-)allocated instance.
- * All instance pointers need to be allocated via this API
- * in order to be assignable from the configuration parser.
- * This API should be called from the mmbackend_create_instance
- * call of your backend.
- *
- * Instances returned from this call are freed by midimonster.
- * The contents of the impl members should be freed in the
- * mmbackend_shutdown procedure of the backend, eg. by querying
- * all instances for the backend.
- */
-MM_API instance* mm_instance();
 
 /*
  * Finds an instance matching the specified backend and identifier.

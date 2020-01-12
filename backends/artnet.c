@@ -94,23 +94,17 @@ static int artnet_configure(char* option, char* value){
 	return 1;
 }
 
-static instance* artnet_instance(){
-	artnet_instance_data* data = NULL;
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
-	data = calloc(1, sizeof(artnet_instance_data));
+static int artnet_instance(instance* inst){
+	artnet_instance_data* data = calloc(1, sizeof(artnet_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
 	data->net = default_net;
 
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static int artnet_configure_instance(instance* inst, char* option, char* value){

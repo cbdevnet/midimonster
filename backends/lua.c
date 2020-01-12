@@ -304,16 +304,11 @@ static int lua_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static instance* lua_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int lua_instance(instance* inst){
 	lua_instance_data* data = calloc(1, sizeof(lua_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
 	//load the interpreter
@@ -321,7 +316,7 @@ static instance* lua_instance(){
 	if(!data->interpreter){
 		LOG("Failed to initialize interpreter");
 		free(data);
-		return NULL;
+		return 1;
 	}
 	luaL_openlibs(data->interpreter);
 
@@ -338,7 +333,7 @@ static instance* lua_instance(){
 	lua_settable(data->interpreter, LUA_REGISTRYINDEX);
 
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static channel* lua_channel(instance* inst, char* spec, uint8_t flags){

@@ -202,7 +202,7 @@ typedef struct _backend_channel {
 } channel;
 
 /*
- * File descriptor management structure
+ * File descriptor structure passed for backend handling
  * Register for the core event loop using mm_manage_fd()
  */
 typedef struct _managed_fd {
@@ -210,13 +210,6 @@ typedef struct _managed_fd {
 	backend* backend;
 	void* impl;
 } managed_fd;
-
-/* Internal channel mapping structure - Core use only */
-typedef struct /*_mm_channel_mapping*/ {
-	channel* from;
-	size_t destinations;
-	channel** to;
-} channel_mapping;
 
 /*
  * Register a new backend.

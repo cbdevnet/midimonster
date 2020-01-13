@@ -14,12 +14,19 @@
 #include "backend.h"
 #include "plugin.h"
 
+/* Core-internal structures */
 typedef struct /*_event_collection*/ {
 	size_t alloc;
 	size_t n;
 	channel** channel;
 	channel_value* value;
 } event_collection;
+
+typedef struct /*_mm_channel_mapping*/ {
+	channel* from;
+	size_t destinations;
+	channel** to;
+} channel_mapping;
 
 static size_t mappings = 0;
 static channel_mapping* map = NULL;

@@ -18,6 +18,7 @@ midimonster: LDLIBS = -ldl
 ifneq "$(GITVERSION)" ""
 midimonster: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
 midimonster.exe: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
+resource.o: RCCFLAGS += -DMIDIMONSTER_VERSION=\\\"$(GITVERSION)\\\"
 endif
 
 # Work around strange linker passing convention differences in Linux and OSX
@@ -54,17 +55,21 @@ backends-full:
 midimonster: midimonster.c portability.h $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
 
+resource.o: midimonster.rc
+	x86_64-w64-mingw32-windres $(RCCFLAGS) $< -o $@ --output-format=coff
+
 midimonster.exe: export CC = x86_64-w64-mingw32-gcc
 midimonster.exe: CFLAGS += -Wno-format
 midimonster.exe: LDLIBS = -lws2_32
 midimonster.exe: LDFLAGS += -Wl,--out-implib,libmmapi.a
-midimonster.exe: midimonster.c portability.h $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
+midimonster.exe: midimonster.c portability.h $(OBJS) resource.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) resource.o $(LDLIBS) -o $@
 
 clean:
 	$(RM) midimonster
 	$(RM) midimonster.exe
 	$(RM) libmmapi.a
+	$(RM) resource.o
 	$(RM) $(OBJS)
 	$(MAKE) -C backends clean
 

@@ -1,7 +1,7 @@
 ### The `maweb` backend
 
 This backend connects directly with the integrated *MA Web Remote* of MA Lighting consoles and OnPC
-instances (GrandMA2 / GrandMA2 OnPC / GrandMA Dot2 / GrandMA Dot2 OnPC).
+instances (GrandMA2 / GrandMA2 OnPC / Dot2 / Dot2 OnPC).
 It grants read-write access to the console's playback controls as well as write access to most command
 line and control keys.
 
@@ -32,7 +32,7 @@ Web Remote. Set a web remote password using the option below the activation sett
 The per-instance command line mode may be one of `remote`, `console` or `downgrade`. The first option handles
 command keys with a "virtual" commandline belonging to the Web Remote connection. Any commands entered are
 not visible on the main console. The `console` mode is only available with GrandMA2 remotes and injects key events
-into the main console. This mode also supports additional hardkeys that are only available on GrandMA consoles.
+into the main console. This mode also supports additional hardkeys that are only available on GrandMA2 consoles.
 When connected to a dot2 console while this mode is active, the use of commandline keys will not be possible.
 With the `downgrade` mode, keys are handled on the console if possible, falling back to remote handling if not.
 

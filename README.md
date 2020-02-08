@@ -1,5 +1,7 @@
 # The MIDIMonster
 
+<img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
+
 Named for its scary math, the MIDIMonster is a universal control and translation
 tool for multi-channel absolute-value-based control and/or bus protocols.
 
@@ -24,7 +26,8 @@ on any other (or the same) supported protocol, for example to:
 * Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))
 * Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))
 * Translate OSC messages into MIDI ([Example configuration](configs/midi-osc.cfg))
-* Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua)) to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
+* Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua))
+	to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))
@@ -32,15 +35,23 @@ on any other (or the same) supported protocol, for example to:
 
 [![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
 
+If you encounter a bug or suspect a problem with a a protocol implementation, please
+[open an Issue](https://github.com/cbdevnet/midimonster/issues) or get in touch with us via
+IRC on [Hackint in `#midimonster`](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster).
+We are happy to hear from you!
+
 # Table of Contents
 
-  * [Usage](#usage)
-  * [Configuration](#configuration)
-  * [Backend documentation](#backend-documentation)
-  * [Building](#building)
-    + [Prerequisites](#prerequisites)
-    + [Build](#build)
-  * [Development](#development)
+* [Usage](#usage)
+* [Configuration](#configuration)
+* [Backend documentation](#backend-documentation)
+* [Installation](#installation)
+	+ [Using the installer](#using-the-installer)
+	+ [Building from source](#building-from-source)
+		- [Building for Linux/OSX](#building-for-linuxosx)
+		- [Building for Packaging](#building-for-packaging)
+		- [Building for Windows](#building-for-windows)
+* [Development](#development)
 
 ## Usage
 
@@ -86,7 +97,6 @@ are applied when the backend/instance is first mentioned in the configuration fi
 ### Channel mapping
 
 The `[map]` section consists of lines of channel-to-channel assignments, reading like
-
 ```
 instance.channel-a < instance.channel-b
 instance.channel-a > instance.channel-b
@@ -105,7 +115,7 @@ The last line is a shorter way to create a bi-directional mapping.
 
 To make mapping large contiguous sets of channels easier, channel names may contain
 expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers
-delimiting a range of channels.  Multiple such expressions may be used in one channel
+delimiting a range of channels. Multiple such expressions may be used in one channel
 specification, with the rightmost expression being incremented (or decremented) first for
 evaluation.
 
@@ -113,7 +123,6 @@ Both sides of a multi-channel assignment need to have the same number of channel
 side must have exactly one channel.
 
 Example multi-channel mapping:
-
 ```
 instance-a.channel{1..10} > instance-b.{10..1}
 ```
@@ -136,14 +145,40 @@ special information. These documentation files are located in the `backends/` di
 * [`lua` backend documentation](backends/lua.md)
 * [`maweb` backend documentation](backends/maweb.md)
 
-## Building
+## Installation
 
-This section will explain how to build the provided sources to be able to run
-`midimonster`.
+This section will explain how to build and install the MIDIMonster.
+Development is mainly done on Linux, but builds for OSX and Windows
+are possible.
 
-### Prerequisites
+### Using the installer
 
-In order to build the MIDIMonster, you'll need some libraries that provide
+The easiest way to install MIDIMonster and its dependencies on a Linux system
+is the [installer script](installer.sh).
+
+The following commands download the installer, make it executable and finally, start it:
+
+```
+wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
+chmod +x ./installer.sh
+./installer.sh
+```
+
+The installer script can also update MIDIMonster to the latest version automatically,
+using a configuration file generated during the installation.
+To do so, run `midimonster-updater` as root on your system after using the installer.
+
+If you prefer to install a Debian package you can download the `.deb` file from our
+[Release page](https://github.com/cbdevnet/midimonster/releases).
+To install the package, run the following command as the root user:
+
+```
+dpkg -i <file>.deb
+```
+
+### Building from source
+
+To build the MIDIMonster directly from the sources, you'll need some libraries that provide
 support for the protocols to translate.
 
 * `libasound2-dev` (for the ALSA MIDI backend)
@@ -159,9 +194,24 @@ support for the protocols to translate.
 To build for Windows, the package `mingw-w64` provides a cross-compiler that can
 be used to build a subset of the backends as well as the core.
 
-### Build
+#### Building for Linux/OSX
 
 For Linux and OSX, just running `make` in the source directory should do the trick.
+
+Some backends have been marked as optional as they require rather large additional software to be installed,
+for example the `ola` backend. To create a build including these, run `make full`.
+
+To install a source build with `make install`, please familiarize yourself with the build parameters
+as specified in the next section.
+
+Backends may also be built selectively by running `make <backendfile>` in the `backends/` directory,
+for example
+
+```
+make jack.so
+```
+
+#### Building for Packaging
 
 The build process accepts the following parameters, either from the environment or
 as arguments to the `make` invocation:
@@ -179,36 +229,6 @@ as arguments to the `make` invocation:
 Note that the same variables may have different default values depending on the target. This implies that
 builds that are destined to be installed require those variables to be set to the same value for the
 build and `install` targets.
-
-Some backends have been marked as optional as they require rather large additional software to be installed,
-for example the `ola` backend. To create a build including these, run `make full`.
-
-Backends may also be built selectively by running `make <backendfile>` in the `backends/` directory,
-for example
-
-```
-make jack.so
-```
-#### Using the installer
-
-For easy installation on Linux, the [installer script](installer.sh) can be used:
-
-```
-wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
-chmod +x ./installer.sh
-./installer.sh
-```
-This tool can also update MIDImonster automatically using a configuration file generated by the installer.
-To do so, run `midimonster-updater` as root on your system after using the installer.
-
-To install the Debian packages from the [Release page](https://github.com/cbdevnet/midimonster/releases),
-download the `.deb` file and install the package using the following command as the root user:
-
-```
-dpkg -i <file>.deb
-```
-
-#### Building for packaging or installation
 
 For system-wide install or packaging builds, the following steps are recommended:
 

@@ -1,9 +1,9 @@
 # The MIDIMonster
 
+<img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
+
 Named for its scary math, the MIDIMonster is a universal control and translation
 tool for multi-channel absolute-value-based control and/or bus protocols.
-
-![MIDIMonster Logo](/MIDIMonster.svg?raw=true&sanitize=true "MIDIMonster Logo")
 
 Currently, the MIDIMonster supports the following protocols:
 

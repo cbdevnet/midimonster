@@ -3,6 +3,8 @@
 Named for its scary math, the MIDIMonster is a universal control and translation
 tool for multi-channel absolute-value-based control and/or bus protocols.
 
+![MIDIMonster Logo](/MIDIMonster.svg?raw=true&sanitize=true "MIDIMonster Logo")
+
 Currently, the MIDIMonster supports the following protocols:
 
 | Protocol			| Operating Systems	| Notes				| Backends			|
@@ -24,7 +26,8 @@ on any other (or the same) supported protocol, for example to:
 * Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))
 * Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))
 * Translate OSC messages into MIDI ([Example configuration](configs/midi-osc.cfg))
-* Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua)) to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
+* Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua))
+	to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))
@@ -32,21 +35,23 @@ on any other (or the same) supported protocol, for example to:
 
 [![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
 
-If you encounter a bug or suspect a problem with a a protocol implementation, please [open an Issue](https://github.com/cbdevnet/midimonster/issues) or get in touch with us via IRC on [Hackint in `#midimonster`](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster).
+If you encounter a bug or suspect a problem with a a protocol implementation, please
+[open an Issue](https://github.com/cbdevnet/midimonster/issues) or get in touch with us via
+IRC on [Hackint in `#midimonster`](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster).
 We are happy to hear from you!
 
 # Table of Contents
 
-  * [Usage](#usage)
-  * [Configuration](#configuration)
-  * [Backend documentation](#backend-documentation)
-  * [Installation](#installation)
-    + [Using the installer](#using-the-installer)
-    + [Building from source](#building-from-source)
-      - [Building for Linux/OSX](#building-for-linux---osx)
-      - [Building for Packaging](#building-for-packaging)
-      - [Building for Windows](#building-for-windows)
-  * [Development](#development)
+* [Usage](#usage)
+* [Configuration](#configuration)
+* [Backend documentation](#backend-documentation)
+* [Installation](#installation)
+	+ [Using the installer](#using-the-installer)
+	+ [Building from source](#building-from-source)
+		- [Building for Linux/OSX](#building-for-linuxosx)
+		- [Building for Packaging](#building-for-packaging)
+		- [Building for Windows](#building-for-windows)
+* [Development](#development)
 
 ## Usage
 
@@ -110,7 +115,7 @@ The last line is a shorter way to create a bi-directional mapping.
 
 To make mapping large contiguous sets of channels easier, channel names may contain
 expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers
-delimiting a range of channels.  Multiple such expressions may be used in one channel
+delimiting a range of channels. Multiple such expressions may be used in one channel
 specification, with the rightmost expression being incremented (or decremented) first for
 evaluation.
 
@@ -148,12 +153,11 @@ are possible.
 
 ### Using the installer
 
-The easiest way to install MIDIMonster and its dependencies on Linux is the [installer script](installer.sh).
+The easiest way to install MIDIMonster and its dependencies on a Linux system
+is the [installer script](installer.sh).
 
-The following commands 
-* download the installer
-*	make it executable
-* and finally, start it
+The following commands download the installer, make it executable and finally, start it:
+
 ```
 wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
 chmod +x ./installer.sh
@@ -164,8 +168,10 @@ The installer script can also update MIDIMonster to the latest version automatic
 using a configuration file generated during the installation.
 To do so, run `midimonster-updater` as root on your system after using the installer.
 
-If you prefer to install a Debian package you can download the `.deb` file from our [Release page](https://github.com/cbdevnet/midimonster/releases).
+If you prefer to install a Debian package you can download the `.deb` file from our
+[Release page](https://github.com/cbdevnet/midimonster/releases).
 To install the package, run the following command as the root user:
+
 ```
 dpkg -i <file>.deb
 ```
@@ -194,6 +200,9 @@ For Linux and OSX, just running `make` in the source directory should do the tri
 
 Some backends have been marked as optional as they require rather large additional software to be installed,
 for example the `ola` backend. To create a build including these, run `make full`.
+
+To install a source build with `make install`, please familiarize yourself with the build parameters
+as specified in the next section.
 
 Backends may also be built selectively by running `make <backendfile>` in the `backends/` directory,
 for example

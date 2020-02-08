@@ -32,7 +32,7 @@ on any other (or the same) supported protocol, for example to:
 
 [![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
 
-If you have any questions just write an Issue here on Github or get in touch with us via IRC on [Hackint](ircs://irc.hackint.org:6697) in `#midimonster`.
+If you have any questions just create an Issue here on Github or get in touch with us via IRC on Hackint in [#midimonster](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster).
 We are happy to hear from you!
 
 # Table of Contents
@@ -47,13 +47,11 @@ We are happy to hear from you!
   * [Backend documentation](#backend-documentation)
   * [Installation](#installation)
     + [Linux](#linux)
-    + [Building manualy](#building)  
+    + [Building manually](#building)  
       - [Prerequisites](#prerequisites)
       - [Build](#build)
     - [Packaging or installation](#building\ for\ packaging\ or\ installation )
     - [Building for Windows](#building\ for\ windows)
-
-    
   * [Development](#development)
 
 ## Usage
@@ -63,8 +61,6 @@ to use (`monster.cfg` is used as default if none is specified). The configuratio
 file syntax is explained in the next section.
 
 The current MIDIMonster version can be queried by passing *-v* as command-line argument.
-
-___
 
 ## Configuration
 
@@ -131,7 +127,6 @@ Example multi-channel mapping:
 ```
 instance-a.channel{1..10} > instance-b.{10..1}
 ```
-___
 
 ## Backend documentation
 
@@ -150,8 +145,6 @@ special information. These documentation files are located in the `backends/` di
 * [`osc` backend documentation](backends/osc.md)
 * [`lua` backend documentation](backends/lua.md)
 * [`maweb` backend documentation](backends/maweb.md)
-
-___
 
 ## Installation
 

@@ -3,7 +3,7 @@
 The `lua` backend provides a flexible programming environment, allowing users to route and manipulate
 events using the Lua programming language.
 
-Every instance has it's own interpreter state which can be loaded with custom handler scripts.
+Every instance has its own interpreter state which can be loaded with custom handler scripts.
 
 To process incoming channel events, the MIDIMonster calls corresponding Lua functions (if they exist)
 with the value (as a Lua `number` type) as parameter.

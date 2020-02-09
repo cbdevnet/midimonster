@@ -5,3 +5,4 @@ udp backends may ignore MTU
 mm_managed_fd.impl is not freed currently (and is heaped most of the time anyway) -> documentation
 make event collectors threadsafe to stop marshalling data...
 collect & check backend API version
+windows strerror

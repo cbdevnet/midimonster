@@ -2,6 +2,8 @@
 
 <img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
 
+[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
+
 Named for its scary math, the MIDIMonster is a universal control and translation
 tool for multi-channel absolute-value-based control and/or bus protocols.
 
@@ -32,8 +34,6 @@ on any other (or the same) supported protocol, for example to:
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))
 * Play games, type, or control your mouse using MIDI controllers ([Example configuration](configs/midi-mouse.cfg))
-
-[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
 
 If you encounter a bug or suspect a problem with a a protocol implementation, please
 [open an Issue](https://github.com/cbdevnet/midimonster/issues) or get in touch with us via
@@ -150,6 +150,9 @@ special information. These documentation files are located in the `backends/` di
 This section will explain how to build and install the MIDIMonster.
 Development is mainly done on Linux, but builds for OSX and Windows
 are possible.
+
+Binary builds for all supported systems are available for download on the
+[Release page](https://github.com/cbdevnet/midimonster/releases).
 
 ### Using the installer
 

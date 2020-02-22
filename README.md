@@ -25,7 +25,7 @@ with additional flexibility provided by a [Lua scripting environment](backends/l
 With these features, the MIDIMonster allows the user to translate any channel on one protocol into channel(s)
 on any other (or the same) supported protocol, for example to:
 
-* Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))
+* Translate MIDI Control Changes into MIDI Notes ([Example configuration](configs/unifest-17.cfg))
 * Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))
 * Translate OSC messages into MIDI ([Example configuration](configs/midi-osc.cfg))
 * Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua))

@@ -19,6 +19,7 @@ Web Remote. Set a web remote password using the option below the activation sett
 | Option	| Example value		| Default value		| Description							|
 |---------------|-----------------------|-----------------------|---------------------------------------------------------------|
 | `interval`	| `100`			| `50`			| Query interval for input data polling (in msec)		|
+| `quiet`	| `1`			| `0`			| Turn off some warning messages, for use by experts		|
 
 #### Instance configuration
 

@@ -23,6 +23,7 @@ addons:
      - libjack-jackd2-dev
      - liblua5.3-dev
      - libssl-dev
+     - lintian
     packages: &core_build_gpp_latest
      - *core_build
      - gcc-8
@@ -197,7 +198,6 @@ before_install:
  - $CC --version
 #OS X uses something other than $CXX variable
  - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) ]; then $CXX --version; fi
- - if [ "$TASK" == "spellintian" -o "$TASK" == "spellintian-duplicates" ]; then wget "http://archive.ubuntu.com/ubuntu/pool/main/l/lintian/lintian_2.5.104_all.deb"; sudo dpkg -i lintian_*.deb; sudo apt-get install -f -y; fi # Install a later lintian
 # Download libraries to link with on Windows
  - if [ "$TASK" == "windows" ]; then mkdir libs; wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip; unzip lua53.zip lua53.dll; mv lua53.dll libs; fi
 

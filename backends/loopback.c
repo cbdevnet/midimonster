@@ -102,6 +102,7 @@ static int loopback_shutdown(size_t n, instance** inst){
 		}
 		free(data->name);
 		free(inst[u]->impl);
+		inst[u]->impl = NULL;
 	}
 
 	LOG("Backend shut down");

@@ -31,6 +31,18 @@ typedef struct /*_openpixel_hdr*/ {
 } openpixel_header;
 #pragma pack(pop)
 
+typedef struct /*_openpixel_client*/ {
+	int fd;
+	ssize_t buffer;
+	openpixel_header hdr;
+	size_t offset;
+	size_t left;
+	union {
+		uint8_t u8[2];
+		uint16_t u16;
+	} boundary;
+} openpixel_client;
+
 typedef struct {
 	enum {
 		rgb8 = 0,
@@ -43,6 +55,5 @@ typedef struct {
 	int dest_fd;
 	int listen_fd;
 	size_t clients;
-	int* client_fd;
-	size_t* bytes_left;
+	openpixel_client* client;
 } openpixel_instance_data;

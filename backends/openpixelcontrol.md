@@ -45,5 +45,10 @@ strip1.blue2 < strip2.green66
 
 #### Known bugs / problems
 
-If the connection is lost, it is currently not reestablished and may cause exit the MIDIMonster entirely.
-Thisi behaviour may be changed in future releases.
+If the connection is lost, it is currently not reestablished and may cause the MIDIMonster to exit entirely.
+This behaviour may be changed in future releases.
+
+While acting as an OpenPixelControl server, the backend allows multiple clients to connect.
+This may lead to confusing data output when multiple clients are trying to control the same strip.
+
+16 bit server mode is not implemented yet. This will be fixed in a future release.

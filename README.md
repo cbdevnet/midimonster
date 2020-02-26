@@ -2,7 +2,9 @@
 
 <img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
 
-[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
+[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
+[![IRC Channel](https://static.midimonster.net/hackint-badge.svg)](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster)
 
 Named for its scary math, the MIDIMonster is a universal control and translation
 tool for multi-channel absolute-value-based control and/or bus protocols.
@@ -15,6 +17,7 @@ Currently, the MIDIMonster supports the following protocols:
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)	|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)	|
+| OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
 | evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)	|
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)	|
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
@@ -142,6 +145,7 @@ special information. These documentation files are located in the `backends/` di
 * [`loopback` backend documentation](backends/loopback.md)
 * [`ola` backend documentation](backends/ola.md)
 * [`osc` backend documentation](backends/osc.md)
+* [`openpixelcontrol` backend documentation](backends/openpixelcontrol.md)
 * [`lua` backend documentation](backends/lua.md)
 * [`maweb` backend documentation](backends/maweb.md)
 

@@ -52,6 +52,7 @@ static int openpixel_configure_instance(instance* inst, char* option, char* valu
 		if(data->dest_fd >= 0){
 			return 0;
 		}
+		LOGPF("Failed to connect to server for instance %s", inst->name);
 		return 1;
 	}
 	if(!strcmp(option, "listen")){
@@ -62,9 +63,10 @@ static int openpixel_configure_instance(instance* inst, char* option, char* valu
 		}
 
 		data->listen_fd = mmbackend_socket(host, port, SOCK_STREAM, 1, 0);
-		if(data->listen_fd >= 0 && listen(data->listen_fd, SOMAXCONN)){
+		if(data->listen_fd >= 0 && !listen(data->listen_fd, SOMAXCONN)){
 			return 0;
 		}
+		LOGPF("Failed to bind server descriptor for instance %s", inst->name);
 		return 1;
 	}
 	else if(!strcmp(option, "mode")){
@@ -103,15 +105,22 @@ static ssize_t openpixel_buffer_find(openpixel_instance_data* data, uint8_t stri
 	for(n = 0; n < data->buffers; n++){
 		if(data->buffer[n].strip == strip
 				&& (data->buffer[n].flags & OPENPIXEL_INPUT) >= input){
+			DBGPF("Using allocated %s buffer for requested strip %d, size %d", input ? "input" : "output", strip, data->buffer[n].bytes);
 			return n;
 		}
 	}
+	DBGPF("Instance has no %s buffer for requested strip %d", input ? "input" : "output", strip);
 	return -1;
 }
 
-static int openpixel_buffer_extend(openpixel_instance_data* data, uint8_t strip, uint8_t input, uint8_t length){
+static int openpixel_buffer_extend(openpixel_instance_data* data, uint8_t strip, uint8_t input, uint16_t length){
 	ssize_t buffer = openpixel_buffer_find(data, strip, input);
+	
+	//length is in component-channels, round it to the nearest rgb-triplet
+	//this guarantees that any allocated buffer has at least three bytes, which is important to parts of the receive handler
 	length = (length % 3) ? ((length / 3) + 1) * 3 : length;
+
+	//calculate required buffer length
 	size_t bytes_required = (data->mode == rgb8) ? length : length * 2;
 	if(buffer < 0){
 		//allocate new buffer
@@ -242,7 +251,7 @@ static int openpixel_set(instance* inst, size_t num, channel** c, channel_value*
 		}
 
 		if(strip == 0){
-			//update values in all other output strips, dont mark
+			//update values in all other output strips, don't mark
 			for(p = 0; p < data->buffers; p++){
 				if(!(data->buffer[p].flags & OPENPIXEL_INPUT)){
 					//check whether the buffer is large enough
@@ -278,8 +287,204 @@ static int openpixel_set(instance* inst, size_t num, channel** c, channel_value*
 	return 0;
 }
 
+static int openpixel_client_new(instance* inst, int fd){
+	if(fd < 0){
+		return 1;
+	}
+	openpixel_instance_data* data = (openpixel_instance_data*) inst->impl;
+	size_t u;
+
+	//mark nonblocking
+	#ifdef _WIN32
+	unsigned long flags = 1;
+	if(ioctlsocket(fd, FIONBIO, &flags)){
+	#else
+	int flags = fcntl(fd, F_GETFL, 0);
+	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
+	#endif
+		LOGPF("Failed to set client descriptor on %s nonblocking", inst->name);
+		close(fd);
+		return 0;
+	}
+
+	//find a client block
+	for(u = 0; u < data->clients; u++){
+		if(data->client[u].fd <= 0){
+			break;
+		}
+	}
+
+	//if no free slot, make one
+	if(u == data->clients){
+		data->client = realloc(data->client, (data->clients + 1) * sizeof(openpixel_client));
+		if(!data->client){
+			data->clients = 0;
+			LOG("Failed to allocate memory");
+			return 1;
+		}
+		data->clients++;
+	}
+
+	data->client[u].fd = fd;
+	data->client[u].buffer = -1;
+	data->client[u].offset = 0;
+
+	return mm_manage_fd(fd, BACKEND_NAME, 1, inst);
+}
+
+static int openpixel_client_handle(instance* inst, int fd){
+	openpixel_instance_data* data = (openpixel_instance_data*) inst->impl;
+	uint8_t buffer[8192];
+	size_t c = 0, offset = 0, u;
+	ssize_t bytes_left = 0;
+	channel* chan = NULL;
+	channel_value val;
+
+	for(c = 0; c < data->clients; c++){
+		if(data->client[c].fd == fd){
+			break;
+		}
+	}
+
+	if(c == data->clients){
+		LOGPF("Unknown client descriptor signaled on %s", inst->name);
+		return 1;
+	}
+
+	//FIXME might want to read until EAGAIN
+	ssize_t bytes = recv(fd, buffer, sizeof(buffer), 0);
+	if(bytes <= 0){
+		if(bytes < 0){
+			LOGPF("Failed to receive from client: %s", strerror(errno));
+		}
+
+		//close the connection
+		close(fd);
+		data->client[c].fd = -1;
+		//unmanage the fd
+		mm_manage_fd(fd, BACKEND_NAME, 0, NULL);
+		return 0;
+	}
+
+	for(bytes_left = bytes - offset; bytes_left > 0; bytes_left = bytes - offset){
+		if(data->client[c].buffer == -1){
+			//read a header
+			DBGPF("Reading %" PRIsize_t " bytes to header at offset %" PRIsize_t ", header size %" PRIsize_t ", %" PRIsize_t " bytes left", min(sizeof(openpixel_header) - data->client[c].offset, bytes_left), data->client[c].offset, sizeof(openpixel_header), bytes_left);
+			memcpy(((uint8_t*) (&data->client[c].hdr)) + data->client[c].offset, buffer + offset, min(sizeof(openpixel_header) - data->client[c].offset, bytes_left));
+
+			//if done, resolve buffer
+			if(sizeof(openpixel_header) - data->client[c].offset < bytes_left){
+				data->client[c].buffer = openpixel_buffer_find(data, data->client[c].hdr.strip, 1);
+				//if no buffer or mode mismatch, ignore data
+				if(data->client[c].buffer < 0
+						|| data->mode != data->client[c].hdr.mode){
+					data->client[c].buffer = -2; //mark for ignore
+				}
+				data->client[c].left = be16toh(data->client[c].hdr.length);
+				data->client[c].offset = 0;
+			}
+			//if not, update client offset
+			else{
+				data->client[c].offset += bytes_left;
+			}
+
+			//update scan offset
+			offset += min(sizeof(openpixel_header) - data->client[c].offset, bytes_left);
+		}
+		else{
+			//read data
+			if(data->client[c].buffer == -2){
+				//ignore data
+				offset += min(data->client[c].left, bytes_left);
+				data->client[c].offset += min(data->client[c].left, bytes_left);
+				data->client[c].left -= min(data->client[c].left, bytes_left);
+			}
+			else{
+				if(data->mode == rgb8){
+					for(u = 0; u < bytes_left; u++){
+						//if over buffer length, ignore
+						if(u + data->client[c].offset >= data->buffer[data->client[c].buffer].bytes){
+							data->client[c].buffer = -2;
+							break;
+						}
+
+						//FIXME if at start of trailing non-multiple of 3, ignore
+						
+						//update changed channels
+						if(data->buffer[data->client[c].buffer].data.u8[u + data->client[c].offset] != buffer[offset + u]){
+							data->buffer[data->client[c].buffer].data.u8[u + data->client[c].offset] = buffer[offset + u];
+							chan = mm_channel(inst, ((uint64_t) data->client[c].hdr.strip << 32) | (u + data->client[c].offset + 1), 0);
+							if(chan){
+								//push event
+								val.raw.u64 = buffer[offset + u];
+								val.normalised = (double) buffer[offset + u] / 255.0;
+								if(mm_channel_event(chan, val)){
+									LOG("Failed to push channel event to core");
+									//FIXME err out here
+								}
+							}
+						}
+					}
+
+					//update offsets
+					offset += u;
+					data->client[c].offset += u;
+					data->client[c].left -= u;
+				}
+				else{
+					//TODO byte-order conversion may be on recv boundary
+					//if over buffer length, ignore
+					//skip non-multiple-of 6 trailing data
+				}
+			}
+
+			//end of data, return to reading headers
+			if(data->client[c].left == 0){
+				data->client[c].buffer = -1;
+				data->client[c].offset = 0;
+				data->client[c].left = 0;
+			}
+		}
+	}
+
+	return 0;
+}
+
 static int openpixel_handle(size_t num, managed_fd* fds){
-	//TODO handle bcast
+	size_t u;
+	instance* inst = NULL;
+	openpixel_instance_data* data = NULL;
+	uint8_t buffer[8192];
+	ssize_t bytes;
+
+	for(u = 0; u < num; u++){
+		inst = (instance*) fds[u].impl;
+		data = (openpixel_instance_data*) inst->impl;
+
+		if(fds[u].fd == data->dest_fd){
+			//destination fd ready to read
+			//since the protocol does not define any responses, the connection was probably closed
+			bytes = recv(data->dest_fd, buffer, sizeof(buffer), 0);
+			if(bytes <= 0){
+				LOGPF("Output descriptor closed on instance %s", inst->name);
+				//unmanage the fd to give the core some rest
+				mm_manage_fd(data->dest_fd, BACKEND_NAME, 0, NULL);
+			}
+			else{
+				LOGPF("Unhandled response data on %s (%" PRIsize_t" bytes)", inst->name, bytes);
+			}
+		}
+		else if(fds[u].fd == data->listen_fd){
+			//listen fd ready to read, accept a new client
+			if(openpixel_client_new(inst, accept(data->listen_fd, NULL, NULL))){
+				return 1;
+			}
+		}
+		else{
+			//handle client input
+			openpixel_client_handle(inst, fds[u].fd);
+		}
+	}
 	return 0;
 }
 
@@ -323,12 +528,11 @@ static int openpixel_shutdown(size_t n, instance** inst){
 
 		//shutdown all clients
 		for(p = 0; p < data->clients; p++){
-			if(data->client_fd[p] >= 0){
-				close(data->client_fd[p]);
+			if(data->client[p].fd>= 0){
+				close(data->client[p].fd);
 			}
 		}
-		free(data->client_fd);
-		free(data->bytes_left);
+		free(data->client);
 
 		//close all configured fds
 		if(data->listen_fd >= 0){

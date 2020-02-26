@@ -153,7 +153,11 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 int mmbackend_send(int fd, uint8_t* data, size_t length){
 	ssize_t total = 0, sent;
 	while(total < length){
+		#ifndef LIBMMBACKEND_TCP_TORTURE
 		sent = send(fd, data + total, length - total, 0);
+		#else
+		sent = send(fd, data + total, 1, 0);
+		#endif
 		if(sent < 0){
 			LOGPF("Failed to send: %s", strerror(errno));
 			return 1;

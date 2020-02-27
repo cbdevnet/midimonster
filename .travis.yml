@@ -1,5 +1,4 @@
 language: c
-# Use the latest Travis images since they are more up to date than the stable release.
 group: edge
 
 before_script:
@@ -35,7 +34,7 @@ addons:
      - *core_build
      - mingw-w64
 
-matrix:
+jobs:
   fast_finish: true
   include:
     - os: osx
@@ -54,28 +53,23 @@ matrix:
       env:
       - TASK='sanitize'
     - os: linux
-      dist: xenial
+      dist: bionic
       compiler: clang
       env: TASK='compile'
       addons:
         apt:
           packages:
            - *core_build_clang_latest
-          sources:
-           - ubuntu-toolchain-r-test
-           - llvm-toolchain-xenial-6.0
     - os: linux
-      dist: xenial
+      dist: bionic
       compiler: gcc
       env: TASK='compile'
       addons:
         apt:
           packages:
            - *core_build_gpp_latest
-          sources:
-           - ubuntu-toolchain-r-test
     - os: linux
-      dist: xenial
+      dist: bionic
       compiler: mingw32-gcc
       env: 
         - TASK='windows'
@@ -84,21 +78,16 @@ matrix:
         apt:
           packages:
            - *core_build_windows
-          sources:
-           - ubuntu-toolchain-r-test
     - os: linux
-      dist: xenial
+      dist: bionic
       compiler: clang
       env: TASK='sanitize'
       addons:
         apt:
           packages:
            - *core_build_clang_latest
-          sources:
-           - ubuntu-toolchain-r-test
-           - llvm-toolchain-xenial-6.0
     - os: linux
-      dist: xenial
+      dist: bionic
       compiler: gcc
       env: TASK='coverity'
       addons:
@@ -107,10 +96,8 @@ matrix:
            # Coverity doesn't work with g++-5 or g++-6 yet
            - *core_build
            - gcc-4.9
-          sources:
-           - ubuntu-toolchain-r-test
     - os: linux
-      dist: xenial
+      dist: bionic
       env: TASK='spellintian'
       addons:
         apt:
@@ -118,7 +105,7 @@ matrix:
            - *core_build
            - moreutils
     - os: linux
-      dist: xenial
+      dist: bionic
       env: TASK='spellintian-duplicates'
       addons:
         apt:
@@ -126,7 +113,7 @@ matrix:
            - *core_build
            - moreutils
     - os: linux
-      dist: xenial
+      dist: bionic
       env: TASK='codespell'
       addons:
         apt:
@@ -135,14 +122,14 @@ matrix:
            - moreutils
   allow_failures:
     - os: linux
-      dist: xenial
+      dist: bionic
       compiler: gcc
       env: TASK='coverity'
     - os: linux
-      dist: xenial
+      dist: bionic
       env: TASK='spellintian-duplicates'
     - os: linux
-      dist: xenial
+      dist: bionic
       env: TASK='codespell'
 
 env:
@@ -207,7 +194,7 @@ after_script:
 deploy:
  provider: releases
  file_glob: true
- api_key: $GITHUB_TOKEN
+ token: $GITHUB_TOKEN
  file: ./deployment/*
  skip_cleanup: true
  draft: true

@@ -1,5 +1,7 @@
 language: c
 group: edge
+os: linux
+dist: bionic
 
 before_script:
  - export -f travis_fold
@@ -37,21 +39,6 @@ addons:
 jobs:
   fast_finish: true
   include:
-    - os: osx
-      osx_image: xcode10.2
-      compiler: clang
-      env:
-      - TASK='compile'
-    - os: osx
-      osx_image: xcode10.2
-      compiler: gcc
-      env:
-      - TASK='compile'
-    - os: osx
-      osx_image: xcode10.2
-      compiler: clang
-      env:
-      - TASK='sanitize'
     - os: linux
       dist: bionic
       compiler: clang
@@ -88,16 +75,6 @@ jobs:
            - *core_build_clang_latest
     - os: linux
       dist: bionic
-      compiler: gcc
-      env: TASK='coverity'
-      addons:
-        apt:
-          packages:
-           # Coverity doesn't work with g++-5 or g++-6 yet
-           - *core_build
-           - gcc-4.9
-    - os: linux
-      dist: bionic
       env: TASK='spellintian'
       addons:
         apt:
@@ -120,11 +97,22 @@ jobs:
           packages:
            - *core_build
            - moreutils
-  allow_failures:
-    - os: linux
-      dist: bionic
+    - os: osx
+      osx_image: xcode10.2
+      compiler: clang
+      env:
+      - TASK='compile'
+    - os: osx
+      osx_image: xcode10.2
       compiler: gcc
-      env: TASK='coverity'
+      env:
+      - TASK='compile'
+    - os: osx
+      osx_image: xcode10.2
+      compiler: clang
+      env:
+      - TASK='sanitize'
+  allow_failures:
     - os: linux
       dist: bionic
       env: TASK='spellintian-duplicates'
@@ -138,21 +126,6 @@ env:
    - TERM=dumb
    # Parallel make build
    - MAKEFLAGS="-j 2"
-   # -- BEGIN Coverity Scan ENV
-   - COVERITY_SCAN_BUILD_COMMAND_PREPEND="cov-configure --comptype gcc --compiler gcc-4.9 --template"
-   # The build command with all of the arguments that you would apply to a manual `cov-build`
-   # Usually this is the same as STANDARD_BUILD_COMMAND, excluding the automated test arguments
-   - COVERITY_SCAN_BUILD_COMMAND="make"
-   # Name of the project
-   - COVERITY_SCAN_PROJECT_NAME="$TRAVIS_REPO_SLUG"
-   # Email address for notifications related to this build
-   # - COVERITY_SCAN_NOTIFICATION_EMAIL=""
-   # Regular expression selects on which branches to run analysis
-   # Be aware of quotas. Do not run on every branch/commit
-   - COVERITY_SCAN_BRANCH_PATTERN=".*"
-   # COVERITY_SCAN_TOKEN via "travis encrypt" using the repo's public key
-   # - secure: ""
-   # -- END Coverity Scan ENV
 
 cache:
   apt: true
@@ -177,7 +150,6 @@ before_install:
  - export CFLAGS="$CFLAGS -I/usr/local/opt/openssl@1.1/include"
  - export LDFLAGS="$LDFLAGS -L/usr/local/opt/openssl@1.1/lib" 
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then PATH=/usr/local/opt/ccache/libexec:$PATH; fi # Use ccache on Mac too
-#Coverity doesn't work with g++ 5 or 6, so only upgrade to g++ 4.9 for that
  - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) -a "$CC" = "gcc" ]; then export CC="ccache gcc-8"; export CXX="ccache g++-8"; fi
 #Use the latest clang if we're compiling with clang
  - if [ "$TRAVIS_OS_NAME" == "linux" -a "$CC" = "clang" ]; then export CC="clang-6.0"; export CXX="clang-6.0"; fi
@@ -187,9 +159,6 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) ]; then $CXX --version; fi
 # Download libraries to link with on Windows
  - if [ "$TASK" == "windows" ]; then mkdir libs; wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip; unzip lua53.zip lua53.dll; mv lua53.dll libs; fi
-
-after_script:
-  - if [ "$TASK" = "coverity" ]; then tail -n 10000 ${TRAVIS_BUILD_DIR}/cov-int/build-log.txt; cat ${TRAVIS_BUILD_DIR}/cov-int/scm_log.txt; fi
 
 deploy:
  provider: releases

@@ -33,7 +33,7 @@ typedef struct /*_openpixel_hdr*/ {
 
 typedef struct /*_openpixel_client*/ {
 	int fd;
-	ssize_t buffer;
+	ssize_t buffer; /* -1 header, -2 ignore, -3 bcast */
 	openpixel_header hdr;
 	size_t offset;
 	size_t left;

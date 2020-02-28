@@ -385,9 +385,38 @@ static ssize_t openpixel_client_pixeldata(instance* inst, openpixel_client* clie
 			return u;
 		}
 		else{
-			//TODO byte-order conversion may be on recv boundary
-			//if over buffer length, ignore
-			//skip non-multiple-of 6 trailing data
+			for(u = 0; u < bytes_left; u++){
+				//if over buffer length, ignore
+				if(u + client->offset >= data->buffer[client->buffer].bytes){
+					client->buffer = -2;
+					break;
+				}
+
+				//if at start of trailing non-multiple of 6, ignore
+				if((client->offset + u) >= (client->offset + client->left) - ((client->offset + client->left) % 6)){
+					client->buffer = -2;
+					break;
+				}
+
+				//byte-order conversion may be on message boundary, do it via a buffer
+				client->boundary.u8[(client->offset + u) % 2] = buffer[u];
+
+				//detect and update changed channels
+				if((client->offset + u) % 2
+						&& data->buffer[client->buffer].data.u16[(u + client->offset) / 2] != be16toh(client->boundary.u16)){
+					data->buffer[client->buffer].data.u16[(u + client->offset) / 2] = be16toh(client->boundary.u16);
+					chan = mm_channel(inst, ((uint64_t) client->hdr.strip << 32) | ((u + client->offset) / 2 + 1), 0);
+					if(chan){
+						//push event
+						val.raw.u64 = be16toh(client->boundary.u16);;
+						val.normalised = (double) val.raw.u64 / 65535.0;
+						if(mm_channel_event(chan, val)){
+							LOG("Failed to push channel event to core");
+						}
+					}
+
+				}
+			}
 		}
 	}
 	return -1;

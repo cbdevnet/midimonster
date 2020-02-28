@@ -50,5 +50,3 @@ This behaviour may be changed in future releases.
 
 While acting as an OpenPixelControl server, the backend allows multiple clients to connect.
 This may lead to confusing data output when multiple clients are trying to control the same strip.
-
-16 bit server mode is not implemented yet. This will be fixed in a future release.

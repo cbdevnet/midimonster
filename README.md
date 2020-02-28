@@ -22,7 +22,7 @@ Currently, the MIDIMonster supports the following protocols:
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
 | JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)		|
 | Lua Scripting			| Linux, Windows, OSX	|				| [`lua`](backends/lua.md)		|
-| Loopback			| Linux, Windosw, OSX	|				| [`loopback`](backends/loopback.md)	|
+| Loopback			| Linux, Windows, OSX	|				| [`loopback`](backends/loopback.md)	|
 
 With these features, the MIDIMonster allows users to control any channel on any of these protocols, and translate any channel on
 one protocol into channel(s) on any other (or the same) supported protocol, for example to:

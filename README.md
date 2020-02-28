@@ -24,10 +24,8 @@ Currently, the MIDIMonster supports the following protocols:
 | Lua Scripting			| Linux, Windows, OSX	|				| [`lua`](backends/lua.md)		|
 | Loopback			| Linux, Windosw, OSX	|				| [`loopback`](backends/loopback.md)	|
 
-with additional flexibility provided by a [Lua scripting environment](backends/lua.md).
-
-With these features, the MIDIMonster allows the user to translate any channel on one protocol into channel(s)
-on any other (or the same) supported protocol, for example to:
+With these features, the MIDIMonster allows users to control any channel on any of these protocols, and translate any channel on
+one protocol into channel(s) on any other (or the same) supported protocol, for example to:
 
 * Translate MIDI Control Changes into MIDI Notes ([Example configuration](configs/unifest-17.cfg))
 * Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))

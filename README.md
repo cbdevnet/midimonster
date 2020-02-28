@@ -1,5 +1,4 @@
 # The MIDIMonster
-
 <img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
 
 [![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster)
@@ -11,17 +10,19 @@ tool for multi-channel absolute-value-based control and/or bus protocols.
 
 Currently, the MIDIMonster supports the following protocols:
 
-| Protocol			| Operating Systems	| Notes				| Backends			|
-|-------------------------------|-----------------------|-------------------------------|-------------------------------|
+| Protocol / Interface		| Operating Systems	| Notes				| Backends				|
+|-------------------------------|-----------------------|-------------------------------|---------------------------------------|
 | MIDI				| Linux, Windows, OSX	| Linux: via ALSA/JACK, OSX: via JACK | [`midi`](backends/midi.md), [`winmidi`](backends/winmidi.md), [`jack`](backends/jack.md) |
-| ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)|
-| Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)	|
-| OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)	|
+| ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)	|
+| Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)		|
+| OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)		|
 | OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
-| evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)	|
-| Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)	|
+| evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)		|
+| Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)		|
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
-| JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)	|
+| JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)		|
+| Lua Scripting			| Linux, Windows, OSX	|				| [`lua`](backends/lua.md)		|
+| Loopback			| Linux, Windosw, OSX	|				| [`loopback`](backends/loopback.md)	|
 
 with additional flexibility provided by a [Lua scripting environment](backends/lua.md).
 

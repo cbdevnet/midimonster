@@ -64,3 +64,13 @@ Using these names as arguments to the output and value interface functions works
 
 Output values will not trigger corresponding input event handlers unless the channel is mapped
 back in the MIDIMonster configuration.
+
+To build (and run) the `lua` backend on Windows, a compiled version of the Lua library is required.
+For various reasons (legal, separations of concern, not wanting to ship binary data in the repository),
+you will need to acquire a copy of `lua53.dll` (for example by downloading it from the [luabinaries
+project](http://luabinaries.sourceforge.net/download.html).
+
+To build the `lua` backend for Windows, place `lua53.dll` in a subdirectory `libs/` in the project root
+and run `make lua.dll` inside the `backends/` directory.
+
+At runtime, Windows searches for the file in the same directory as `midimonster.exe`.

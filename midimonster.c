@@ -264,13 +264,27 @@ static fd_set fds_collect(int* max_fd){
 }
 
 static int platform_initialize(){
-#ifdef _WIN32
+	#ifdef _WIN32
 	WSADATA wsa;
 	WORD version = MAKEWORD(2, 2);
 	if(WSAStartup(version, &wsa)){
 		return 1;
 	}
-#endif
+	#endif
+	return 0;
+}
+
+static int platform_shutdown(){
+	#ifdef _WIN32
+	DWORD processes;
+	if(GetConsoleProcessList(&processes, 1) == 1){
+		fprintf(stderr, "\nMIDIMonster is the last process in this console, please press any key to exit\n");
+		HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+		SetConsoleMode(input, 0);
+		FlushConsoleInputBuffer(input);
+		WaitForSingleObject(input, INFINITE);
+	}
+	#endif
 	return 0;
 }
 
@@ -346,7 +360,7 @@ int main(int argc, char** argv){
 		fds_free();
 		plugins_close();
 		config_free();
-		return usage(argv[0]);
+		return (usage(argv[0]) | platform_shutdown());
 	}
 
 	//load an initial timestamp
@@ -433,6 +447,7 @@ bail:
 	event_free();
 	plugins_close();
 	config_free();
+	platform_shutdown();
 
 	return rv;
 }

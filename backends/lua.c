@@ -457,6 +457,7 @@ static int lua_start(size_t n, instance** inst){
 			if(strcmp(data->channel_name[p], "output")
 					&& strcmp(data->channel_name[p], "input_value")
 					&& strcmp(data->channel_name[p], "output_value")
+					&& strcmp(data->channel_name[p], "input_channel")
 					&& strcmp(data->channel_name[p], "interval")){
 				lua_getglobal(data->interpreter, data->channel_name[p]);
 				data->reference[p] = luaL_ref(data->interpreter, LUA_REGISTRYINDEX);

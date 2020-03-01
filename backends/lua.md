@@ -1,7 +1,7 @@
 ### The `lua` backend
 
-The `lua` backend provides a flexible programming environment, allowing users to route and manipulate
-events using the Lua programming language.
+The `lua` backend provides a flexible programming environment, allowing users to route, generate
+and  manipulate events using the Lua scripting language.
 
 Every instance has its own interpreter state which can be loaded with custom handler scripts.
 
@@ -45,7 +45,7 @@ The `lua` backend does not take any global configuration.
 |---------------|-----------------------|-----------------------|-----------------------|
 | `script`	| `script.lua`		| none			| Lua source file (relative to configuration file)|
 
-A single instance may have multiple `source` options specified, which will all be read cumulatively.
+A single instance may have multiple `script` options specified, which will all be read cumulatively.
 
 #### Channel specification
 
@@ -63,7 +63,7 @@ as an input channel name to a Lua instance will not call any handler functions.
 Using these names as arguments to the output and value interface functions works as intended.
 
 Output values will not trigger corresponding input event handlers unless the channel is mapped
-back in the MIDIMonster configuration.
+back in the MIDIMonster configuration. This is intentional.
 
 To build (and run) the `lua` backend on Windows, a compiled version of the Lua 5.3 library is required.
 For various reasons (legal, separations of concern, not wanting to ship binary data in the repository),

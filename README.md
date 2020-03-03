@@ -22,6 +22,7 @@ Currently, the MIDIMonster supports the following protocols:
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
 | JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)		|
 | Lua Scripting			| Linux, Windows, OSX	|				| [`lua`](backends/lua.md)		|
+| Python Scripting		| Linux, OSX		|				| [`python`](backends/python.md)	|
 | Loopback			| Linux, Windows, OSX	|				| [`loopback`](backends/loopback.md)	|
 
 With these features, the MIDIMonster allows users to control any channel on any of these protocols, and translate any channel on
@@ -146,6 +147,7 @@ special information. These documentation files are located in the `backends/` di
 * [`osc` backend documentation](backends/osc.md)
 * [`openpixelcontrol` backend documentation](backends/openpixelcontrol.md)
 * [`lua` backend documentation](backends/lua.md)
+* [`python` backend documentation](backends/python.md)
 * [`maweb` backend documentation](backends/maweb.md)
 
 ## Installation
@@ -192,8 +194,9 @@ support for the protocols to translate.
 * `liblua5.3-dev` (for the lua backend)
 * `libola-dev` (for the optional OLA backend)
 * `libjack-jackd2-dev` (for the JACK backend)
-* `pkg-config` (as some projects and systems like to spread their files around)
 * `libssl-dev` (for the MA Web Remote backend)
+* `python3-dev` (for the Python backend)
+* `pkg-config` (as some projects and systems like to spread their files around)
 * A C compiler
 * GNUmake
 

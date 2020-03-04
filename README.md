@@ -38,7 +38,7 @@ one protocol into channel(s) on any other (or the same) supported protocol, for 
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))
 * Play games, type, or control your mouse using MIDI controllers ([Example configuration](configs/midi-mouse.cfg))
 
-If you encounter a bug or suspect a problem with a a protocol implementation, please
+If you encounter a bug or suspect a problem with a protocol implementation, please
 [open an Issue](https://github.com/cbdevnet/midimonster/issues) or get in touch with us via
 IRC on [Hackint in `#midimonster`](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster).
 We are happy to hear from you!

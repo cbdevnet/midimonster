@@ -1,7 +1,7 @@
 ### The `python` backend
 
 The `python` backend provides a flexible programming environment, allowing users
-to route, generate and manipulate channel events using the Python 3 scripting languge.
+to route, generate and manipulate channel events using the Python 3 scripting language.
 
 Every instance has its own interpreter, which can be loaded with multiple Python modules.
 These modules may contain member functions accepting a single `float` parameter, which can

@@ -9,6 +9,7 @@
 
 #define MAX_FDS 255
 
+static uint32_t next_frame = 0;
 static uint8_t default_net = 0;
 static size_t artnet_fds = 0;
 static artnet_descriptor* artnet_fd = NULL;
@@ -37,7 +38,6 @@ static int artnet_listener(char* host, char* port){
 	artnet_fd[artnet_fds].fd = fd;
 	artnet_fd[artnet_fds].output_instances = 0;
 	artnet_fd[artnet_fds].output_instance = NULL;
-	artnet_fd[artnet_fds].last_frame = NULL;
 	artnet_fds++;
 	return 0;
 }
@@ -52,6 +52,7 @@ MM_PLUGIN_API int init(){
 		.handle = artnet_set,
 		.process = artnet_handle,
 		.start = artnet_start,
+		.interval = artnet_interval,
 		.shutdown = artnet_shutdown
 	};
 
@@ -66,6 +67,13 @@ MM_PLUGIN_API int init(){
 		return 1;
 	}
 	return 0;
+}
+
+static uint32_t artnet_interval(){
+	if(next_frame){
+		return next_frame;
+	}
+	return ARTNET_KEEPALIVE_INTERVAL;
 }
 
 static int artnet_configure(char* option, char* value){
@@ -211,7 +219,8 @@ static int artnet_transmit(instance* inst){
 	//update last frame timestamp
 	for(u = 0; u < artnet_fd[data->fd_index].output_instances; u++){
 		if(artnet_fd[data->fd_index].output_instance[u].label == inst->ident){
-			artnet_fd[data->fd_index].last_frame[u] = mm_timestamp();
+			artnet_fd[data->fd_index].output_instance[u].last_frame = mm_timestamp();
+			artnet_fd[data->fd_index].output_instance[u].mark = 0;
 		}
 	}
 	return 0;
@@ -226,7 +235,6 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 		return 0;
 	}
 
-	//FIXME maybe introduce minimum frame interval
 	for(u = 0; u < num; u++){
 		if(IS_WIDE(data->data.map[c[u]->ident])){
 			uint32_t val = v[u].normalised * ((double) 0xFFFF);
@@ -248,6 +256,21 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	}
 
 	if(mark){
+		//find last frame time
+		for(u = 0; u < artnet_fd[data->fd_index].output_instances; u++){
+			if(artnet_fd[data->fd_index].output_instance[u].label == inst->ident){
+				break;
+			}
+		}
+
+		//check output rate limit, request next frame
+		if(mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame < ARTNET_FRAME_TIMEOUT){
+			artnet_fd[data->fd_index].output_instance[u].mark = 1;
+			if(!next_frame || next_frame < mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame){
+				next_frame = mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame;
+			}
+			return 0;
+		}
 		return artnet_transmit(inst);
 	}
 
@@ -325,14 +348,22 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	instance* inst = NULL;
 	artnet_pkt* frame = (artnet_pkt*) recv_buf;
 
-	//transmit keepalive frames
+	//transmit keepalive & synthesized frames
+	next_frame = 0;
 	for(u = 0; u < artnet_fds; u++){
 		for(c = 0; c < artnet_fd[u].output_instances; c++){
-			if(timestamp - artnet_fd[u].last_frame[c] >= ARTNET_KEEPALIVE_INTERVAL){
+			if(timestamp - artnet_fd[u].output_instance[c].last_frame >= ARTNET_KEEPALIVE_INTERVAL //timeout 
+					|| (artnet_fd[u].output_instance[c].mark && timestamp - artnet_fd[u].output_instance[c].last_frame >= ARTNET_FRAME_TIMEOUT)){ //synthesized frame
 				inst = mm_instance_find(BACKEND_NAME, artnet_fd[u].output_instance[c].label);
 				if(inst){
 					artnet_transmit(inst);
 				}
+			}
+
+			//update next_frame
+			if(artnet_fd[u].output_instance[c].mark
+					&& (!next_frame || next_frame > mm_timestamp() - artnet_fd[u].output_instance[c].last_frame)){
+				next_frame = mm_timestamp() - artnet_fd[u].output_instance[c].last_frame;
 			}
 		}
 	}
@@ -407,15 +438,15 @@ static int artnet_start(size_t n, instance** inst){
 
 		//if enabled for output, add to keepalive tracking
 		if(data->dest_len){
-			artnet_fd[data->fd_index].output_instance = realloc(artnet_fd[data->fd_index].output_instance, (artnet_fd[data->fd_index].output_instances + 1) * sizeof(artnet_instance_id));
-			artnet_fd[data->fd_index].last_frame = realloc(artnet_fd[data->fd_index].last_frame, (artnet_fd[data->fd_index].output_instances + 1) * sizeof(uint64_t));
+			artnet_fd[data->fd_index].output_instance = realloc(artnet_fd[data->fd_index].output_instance, (artnet_fd[data->fd_index].output_instances + 1) * sizeof(artnet_output_universe));
 
-			if(!artnet_fd[data->fd_index].output_instance || !artnet_fd[data->fd_index].last_frame){
+			if(!artnet_fd[data->fd_index].output_instance){
 				LOG("Failed to allocate memory");
 				goto bail;
 			}
-			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances] = id;
-			artnet_fd[data->fd_index].last_frame[artnet_fd[data->fd_index].output_instances] = 0;
+			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances].label = id.label;
+			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances].last_frame = 0;
+			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances].mark = 0;
 
 			artnet_fd[data->fd_index].output_instances++;
 		}
@@ -443,7 +474,6 @@ static int artnet_shutdown(size_t n, instance** inst){
 	for(p = 0; p < artnet_fds; p++){
 		close(artnet_fd[p].fd);
 		free(artnet_fd[p].output_instance);
-		free(artnet_fd[p].last_frame);
 	}
 	free(artnet_fd);
 

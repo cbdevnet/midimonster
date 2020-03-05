@@ -28,12 +28,14 @@ static struct /*_sacn_global_config*/ {
 	size_t fds;
 	sacn_fd* fd;
 	uint64_t last_announce;
+	uint32_t next_frame;
 } global_cfg = {
 	.source_name = "MIDIMonster",
 	.cid = {'M', 'I', 'D', 'I', 'M', 'o', 'n', 's', 't', 'e', 'r'},
 	.fds = 0,
 	.fd = NULL,
-	.last_announce = 0
+	.last_announce = 0,
+	.next_frame = 0
 };
 
 MM_PLUGIN_API int init(){
@@ -46,6 +48,7 @@ MM_PLUGIN_API int init(){
 		.handle = sacn_set,
 		.process = sacn_handle,
 		.start = sacn_start,
+		.interval = sacn_interval,
 		.shutdown = sacn_shutdown
 	};
 
@@ -61,6 +64,13 @@ MM_PLUGIN_API int init(){
 	}
 
 	return 0;
+}
+
+static uint32_t sacn_interval(){
+	if(global_cfg.next_frame){
+		return global_cfg.next_frame;
+	}
+	return SACN_KEEPALIVE_INTERVAL;
 }
 
 static int sacn_listener(char* host, char* port, uint8_t flags){
@@ -87,7 +97,6 @@ static int sacn_listener(char* host, char* port, uint8_t flags){
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].universes = 0;
 	global_cfg.fd[global_cfg.fds].universe = NULL;
-	global_cfg.fd[global_cfg.fds].last_frame = NULL;
 
 	if(flags & mcast_loop){
 		//set IP_MCAST_LOOP to allow local applications to receive output
@@ -190,6 +199,10 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 		data->unicast_input = strtoul(value, NULL, 10);
 		return 0;
 	}
+	else if(!strcmp(option, "realtime")){
+		data->realtime = strtoul(value, NULL, 10);
+		return 0;
+	}
 
 	LOGPF("Unknown instance configuration option %s for instance %s", option, inst->name);
 	return 1;
@@ -289,10 +302,11 @@ static int sacn_transmit(instance* inst){
 		LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
 	}
 
-	//update last transmit timestamp
+	//update last transmit timestamp, unmark instance
 	for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
-		if(global_cfg.fd[data->fd_index].universe[u] == data->uni){
-			global_cfg.fd[data->fd_index].last_frame[u] = mm_timestamp();
+		if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
+			global_cfg.fd[data->fd_index].universe[u].last_frame = mm_timestamp();
+			global_cfg.fd[data->fd_index].universe[u].mark = 0;
 		}
 	}
 	return 0;
@@ -300,6 +314,7 @@ static int sacn_transmit(instance* inst){
 
 static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u, mark = 0;
+	uint32_t frame_delta = 0;
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
 
 	if(!num){
@@ -333,6 +348,25 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	//send packet if required
 	if(mark){
+		if(!data->realtime){
+			//find output instance data
+			for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
+				if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
+					break;
+				}
+			}
+
+			frame_delta = mm_timestamp() - global_cfg.fd[data->fd_index].universe[u].last_frame;
+
+			//check if ratelimiting engaged
+			if(frame_delta < SACN_FRAME_TIMEOUT){
+				global_cfg.fd[data->fd_index].universe[u].mark = 1;
+				if(!global_cfg.next_frame || global_cfg.next_frame > (SACN_KEEPALIVE_INTERVAL - frame_delta)){
+					global_cfg.next_frame = (SACN_KEEPALIVE_INTERVAL - frame_delta);
+				}
+				return 0;
+			}
+		}
 		sacn_transmit(inst);
 	}
 
@@ -468,6 +502,7 @@ static void sacn_discovery(size_t fd){
 static int sacn_handle(size_t num, managed_fd* fds){
 	size_t u, c;
 	uint64_t timestamp = mm_timestamp();
+	uint32_t synthesize_delta = 0;
 	ssize_t bytes_read;
 	char recv_buf[SACN_RECV_BUF];
 	instance* inst = NULL;
@@ -477,7 +512,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	sacn_frame_root* frame = (sacn_frame_root*) recv_buf;
 	sacn_frame_data* data = (sacn_frame_data*) (recv_buf + sizeof(sacn_frame_root));
 
-	if(mm_timestamp() - global_cfg.last_announce > SACN_DISCOVERY_TIMEOUT){
+	if(timestamp - global_cfg.last_announce > SACN_DISCOVERY_TIMEOUT){
 		//send universe discovery pdu
 		for(u = 0; u < global_cfg.fds; u++){
 			if(global_cfg.fd[u].universes){
@@ -487,17 +522,28 @@ static int sacn_handle(size_t num, managed_fd* fds){
 		global_cfg.last_announce = timestamp;
 	}
 
-	//check for keepalive frames
+	//check for keepalive frames, synthesize frames if necessary
 	for(u = 0; u < global_cfg.fds; u++){
 		for(c = 0; c < global_cfg.fd[u].universes; c++){
-			if(timestamp - global_cfg.fd[u].last_frame[c] >= SACN_KEEPALIVE_INTERVAL){
+			synthesize_delta = timestamp - global_cfg.fd[u].universe[c].last_frame;
+
+			if((global_cfg.fd[u].universe[c].mark
+						&& synthesize_delta >= SACN_FRAME_TIMEOUT + SACN_SYNTHESIZE_MARGIN)
+					|| synthesize_delta >= SACN_KEEPALIVE_INTERVAL){
 				instance_id.fields.fd_index = u;
-				instance_id.fields.uni = global_cfg.fd[u].universe[c];
+				instance_id.fields.uni = global_cfg.fd[u].universe[c].universe;
 				inst = mm_instance_find(BACKEND_NAME, instance_id.label);
 				if(inst){
 					sacn_transmit(inst);
 				}
 			}
+
+			//update next frame request
+			if(global_cfg.fd[u].universe[c].mark 
+					&& (!global_cfg.next_frame || global_cfg.next_frame > SACN_FRAME_TIMEOUT + SACN_SYNTHESIZE_MARGIN - synthesize_delta)){
+				global_cfg.next_frame = SACN_FRAME_TIMEOUT + SACN_SYNTHESIZE_MARGIN - synthesize_delta;
+			}
+
 		}
 	}
 
@@ -557,7 +603,6 @@ static int sacn_start(size_t n, instance** inst){
 
 	if(!global_cfg.fds){
 		LOG("Failed to start, no descriptors bound");
-		free(inst);
 		return 1;
 	}
 
@@ -590,13 +635,15 @@ static int sacn_start(size_t n, instance** inst){
 
 		if(data->xmit_prio){
 			//add to list of advertised universes for this fd
-			global_cfg.fd[data->fd_index].universe = realloc(global_cfg.fd[data->fd_index].universe, (global_cfg.fd[data->fd_index].universes + 1) * sizeof(uint16_t));
+			global_cfg.fd[data->fd_index].universe = realloc(global_cfg.fd[data->fd_index].universe, (global_cfg.fd[data->fd_index].universes + 1) * sizeof(sacn_output_universe));
 			if(!global_cfg.fd[data->fd_index].universe){
 				LOG("Failed to allocate memory");
 				goto bail;
 			}
 
-			global_cfg.fd[data->fd_index].universe[global_cfg.fd[data->fd_index].universes] = data->uni;
+			global_cfg.fd[data->fd_index].universe[global_cfg.fd[data->fd_index].universes].universe = data->uni;
+			global_cfg.fd[data->fd_index].universe[global_cfg.fd[data->fd_index].universes].last_frame = 0;
+			global_cfg.fd[data->fd_index].universe[global_cfg.fd[data->fd_index].universes].mark = 0;
 			global_cfg.fd[data->fd_index].universes++;
 
 			//generate multicast destination address if none set
@@ -612,12 +659,6 @@ static int sacn_start(size_t n, instance** inst){
 
 	LOGPF("Registering %" PRIsize_t " descriptors to core", global_cfg.fds);
 	for(u = 0; u < global_cfg.fds; u++){
-		//allocate memory for storing last frame transmission timestamp
-		global_cfg.fd[u].last_frame = calloc(global_cfg.fd[u].universes, sizeof(uint64_t));
-		if(!global_cfg.fd[u].last_frame){
-			LOG("Failed to allocate memory");
-			goto bail;
-		}
 		if(mm_manage_fd(global_cfg.fd[u].fd, BACKEND_NAME, 1, (void*) u)){
 			goto bail;
 		}
@@ -638,7 +679,6 @@ static int sacn_shutdown(size_t n, instance** inst){
 	for(p = 0; p < global_cfg.fds; p++){
 		close(global_cfg.fd[p].fd);
 		free(global_cfg.fd[p].universe);
-		free(global_cfg.fd[p].last_frame);
 	}
 	free(global_cfg.fd);
 	LOG("Backend shut down");

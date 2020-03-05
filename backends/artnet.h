@@ -20,7 +20,8 @@ static int artnet_shutdown(size_t n, instance** inst);
 
 #define ARTNET_KEEPALIVE_INTERVAL 1000
 //limit transmit rate to at most 44 packets per second (1000/44 ~= 22)
-#define ARTNET_FRAME_TIMEOUT 20
+#define ARTNET_FRAME_TIMEOUT 15
+#define ARTNET_SYNTHESIZE_MARGIN 10
 
 #define MAP_COARSE 0x0200
 #define MAP_FINE 0x0400

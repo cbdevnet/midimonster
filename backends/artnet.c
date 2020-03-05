@@ -227,6 +227,7 @@ static int artnet_transmit(instance* inst){
 }
 
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
+	uint32_t frame_delta = 0;
 	size_t u, mark = 0;
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
@@ -263,11 +264,12 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 			}
 		}
 
+		frame_delta = mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame;
 		//check output rate limit, request next frame
-		if(mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame < ARTNET_FRAME_TIMEOUT){
+		if(frame_delta < ARTNET_FRAME_TIMEOUT){
 			artnet_fd[data->fd_index].output_instance[u].mark = 1;
-			if(!next_frame || next_frame < mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame){
-				next_frame = mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame;
+			if(!next_frame || next_frame > (ARTNET_KEEPALIVE_INTERVAL - frame_delta)){
+				next_frame = (ARTNET_KEEPALIVE_INTERVAL - frame_delta);
 			}
 			return 0;
 		}
@@ -340,6 +342,7 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 static int artnet_handle(size_t num, managed_fd* fds){
 	size_t u, c;
 	uint64_t timestamp = mm_timestamp();
+	uint32_t synthesize_delta = 0;
 	ssize_t bytes_read;
 	char recv_buf[ARTNET_RECV_BUF];
 	artnet_instance_id inst_id = {
@@ -352,8 +355,10 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	next_frame = 0;
 	for(u = 0; u < artnet_fds; u++){
 		for(c = 0; c < artnet_fd[u].output_instances; c++){
-			if(timestamp - artnet_fd[u].output_instance[c].last_frame >= ARTNET_KEEPALIVE_INTERVAL //timeout 
-					|| (artnet_fd[u].output_instance[c].mark && timestamp - artnet_fd[u].output_instance[c].last_frame >= ARTNET_FRAME_TIMEOUT)){ //synthesized frame
+			synthesize_delta = timestamp - artnet_fd[u].output_instance[c].last_frame;
+			if((artnet_fd[u].output_instance[c].mark 
+						&& synthesize_delta >= ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN) //synthesize next frame
+					|| synthesize_delta >= ARTNET_KEEPALIVE_INTERVAL){ //keepalive timeout
 				inst = mm_instance_find(BACKEND_NAME, artnet_fd[u].output_instance[c].label);
 				if(inst){
 					artnet_transmit(inst);
@@ -362,8 +367,8 @@ static int artnet_handle(size_t num, managed_fd* fds){
 
 			//update next_frame
 			if(artnet_fd[u].output_instance[c].mark
-					&& (!next_frame || next_frame > mm_timestamp() - artnet_fd[u].output_instance[c].last_frame)){
-				next_frame = mm_timestamp() - artnet_fd[u].output_instance[c].last_frame;
+					&& (!next_frame || next_frame > ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta)){
+				next_frame = ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta;
 			}
 		}
 	}

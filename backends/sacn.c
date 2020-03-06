@@ -523,6 +523,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	}
 
 	//check for keepalive frames, synthesize frames if necessary
+	global_cfg.next_frame = 0;
 	for(u = 0; u < global_cfg.fds; u++){
 		for(c = 0; c < global_cfg.fd[u].universes; c++){
 			synthesize_delta = timestamp - global_cfg.fd[u].universe[c].last_frame;

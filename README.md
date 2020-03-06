@@ -187,7 +187,8 @@ dpkg -i <file>.deb
 ### Building from source
 
 To build the MIDIMonster directly from the sources, you'll need some libraries that provide
-support for the protocols to translate.
+support for the protocols to translate. When building from source, you can also to exclude
+backends (for example, if you don't need them or don't want to install their prerequisites).
 
 * `libasound2-dev` (for the ALSA MIDI backend)
 * `libevdev-dev` (for the evdev backend)

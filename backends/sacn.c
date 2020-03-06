@@ -223,7 +223,7 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	char* spec_next = spec;
 
 	unsigned chan_a = strtoul(spec, &spec_next, 10), chan_b = 0;
-	
+
 	//range check
 	if(!chan_a || chan_a > 512){
 		LOGPF("Channel out of range on instance %s: %s", inst->name, spec);
@@ -540,7 +540,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 			}
 
 			//update next frame request
-			if(global_cfg.fd[u].universe[c].mark 
+			if(global_cfg.fd[u].universe[c].mark
 					&& (!global_cfg.next_frame || global_cfg.next_frame > SACN_FRAME_TIMEOUT + SACN_SYNTHESIZE_MARGIN - synthesize_delta)){
 				global_cfg.next_frame = SACN_FRAME_TIMEOUT + SACN_SYNTHESIZE_MARGIN - synthesize_delta;
 			}

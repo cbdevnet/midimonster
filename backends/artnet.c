@@ -356,7 +356,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	for(u = 0; u < artnet_fds; u++){
 		for(c = 0; c < artnet_fd[u].output_instances; c++){
 			synthesize_delta = timestamp - artnet_fd[u].output_instance[c].last_frame;
-			if((artnet_fd[u].output_instance[c].mark 
+			if((artnet_fd[u].output_instance[c].mark
 						&& synthesize_delta >= ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN) //synthesize next frame
 					|| synthesize_delta >= ARTNET_KEEPALIVE_INTERVAL){ //keepalive timeout
 				inst = mm_instance_find(BACKEND_NAME, artnet_fd[u].output_instance[c].label);

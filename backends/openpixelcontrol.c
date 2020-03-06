@@ -1,4 +1,5 @@
 #define BACKEND_NAME "openpixelcontrol"
+#define DEBUG
 
 #include <string.h>
 
@@ -115,7 +116,7 @@ static ssize_t openpixel_buffer_find(openpixel_instance_data* data, uint8_t stri
 
 static int openpixel_buffer_extend(openpixel_instance_data* data, uint8_t strip, uint8_t input, uint16_t length){
 	ssize_t buffer = openpixel_buffer_find(data, strip, input);
-	
+
 	//length is in component-channels, round it to the nearest rgb-triplet
 	//this guarantees that any allocated buffer has at least three bytes, which is important to parts of the receive handler
 	length = (length % 3) ? ((length / 3) + 1) * 3 : length;
@@ -340,12 +341,86 @@ static int openpixel_client_new(instance* inst, int fd){
 	return mm_manage_fd(fd, BACKEND_NAME, 1, inst);
 }
 
-static ssize_t openpixel_client_pixeldata(instance* inst, openpixel_client* client, uint8_t* buffer, size_t bytes_left){
-	openpixel_instance_data* data = (openpixel_instance_data*) inst->impl;
-	size_t u;
+static size_t openpixel_strip_pixeldata8(instance* inst, openpixel_client* client, uint8_t* data, openpixel_buffer* buffer, size_t bytes_left){
 	channel* chan = NULL;
 	channel_value val;
+	size_t u;
 
+	for(u = 0; u < bytes_left; u++){
+		//if over buffer length, ignore
+		if(u + client->offset >= buffer->bytes){
+			client->buffer = -2;
+			break;
+		}
+
+		//FIXME if at start of trailing non-multiple of 3, ignore
+
+		//update changed channels
+		if(buffer->data.u8[u + client->offset] != data[u]){
+			buffer->data.u8[u + client->offset] = data[u];
+			chan = mm_channel(inst, ((uint64_t) buffer->strip << 32) | (u + client->offset + 1), 0);
+			if(chan){
+				//push event
+				val.raw.u64 = data[u];
+				val.normalised = (double) data[u] / 255.0;
+				if(mm_channel_event(chan, val)){
+					LOG("Failed to push channel event to core");
+				}
+			}
+		}
+	}
+	return u;
+}
+
+static size_t openpixel_strip_pixeldata16(instance* inst, openpixel_client* client, uint8_t* data, openpixel_buffer* buffer, size_t bytes_left){
+	channel* chan = NULL;
+	channel_value val;
+	size_t u;
+
+	for(u = 0; u < bytes_left; u++){
+		//if over buffer length, ignore
+		if(u + client->offset >= buffer->bytes){
+			client->buffer = -2;
+			break;
+		}
+
+		//if at start of trailing non-multiple of 6, ignore
+		if((client->offset + u) >= (client->offset + client->left) - ((client->offset + client->left) % 6)){
+			client->buffer = -2;
+			break;
+		}
+
+		//byte-order conversion may be on message boundary, do it via a buffer
+		client->boundary.u8[(client->offset + u) % 2] = data[u];
+
+		//detect and update changed channels
+		if((client->offset + u) % 2
+				&& buffer->data.u16[(u + client->offset) / 2] != be16toh(client->boundary.u16)){
+			buffer->data.u16[(u + client->offset) / 2] = be16toh(client->boundary.u16);
+			chan = mm_channel(inst, ((uint64_t) buffer->strip << 32) | ((u + client->offset) / 2 + 1), 0);
+			if(chan){
+				//push event
+				val.raw.u64 = be16toh(client->boundary.u16);;
+				val.normalised = (double) val.raw.u64 / 65535.0;
+				if(mm_channel_event(chan, val)){
+					LOG("Failed to push channel event to core");
+				}
+			}
+
+		}
+	}
+	return u;
+}
+
+static ssize_t openpixel_client_pixeldata(instance* inst, openpixel_client* client, uint8_t* buffer, size_t bytes_left){
+	openpixel_instance_data* data = (openpixel_instance_data*) inst->impl;
+	openpixel_client temp_client = {
+		.fd = -1
+	};
+	ssize_t u, p;
+	uint8_t processing_done = 1;
+
+	//ignore data
 	if(client->buffer == -2){
 		//ignore data
 		u = min(client->left, bytes_left);
@@ -353,71 +428,55 @@ static ssize_t openpixel_client_pixeldata(instance* inst, openpixel_client* clie
 		client->left -= u;
 		return u;
 	}
+	//handle broadcast data
+	else if(client->buffer == -3){
+		//iterate all input strips
+		for(p = 0; p < data->buffers; p++){
+			if(data->buffer[p].flags & OPENPIXEL_INPUT){
+				//prepare temporary client
+				temp_client.buffer = p;
+				temp_client.hdr = client->hdr;
+				temp_client.hdr.strip = data->buffer[p].strip;
+				temp_client.offset = client->offset;
+				temp_client.left = client->left;
+
+				//run processing on strip
+				if(data->mode == rgb8){
+					openpixel_strip_pixeldata8(inst, &temp_client, buffer, data->buffer + p, bytes_left);
+				}
+				else{
+					openpixel_strip_pixeldata16(inst, &temp_client, buffer, data->buffer + p, bytes_left);
+				}
+				if(temp_client.buffer != -2){
+					processing_done = 0;
+				}
+			}
+		}
+
+		//if all strips report being done, ignore the rest of the data
+		if(processing_done){
+			client->buffer = -2;
+		}
+
+		//remove data
+		u = min(client->left, bytes_left);
+		client->offset += u;
+		client->left -= u;
+		return u;
+	}
+	//process data
 	else{
 		if(data->mode == rgb8){
-			for(u = 0; u < bytes_left; u++){
-				//if over buffer length, ignore
-				if(u + client->offset >= data->buffer[client->buffer].bytes){
-					client->buffer = -2;
-					break;
-				}
-
-				//FIXME if at start of trailing non-multiple of 3, ignore
-				
-				//update changed channels
-				if(data->buffer[client->buffer].data.u8[u + client->offset] != buffer[u]){
-					data->buffer[client->buffer].data.u8[u + client->offset] = buffer[u];
-					chan = mm_channel(inst, ((uint64_t) client->hdr.strip << 32) | (u + client->offset + 1), 0);
-					if(chan){
-						//push event
-						val.raw.u64 = buffer[u];
-						val.normalised = (double) buffer[u] / 255.0;
-						if(mm_channel_event(chan, val)){
-							LOG("Failed to push channel event to core");
-						}
-					}
-				}
-			}
-
-			//update offsets
-			client->offset += u;
-			client->left -= u;
-			return u;
+			u = openpixel_strip_pixeldata8(inst, client, buffer, data->buffer + client->buffer, bytes_left);
 		}
 		else{
-			for(u = 0; u < bytes_left; u++){
-				//if over buffer length, ignore
-				if(u + client->offset >= data->buffer[client->buffer].bytes){
-					client->buffer = -2;
-					break;
-				}
-
-				//if at start of trailing non-multiple of 6, ignore
-				if((client->offset + u) >= (client->offset + client->left) - ((client->offset + client->left) % 6)){
-					client->buffer = -2;
-					break;
-				}
-
-				//byte-order conversion may be on message boundary, do it via a buffer
-				client->boundary.u8[(client->offset + u) % 2] = buffer[u];
-
-				//detect and update changed channels
-				if((client->offset + u) % 2
-						&& data->buffer[client->buffer].data.u16[(u + client->offset) / 2] != be16toh(client->boundary.u16)){
-					data->buffer[client->buffer].data.u16[(u + client->offset) / 2] = be16toh(client->boundary.u16);
-					chan = mm_channel(inst, ((uint64_t) client->hdr.strip << 32) | ((u + client->offset) / 2 + 1), 0);
-					if(chan){
-						//push event
-						val.raw.u64 = be16toh(client->boundary.u16);;
-						val.normalised = (double) val.raw.u64 / 65535.0;
-						if(mm_channel_event(chan, val)){
-							LOG("Failed to push channel event to core");
-						}
-					}
-
-				}
-			}
+			u = openpixel_strip_pixeldata16(inst, client, buffer, data->buffer + client->buffer, bytes_left);
 		}
+
+		//update offsets
+		client->offset += u;
+		client->left -= u;
+		return u;
 	}
 	return -1;
 }
@@ -431,8 +490,14 @@ static ssize_t openpixel_client_headerdata(instance* inst, openpixel_client* cli
 
 	//if done, resolve buffer
 	if(sizeof(openpixel_header) - client->offset <= bytes_left){
-		client->buffer = openpixel_buffer_find(data, client->hdr.strip, 1);
-		//TODO handle broadcast strip input
+		//if broadcast strip, mark broadcast
+		if(client->hdr.strip == 0
+				&& data->mode == client->hdr.mode){
+			client->buffer = -3;
+		}
+		else{
+			client->buffer = openpixel_buffer_find(data, client->hdr.strip, 1);
+		}
 		//if no buffer or mode mismatch, ignore data
 		if(client->buffer < 0
 				|| data->mode != client->hdr.mode){

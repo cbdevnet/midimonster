@@ -13,7 +13,7 @@ The following functions are provided within the Lua interpreter for interaction 
 | Function			| Usage example			| Description				|
 |-------------------------------|-------------------------------|---------------------------------------|
 | `output(string, number)`	| `output("foo", 0.75)`		| Output a value event to a channel	|
-| `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms) |
+| `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms). Calling `interval` on a Lua function multiple times updates the interval. Specifying `0` as interval stops periodic calls to the function |
 | `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel	|
 | `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel |
 | `input_channel()`		| `print(input_channel())`	| Returns the name of the input channel whose handler function is currently running or `nil` if in an `interval`'ed function (or the initial parse step) |

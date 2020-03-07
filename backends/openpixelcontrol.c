@@ -1,5 +1,4 @@
 #define BACKEND_NAME "openpixelcontrol"
-#define DEBUG
 
 #include <string.h>
 

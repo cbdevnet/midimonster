@@ -1,4 +1,5 @@
 #define BACKEND_NAME "openpixelcontrol"
+#define DEBUG
 
 #include <string.h>
 
@@ -422,10 +423,9 @@ static ssize_t openpixel_client_pixeldata(instance* inst, openpixel_client* clie
 	//ignore data
 	if(client->buffer == -2){
 		//ignore data
-		u = min(client->left, bytes_left);
-		client->offset += u;
-		client->left -= u;
-		return u;
+		client->offset += bytes_left;
+		client->left -= bytes_left;
+		return bytes_left;
 	}
 	//handle broadcast data
 	else if(client->buffer == -3){
@@ -559,7 +559,7 @@ static int openpixel_client_handle(instance* inst, int fd){
 		}
 		else{
 			//read data
-			bytes_handled = openpixel_client_pixeldata(inst, data->client + c, buffer + offset, bytes_left);
+			bytes_handled = openpixel_client_pixeldata(inst, data->client + c, buffer + offset, min(bytes_left, data->client[c].left));
 			if(bytes_handled < 0){
 				//FIXME handle errors
 			}

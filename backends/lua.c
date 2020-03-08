@@ -75,7 +75,7 @@ static int lua_update_timerfd(){
 	size_t n = 0;
 	#ifdef MMBACKEND_LUA_TIMERFD
 	struct itimerspec timer_config = {
-		0
+		{0}
 	};
 	#endif
 
@@ -260,7 +260,7 @@ static int lua_callback_value(lua_State* interpreter, uint8_t input){
 	//find correct channel & return value
 	for(n = 0; n < data->channels; n++){
 		if(!strcmp(channel_name, data->channel_name[n])){
-			lua_pushnumber(data->interpreter, (input) ? data->input[n] : data->output[n]);
+			lua_pushnumber(interpreter, (input) ? data->input[n] : data->output[n]);
 			return 1;
 		}
 	}
@@ -280,6 +280,11 @@ static int lua_callback_output_value(lua_State* interpreter){
 static int lua_callback_input_channel(lua_State* interpreter){
 	lua_pushstring(interpreter, LUA_REGISTRY_CURRENT_CHANNEL);
 	lua_gettable(interpreter, LUA_REGISTRYINDEX);
+	return 1;
+}
+
+static int lua_callback_timestamp(lua_State* interpreter){
+	lua_pushnumber(interpreter, mm_timestamp());
 	return 1;
 }
 
@@ -326,6 +331,7 @@ static int lua_instance(instance* inst){
 	lua_register(data->interpreter, "input_value", lua_callback_input_value);
 	lua_register(data->interpreter, "output_value", lua_callback_output_value);
 	lua_register(data->interpreter, "input_channel", lua_callback_input_channel);
+	lua_register(data->interpreter, "timestamp", lua_callback_timestamp);
 
 	//store instance pointer to the lua state
 	lua_pushstring(data->interpreter, LUA_REGISTRY_KEY);
@@ -417,9 +423,6 @@ static int lua_handle(size_t num, managed_fd* fds){
 		return 1;
 	}
 	#else
-	if(!last_timestamp){
-		last_timestamp = mm_timestamp();
-	}
 	delta = mm_timestamp() - last_timestamp;
 	last_timestamp = mm_timestamp();
 	#endif
@@ -458,6 +461,7 @@ static int lua_start(size_t n, instance** inst){
 					&& strcmp(data->channel_name[p], "input_value")
 					&& strcmp(data->channel_name[p], "output_value")
 					&& strcmp(data->channel_name[p], "input_channel")
+					&& strcmp(data->channel_name[p], "timestamp")
 					&& strcmp(data->channel_name[p], "interval")){
 				lua_getglobal(data->interpreter, data->channel_name[p]);
 				data->reference[p] = luaL_ref(data->interpreter, LUA_REGISTRYINDEX);
@@ -474,6 +478,8 @@ static int lua_start(size_t n, instance** inst){
 	if(mm_manage_fd(timer_fd, BACKEND_NAME, 1, NULL)){
 		return 1;
 	}
+	#else
+	last_timestamp = mm_timestamp();
 	#endif
 	return 0;
 }

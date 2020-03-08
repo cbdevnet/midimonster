@@ -17,6 +17,7 @@ The following functions are provided within the Lua interpreter for interaction 
 | `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel	|
 | `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel |
 | `input_channel()`		| `print(input_channel())`	| Returns the name of the input channel whose handler function is currently running or `nil` if in an `interval`'ed function (or the initial parse step) |
+| `timestamp()`			| `print(timestamp())`		| Returns the core timestamp for this iteration with millisecond resolution. This is not a performance timer, but intended for timeouting, etc |
 
 Example script:
 ```
@@ -58,8 +59,8 @@ lua1.foo > lua2.bar
 
 #### Known bugs / problems
 
-Using any of the interface functions (`output`, `interval`, `input_value`, `output_value`, `input_channel`)
-as an input channel name to a Lua instance will not call any handler functions.
+Using any of the interface functions (`output`, `interval`, `input_value`, `output_value`, `input_channel`,
+`timestamp`) as an input channel name to a Lua instance will not call any handler functions.
 Using these names as arguments to the output and value interface functions works as intended.
 
 Output values will not trigger corresponding input event handlers unless the channel is mapped

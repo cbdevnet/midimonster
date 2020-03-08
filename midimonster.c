@@ -333,6 +333,9 @@ int main(int argc, char** argv){
 	managed_fd* signaled_fds = NULL;
 	int rv = EXIT_FAILURE, error, maxfd = -1;
 	char* cfg_file = DEFAULT_CFG;
+	#ifdef _WIN32
+	char* error_message = NULL;
+	#endif
 
 	//parse commandline arguments
 	if(args_parse(argc, argv, &cfg_file)){
@@ -392,7 +395,15 @@ int main(int argc, char** argv){
 		tv = backend_timeout();
 		error = select(maxfd + 1, &read_fds, NULL, NULL, &tv);
 		if(error < 0){
+			#ifndef _WIN32
 			fprintf(stderr, "select failed: %s\n", strerror(errno));
+			#else
+			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 
+					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error_message, 0, NULL);
+			fprintf(stderr, "select failed: %s\n", error_message);
+			LocalFree(error_message);
+			error_message = NULL;
+			#endif
 			break;
 		}
 

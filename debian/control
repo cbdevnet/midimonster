@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: cbdev <cb@cbcdn.com>
 Build-Depends: debhelper (>= 11)
 Standards-Version: 4.1.3
-Homepage: https://midimonster.tech/
+Homepage: https://midimonster.net/
 Vcs-Browser: https://github.com/cbdevnet/midimonster
 Vcs-Git: https://github.com/cbdevnet/midimonster
 

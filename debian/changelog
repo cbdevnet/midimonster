@@ -1,3 +1,15 @@
+midimonster (0.4-1) unstable; urgency=medium
+
+  * Add input_channel and timestamp calls to Lua core interface
+  * Allow commandline configuration override
+  * New OpenPixelControl backend
+  * New Python backend
+  * Quiet mode for maweb backend
+  * Rate-limiting for ArtNet and sACN (configurable)
+  * Core API: Allow managed_fd implementation data to be updated
+
+ -- cbdev <cb@cbcdn.com>  Sun, 08 Mar 2020 17:15:56 +0100
+
 midimonster (0.3-1) unstable; urgency=medium
 
   * Bugfixes to the jack, maweb, evdev and sacn backends

@@ -127,6 +127,7 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	//find exact match
 	for(u = 0; u < fds; u++){
 		if(fd[u].fd == new_fd && fd[u].backend == b){
+			fd[u].impl = impl;
 			if(!manage){
 				fd[u].fd = -1;
 				fd[u].backend = NULL;

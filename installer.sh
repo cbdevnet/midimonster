@@ -257,11 +257,12 @@ if [ $(wget -q --spider http://github.com) $? -eq 1 ]; then
 fi
 
 # Forceupdate		# Now only with default config because source imports all and overwrites the args.. [WIP!]
-if [ "$UPDATER_FORCE" -eq "1" ]; then
+if [ "$UPDATER_FORCE" = "1" ]; then
 	printf "Forcing the updater to start...\n\n"
 	if [ -f $updater_file ]; then
 		. $updater_file
 		ARGS "$@"	# Parse arguments again to compensate overwrite from source /\
+		printf "Successfully imported settings from %s\n" "$updater_file"
 	fi
 
 	UPDATER-PREP
@@ -280,7 +281,7 @@ if [ -f $updater_file ]; then
 	if [ -x "$VAR_PREFIX/bin/midimonster" ]; then
 		UPDATER
 	else
-		printf "midimonster binary not found, skipping updater.\n"
+		printf "MIDIMonster binary not found, skipping updater.\nYou can force an update with --forceupdate\n"
 	fi
 fi
 

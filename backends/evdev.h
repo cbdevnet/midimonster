@@ -11,7 +11,7 @@
 MM_PLUGIN_API int init();
 static int evdev_configure(char* option, char* value);
 static int evdev_configure_instance(instance* instance, char* option, char* value);
-static instance* evdev_instance();
+static int evdev_instance(instance* inst);
 static channel* evdev_channel(instance* instance, char* spec, uint8_t flags);
 static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int evdev_handle(size_t num, managed_fd* fds);

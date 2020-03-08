@@ -10,7 +10,7 @@
 MM_PLUGIN_API int init();
 static int osc_configure(char* option, char* value);
 static int osc_configure_instance(instance* inst, char* option, char* value);
-static instance* osc_instance();
+static int osc_instance(instance* inst);
 static channel* osc_map_channel(instance* inst, char* spec, uint8_t flags);
 static int osc_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int osc_handle(size_t num, managed_fd* fds);

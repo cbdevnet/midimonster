@@ -40,21 +40,15 @@ static int ola_configure(char* option, char* value){
 	return 1;
 }
 
-static instance* ola_instance(){
-	ola_instance_data* data = NULL;
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
-	data = (ola_instance_data*)calloc(1, sizeof(ola_instance_data));
+static int ola_instance(instance* inst){
+	ola_instance_data* data = (ola_instance_data*) calloc(1, sizeof(ola_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static int ola_configure_instance(instance* inst, char* option, char* value){
@@ -188,7 +182,7 @@ static void ola_data_receive(unsigned int universe, const ola::DmxBuffer& ola_dm
 			else{
 				chan = mm_channel(inst, p, 0);
 			}
-			
+
 			if(!chan){
 				LOGPF("Active channel %" PRIsize_t " on %s not known to core", p, inst->name);
 				return;

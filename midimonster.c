@@ -14,12 +14,19 @@
 #include "backend.h"
 #include "plugin.h"
 
+/* Core-internal structures */
 typedef struct /*_event_collection*/ {
 	size_t alloc;
 	size_t n;
 	channel** channel;
 	channel_value* value;
 } event_collection;
+
+typedef struct /*_mm_channel_mapping*/ {
+	channel* from;
+	size_t destinations;
+	channel** to;
+} channel_mapping;
 
 static size_t mappings = 0;
 static channel_mapping* map = NULL;
@@ -120,6 +127,7 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	//find exact match
 	for(u = 0; u < fds; u++){
 		if(fd[u].fd == new_fd && fd[u].backend == b){
+			fd[u].impl = impl;
 			if(!manage){
 				fd[u].fd = -1;
 				fd[u].backend = NULL;
@@ -257,13 +265,27 @@ static fd_set fds_collect(int* max_fd){
 }
 
 static int platform_initialize(){
-#ifdef _WIN32
+	#ifdef _WIN32
 	WSADATA wsa;
 	WORD version = MAKEWORD(2, 2);
 	if(WSAStartup(version, &wsa)){
 		return 1;
 	}
-#endif
+	#endif
+	return 0;
+}
+
+static int platform_shutdown(){
+	#ifdef _WIN32
+	DWORD processes;
+	if(GetConsoleProcessList(&processes, 1) == 1){
+		fprintf(stderr, "\nMIDIMonster is the last process in this console, please press any key to exit\n");
+		HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+		SetConsoleMode(input, 0);
+		FlushConsoleInputBuffer(input);
+		WaitForSingleObject(input, INFINITE);
+	}
+	#endif
 	return 0;
 }
 
@@ -274,9 +296,30 @@ static int args_parse(int argc, char** argv, char** cfg_file){
 			version();
 			return 1;
 		}
-
-		//if nothing else matches, it's probably the configuration file
-		*cfg_file = argv[u];
+		else if(!strcmp(argv[u], "-i")){
+			if(!argv[u + 1]){
+				fprintf(stderr, "Missing instance override specification\n");
+				return 1;
+			}
+			if(config_add_override(override_instance, argv[u + 1])){
+				return 1;
+			}
+			u++;
+		}
+		else if(!strcmp(argv[u], "-b")){
+			if(!argv[u + 1]){
+				fprintf(stderr, "Missing backend override specification\n");
+				return 1;
+			}
+			if(config_add_override(override_backend, argv[u + 1])){
+				return 1;
+			}
+			u++;
+		}
+		else{
+			//if nothing else matches, it's probably the configuration file
+			*cfg_file = argv[u];
+		}
 	}
 
 	return 0;
@@ -290,6 +333,9 @@ int main(int argc, char** argv){
 	managed_fd* signaled_fds = NULL;
 	int rv = EXIT_FAILURE, error, maxfd = -1;
 	char* cfg_file = DEFAULT_CFG;
+	#ifdef _WIN32
+	char* error_message = NULL;
+	#endif
 
 	//parse commandline arguments
 	if(args_parse(argc, argv, &cfg_file)){
@@ -317,9 +363,10 @@ int main(int argc, char** argv){
 		map_free();
 		fds_free();
 		plugins_close();
-		return usage(argv[0]);
+		config_free();
+		return (usage(argv[0]) | platform_shutdown());
 	}
-	
+
 	//load an initial timestamp
 	update_timestamp();
 
@@ -348,7 +395,15 @@ int main(int argc, char** argv){
 		tv = backend_timeout();
 		error = select(maxfd + 1, &read_fds, NULL, NULL, &tv);
 		if(error < 0){
+			#ifndef _WIN32
 			fprintf(stderr, "select failed: %s\n", strerror(errno));
+			#else
+			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 
+					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error_message, 0, NULL);
+			fprintf(stderr, "select failed: %s\n", error_message);
+			LocalFree(error_message);
+			error_message = NULL;
+			#endif
 			break;
 		}
 
@@ -403,6 +458,8 @@ bail:
 	fds_free();
 	event_free();
 	plugins_close();
+	config_free();
+	platform_shutdown();
 
 	return rv;
 }

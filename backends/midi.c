@@ -69,19 +69,14 @@ static int midi_configure(char* option, char* value){
 	return 1;
 }
 
-static instance* midi_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int midi_instance(instance* inst){
 	inst->impl = calloc(1, sizeof(midi_instance_data));
 	if(!inst->impl){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
-	return inst;
+	return 0;
 }
 
 static int midi_configure_instance(instance* inst, char* option, char* value){

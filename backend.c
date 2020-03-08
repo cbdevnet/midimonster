@@ -54,7 +54,7 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 			if(c[p]->instance == instances[u]){
 				xval = v[n];
 				xchnl = c[n];
-				
+
 				v[n] = v[p];
 				c[n] = c[p];
 
@@ -105,7 +105,7 @@ MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	return channels[nchannels++];
 }
 
-MM_API instance* mm_instance(){
+instance* mm_instance(){
 	instance** new_inst = realloc(instances, (ninstances + 1) * sizeof(instance*));
 	if(!new_inst){
 		//TODO free
@@ -274,7 +274,7 @@ int backends_start(){
 		if(p == ninstances){
 			continue;
 		}
-		
+
 		//fetch list of instances
 		if(mm_backend_instances(backends[u].name, &n, &inst)){
 			fprintf(stderr, "Failed to fetch instance list for initialization of backend %s\n", backends[u].name);

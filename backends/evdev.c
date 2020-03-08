@@ -63,16 +63,11 @@ static int evdev_configure(char* option, char* value) {
 	return 1;
 }
 
-static instance* evdev_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int evdev_instance(instance* inst){
 	evdev_instance_data* data = calloc(1, sizeof(evdev_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
 	data->input_fd = -1;
@@ -81,12 +76,12 @@ static instance* evdev_instance(){
 	if(!data->output_proto){
 		LOG("Failed to initialize libevdev output prototype device");
 		free(data);
-		return NULL;
+		return 1;
 	}
 #endif
 
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static int evdev_attach(instance* inst, evdev_instance_data* data, char* node){

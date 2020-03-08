@@ -15,10 +15,15 @@
 #define WS_FLAG_FIN 0x80
 #define WS_FLAG_MASK 0x80
 
+/*
+ * TODO handle peer close/unregister/reopen and fallback connections
+ */
+
 static uint64_t last_keepalive = 0;
 static uint64_t update_interval = 50;
 static uint64_t last_update = 0;
 static uint64_t updates_inflight = 0;
+static uint64_t quiet_mode = 0;
 
 static maweb_command_key cmdline_keys[] = {
 	{"PREV", 109, 0, 1}, {"SET", 108, 1, 0, 1}, {"NEXT", 110, 0, 1},
@@ -139,6 +144,10 @@ static int maweb_configure(char* option, char* value){
 		update_interval = strtoul(value, NULL, 10);
 		return 0;
 	}
+	else if(!strcmp(option, "quiet")){
+		quiet_mode = strtoul(value, NULL, 10);
+		return 0;
+	}
 
 	LOGPF("Unknown backend configuration option %s", option);
 	return 1;
@@ -205,16 +214,11 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static instance* maweb_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int maweb_instance(instance* inst){
 	maweb_instance_data* data = calloc(1, sizeof(maweb_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
 	data->fd = -1;
@@ -222,12 +226,12 @@ static instance* maweb_instance(){
 	if(!data->buffer){
 		LOG("Failed to allocate memory");
 		free(data);
-		return NULL;
+		return 1;
 	}
 	data->allocated = MAWEB_RECV_CHUNK;
 
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){
@@ -462,7 +466,9 @@ static int maweb_request_playbacks(instance* inst){
 	size_t page_index = 0, view = 3, channel = 0, offsets[3], channel_offset, channels;
 
 	if(updates_inflight){
-		LOGPF("Skipping update request, %" PRIu64 " updates still inflight", updates_inflight);
+		if(quiet_mode < 1){
+			LOGPF("Skipping update request, %" PRIu64 " updates still inflight - consider raising the interval time", updates_inflight);
+		}
 		return 0;
 	}
 
@@ -593,7 +599,9 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 				data->login = 0;
 				return 0;
 		}
-		LOGPF("Session id is now %" PRId64, data->session);
+		if(quiet_mode < 2){
+			LOGPF("Session id is now %" PRId64, data->session);
+		}
 	}
 
 	if(json_obj_bool(payload, "forceLogin", 0)){

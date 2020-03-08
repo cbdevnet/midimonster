@@ -95,19 +95,14 @@ static int winmidi_configure_instance(instance* inst, char* option, char* value)
 	return 1;
 }
 
-static instance* winmidi_instance(){
-	instance* i = mm_instance();
-	if(!i){
-		return NULL;
-	}
-
-	i->impl = calloc(1, sizeof(winmidi_instance_data));
-	if(!i->impl){
+static int winmidi_instance(instance* inst){
+	inst->impl = calloc(1, sizeof(winmidi_instance_data));
+	if(!inst->impl){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
-	return i;
+	return 0;
 }
 
 static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){
@@ -263,7 +258,7 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 						backend_config.event[u].inst->name,
 						backend_config.event[u].channel.fields.channel,
 						winmidi_type_name(backend_config.event[u].channel.fields.type),
-						backend_config.event[u].value);
+						backend_config.event[u].value.normalised);
 			}
 			else{
 				LOGPF("Incoming data on channel %s.ch%d.%s%d, value %f",
@@ -271,7 +266,7 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 						backend_config.event[u].channel.fields.channel,
 						winmidi_type_name(backend_config.event[u].channel.fields.type),
 						backend_config.event[u].channel.fields.control,
-						backend_config.event[u].value);
+						backend_config.event[u].value.normalised);
 			}
 		}
 		chan = mm_channel(backend_config.event[u].inst, backend_config.event[u].channel.label, 0);
@@ -396,7 +391,7 @@ static int winmidi_match_input(char* prefix){
 	for(n = 0; n < inputs; n++){
 		midiInGetDevCaps(n, &input_caps, sizeof(MIDIINCAPS));
 		if(!prefix){
-			printf("\tID %d: %s", n, input_caps.szPname);
+			LOGPF("\tID %d: %s", n, input_caps.szPname);
 		}
 		else if(!strncmp(input_caps.szPname, prefix, strlen(prefix))){
 			LOGPF("Selected input device %s (ID %" PRIsize_t ") for name %s", input_caps.szPname, n, prefix);
@@ -429,7 +424,7 @@ static int winmidi_match_output(char* prefix){
 	for(n = 0; n < outputs; n++){
 		midiOutGetDevCaps(n, &output_caps, sizeof(MIDIOUTCAPS));
 		if(!prefix){
-			printf("\tID %d: %s", n, output_caps.szPname);
+			LOGPF("\tID %d: %s", n, output_caps.szPname);
 		}
 		else if(!strncmp(output_caps.szPname, prefix, strlen(prefix))){
 			LOGPF("Selected output device %s (ID %" PRIsize_t " for name %s", output_caps.szPname, n, prefix);

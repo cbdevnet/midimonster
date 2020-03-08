@@ -25,11 +25,11 @@ The `midimonster` module provides the following functions:
 | `manage(function, socket)`	| `midimonster.manage(handler, socket)`| Register a (connected/listening) socket to the MIDIMonster core. Calls `function(socket)` when the socket is ready to read. Calling this method with `None` as the function argument unregisters the socket. A socket may only have one associated handler |
 
 Example Python module:
-```
+```python
 import socket
 import midimonster
 
-# Simple channel ahndler
+# Simple channel handler
 def in1(value):
 	midimonster.output("out1", 1 - value)
 
@@ -45,14 +45,14 @@ def socket_handler(sock):
 
 # Interval handler
 def ping():
-	print(midimonster.interval())
+	print(midimonster.timestamp())
 
 # Register an interval
 midimonster.interval(ping, 1000)
 # Create and register a client socket (add error handling as you like)
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(("localhost", 8990))
-midimonster.manage(reader, s)
+midimonster.manage(socket_handler, s)
 ```
 
 Input values range between 0.0 and 1.0, output values are clamped to the same range.

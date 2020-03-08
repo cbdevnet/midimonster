@@ -64,6 +64,7 @@ static uint32_t lua_interval(){
 				next_timer = timer[n].interval - timer[n].delta;
 			}
 		}
+		DBGPF("Next timer fires in %" PRIu32, next_timer);
 		return next_timer;
 	}
 	return 1000;
@@ -85,6 +86,7 @@ static int lua_update_timerfd(){
 			interval = timer[n].interval;
 		}
 	}
+	DBGPF("Recalculating timers, minimum is %" PRIu64, interval);
 
 	//calculate gcd of all timers if any are active
 	if(interval){
@@ -111,11 +113,13 @@ static int lua_update_timerfd(){
 	}
 
 	if(interval == timer_interval){
+		DBGPF("Keeping interval at %" PRIu64, interval);
 		return 0;
 	}
 
 	#ifdef MMBACKEND_LUA_TIMERFD
-	//configure the new interval
+	//configure the new interval, 0.0 disarms the timer
+	DBGPF("Reconfiguring timerfd to %" PRIu64 ".%" PRIu64, timer_config.it_interval.tv_sec, timer_config.it_interval.tv_nsec);
 	timerfd_settime(timer_fd, 0, &timer_config, NULL);
 	#endif
 	timer_interval = interval;

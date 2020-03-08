@@ -29,7 +29,7 @@ Example Python module:
 import socket
 import midimonster
 
-# Simple channel ahndler
+# Simple channel handler
 def in1(value):
 	midimonster.output("out1", 1 - value)
 

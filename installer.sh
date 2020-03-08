@@ -12,25 +12,81 @@ latest_version=$(curl --silent "https://api.github.com/repos/cbdevnet/midimonste
 
 makeargs=all                    # Build args
 
+normal=$(tput sgr0)
+bold=$(tput bold)
+bold2=$(tput smso)
+c_red=$(tput  setaf 1)
+c_green=$(tput  setaf 2)
+
 VAR_DESTDIR=""                  # Unused
 VAR_PREFIX="/usr"
 VAR_PLUGINS="$VAR_PREFIX/lib/midimonster"
 VAR_DEFAULT_CFG="/etc/midimonster/midimonster.cfg"
 VAR_EXAMPLE_CFGS="$VAR_PREFIX/share/midimonster"
 
-bold=$(tput bold)
-normal=$(tput sgr0)
 
 ################################################ SETUP ################################################
 
 ############################################## FUNCTIONS ##############################################
 
-INSTALL-DEPS () {           ##Install deps from array "$deps"
+ARGS () {
+	for i in "$@"
+	do
+		case $i in
+			--prefix=*)
+				VAR_PREFIX="${i#*=}"
+				VAR_PREFIX_I="1"
+			;;
+			--plugins=*)
+				VAR_PLUGINS="${i#*=}"
+				VAR_PLUGINS_I="1"
+			;;
+			--defcfg=*)
+				VAR_DEFAULT_CFG="${i#*=}"
+				VAR_DEFAULT_CFG_I="1"
+			;;
+			--examples=*)
+				VAR_EXAMPLE_CFGS="${i#*=}"
+				VAR_EXAMPLE_CFGS_I="1"
+			;;
+			--dev)
+				NIGHTLY=1
+				NIGHTLY_I="1"
+			;;
+			-d|--default)
+				VAR_PREFIX_I="1"
+				VAR_PLUGINS_I="1"
+				VAR_DEFAULT_CFG_I="1"
+				VAR_EXAMPLE_CFGS_I="1"
+				NIGHTLY_I="1"
+				NIGHTLY=1
+			;;
+			-fu|--forceupdate)
+				UPDATER_FORCE="1"
+			;;    
+			-h|--help|*)				# [WIP messages]
+				printf "${bold}Usage:${normal} ${0} ${c_green}[OPTIONS]${normal}"
+				printf "\n	${c_green}--prefix${normal} ${c_red}<path>${normal}		Sets the prefix"
+				printf "\n	${c_green}--plugins${normal} ${c_red}<path>${normal}	Sets the plugin path"
+				printf "\n	${c_green}--defcfg${normal} ${c_red}<path>${normal}		Sets the config path"
+				printf "\n	${c_green}--examples${normal} ${c_red}<path>${normal}	Sets the example configs path\n"
+				printf "\n	${c_green}--dev${normal}		Install nightly version (combine with --forceupdate to upgrade to nightly version)"
+				printf "\n   ${c_green}-d,  --default${normal}	Use default values to install"
+				printf "\n   ${c_green}-fu, --forceupdate${normal}	Force the  updater to update without a version check (Can be used to upgrade to the nightly version)"
+				printf "\n   ${c_green}-h,  --help${normal}		Show this message\n"
+				exit 1
+			;;
+		esac
+		shift
+	done
+}
+
+INSTALL-DEPS () {           # Install deps from array "$deps"
 	for t in ${deps[@]}; do
 	    if [ $(dpkg-query -W -f='${Status}' $t 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
 	        printf "Installing %s\n" "$t"
 	        apt-get install $t;
-	        printf "Done\n";
+	        printf "Done.\n";
 	    else
 	        printf "%s already installed!\n" "$t"
 	    fi
@@ -38,26 +94,28 @@ INSTALL-DEPS () {           ##Install deps from array "$deps"
 	printf "\n"
 }
 
-NIGHTLY_CHECK () {
-	#Asks for nightly version
-	read -p "Do you want to install the latest development version? (y/n)? " magic
-	case "$magic" in
-		y|Y)
-			printf "OK! You´re a risky person ;D\n"
-			NIGHTLY=1
-			;;
-		n|N)
-			printf "That´s OK - installing the latest stable version for you ;-)\n"
-			NIGHTLY=0
-			;;
-		*)
-			printf "Invalid input\n"
-			ERROR
-			;;
-	esac
+NIGHTLY_CHECK () {			# Asks for nightly version
+	if [ -z "$NIGHTLY_I" ]; then
+		read -p "Do you want to install the latest development version? (y/n)? " magic
+		case "$magic" in
+			y|Y)
+				printf "OK! You´re a risky person ;D\n"
+				NIGHTLY=1
+				;;
+			n|N)
+				printf "That´s OK - installing the latest stable version for you ;-)\n"
+				NIGHTLY=0
+				;;
+			*)
+				printf "${bold}Invalid input -- INSTALLING LATEST STABLE VERSION!${normal}\n"
+				NIGHTLY=0
+				;;
+		esac
+	fi
 
 	# Roll back to last tag if we're not on a nightly build
 	if [ "$NIGHTLY" != 1 ]; then
+		cd "$tmp_path"
 		printf "Finding latest stable version...\n"
 		Iversion=$(git describe --abbrev=0)
 		printf "Starting Git checkout to %s...\n" "$Iversion"
@@ -75,20 +133,27 @@ INSTALL-PREP () {
 		printf "\n"
 	)
 	NIGHTLY_CHECK
-	printf "Preparation successful\n\n"
-	printf "${bold}If you don't know what you're doing, just hit enter 4 times.${normal}\n"
+	printf "Preparation done.\n\n"
+	printf "${bold}If you don't know what you're doing, just hit enter.${normal}\n\n"
+	if [ -z "$VAR_PREFIX_I" ]; then
+		read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX
+		VAR_PREFIX="${input:-$VAR_PREFIX}"
+	fi
 
-	read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX
-	VAR_PREFIX="${input:-$VAR_PREFIX}"
+	if [ -z "$VAR_PLUGINS_I" ]; then
+		read -e -i "$VAR_PLUGINS" -p "PLUGINS (Plugin directory): " input # Reads VAR_PLUGINS
+		VAR_PLUGINS="${input:-$VAR_PLUGINS}"
+	fi
 
-	read -e -i "$VAR_PLUGINS" -p "PLUGINS (Plugin directory): " input # Reads VAR_PLUGINS
-	VAR_PLUGINS="${input:-$VAR_PLUGINS}"
+	if [ -z "$VAR_DEFAULT_CFG_I" ]; then
+		read -e -i "$VAR_DEFAULT_CFG" -p "Default config path: " input # Reads VAR_DEFAULT_CFG
+		VAR_DEFAULT_CFG="${input:-$VAR_DEFAULT_CFG}"
+	fi
 
-	read -e -i "$VAR_DEFAULT_CFG" -p "Default config path: " input # Reads VAR_DEFAULT_CFG
-	VAR_DEFAULT_CFG="${input:-$VAR_DEFAULT_CFG}"
-
-	read -e -i "$VAR_EXAMPLE_CFGS" -p "Example config directory: " input # Reads VAR_EXAMPLE_CFGS
-	VAR_EXAMPLE_CFGS="${input:-$VAR_EXAMPLE_CFGS}"
+	if [ -z "$VAR_EXAMPLE_CFGS_I" ]; then
+		read -e -i "$VAR_EXAMPLE_CFGS" -p "Example config directory: " input # Reads VAR_EXAMPLE_CFGS
+		VAR_EXAMPLE_CFGS="${input:-$VAR_EXAMPLE_CFGS}"
+	fi
 
 	UPDATER_SAVE
 
@@ -106,12 +171,9 @@ UPDATER-PREP () {
 		printf "\nInitializing repository...\n"
 		cd $tmp_path
 		git init $tmp_path
-		printf "Successfully imported settings from %s\n" "$updater_file"
 	)
 	NIGHTLY_CHECK
-	printf "Preparation successful\n\n"
-
-	rm -f "$VAR_PREFIX/bin/midimonster"
+	printf "Preparation done.\n\n"
 	rm -rf "$VAR_PLUGINS/"
 
 	UPDATER_SAVE
@@ -125,12 +187,12 @@ UPDATER-PREP () {
 
 UPDATER () {
 	installed_version="$(midimonster --version)"
-	#installed_version="MIDIMonster v0.3-40-gafed325" # FOR TESTING ONLY! (or bypassing updater version check)
+	#installed_version="MIDIMonster v0.3-40-gafed325" # FOR TESTING ONLY!
 	if [[ "$installed_version" =~ "$latest_version" ]]; then
 		printf "Newest Version is already installed! ${bold}($installed_version)${normal}\n\n"
 		ERROR
 	else
-		printf "The installed Version ${bold}´$installed_version´${normal} equals not the newest stable version ${bold}´$latest_version´${normal} (Maybe you are running a development version?)\n\n"
+		printf "The installed Version ${bold}´$installed_version´${normal} equals not the newest stable version ${bold}´$latest_version´${normal} (Maybe you are running a development(NIGHTLY) version?)\n\n"
 	fi
 
 	UPDATER-PREP
@@ -180,6 +242,7 @@ CLEAN () {
 
 ################################################ Main #################################################
 trap ERROR SIGINT SIGTERM SIGKILL
+ARGS "$@"	# Parse arguments
 clear
 
 # Check if $user = root!
@@ -189,16 +252,31 @@ if [ "$user" != "root" ]; then
 fi
 
 if [ $(wget -q --spider http://github.com) $? -eq 1 ]; then
-	printf "You need connection to the internet\n"
+	printf "You need a connection to the internet\n"
 	ERROR
+fi
+
+# Forceupdate		# Now only with default config because source imports all and overwrites the args.. [WIP!]
+if [ "$UPDATER_FORCE" -eq "1" ]; then
+	printf "Forcing the updater to start...\n\n"
+	if [ -f $updater_file ]; then
+		. $updater_file
+		ARGS "$@"	# Parse arguments again to compensate overwrite from source /\
+	fi
+
+	UPDATER-PREP
+	INSTALL-RUN
+	DONE
 fi
 
 # Check if updater config file exist and import it (overwrites default values!)
 if [ -f $updater_file ]; then
 	printf "Starting updater...\n\n"
 	. $updater_file
+	ARGS "$@"	# Parse arguments again to compensate overwrite from source /\
+	printf "Successfully imported settings from %s\n" "$updater_file"
 
-	# Check if binary $updater/bin/midimonster exist. If yes start updater else skip.
+		# Check if binary $VAR_PREFIX/bin/midimonster exist. If yes start updater else skip.
 	if [ -x "$VAR_PREFIX/bin/midimonster" ]; then
 		UPDATER
 	else
@@ -206,8 +284,8 @@ if [ -f $updater_file ]; then
 	fi
 fi
 
+#Normal install
 INSTALL-DEPS
 INSTALL-PREP
-printf "\n"
 INSTALL-RUN
 DONE

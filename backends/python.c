@@ -7,12 +7,13 @@
 
 #define MMPY_INSTANCE_KEY "midimonster_instance"
 
-/*
- * TODO might want to export the full MM_API set to python at some point
- */
-
 static PyThreadState* python_main = NULL;
 static wchar_t* program_name = NULL;
+
+static uint64_t last_timestamp = 0;
+static uint32_t timer_interval = 0;
+static size_t intervals = 0;
+static mmpy_timer* interval = NULL;
 
 MM_PLUGIN_API int init(){
 	backend python = {
@@ -24,6 +25,7 @@ MM_PLUGIN_API int init(){
 		.handle = python_set,
 		.process = python_handle,
 		.start = python_start,
+		.interval = python_interval,
 		.shutdown = python_shutdown
 	};
 
@@ -33,6 +35,57 @@ MM_PLUGIN_API int init(){
 		return 1;
 	}
 	return 0;
+}
+
+static uint32_t python_interval(){
+	size_t u = 0;
+	uint32_t next_timer = 1000;
+
+	if(timer_interval){
+		for(u = 0; u < intervals; u++){
+			if(interval[u].interval &&
+					interval[u].interval - interval[u].delta < next_timer){
+				next_timer = interval[u].interval - interval[u].delta;
+			}
+		}
+		DBGPF("Next timer fires in %" PRIu32, next_timer);
+		return next_timer;
+	}
+
+	return 1000;
+}
+
+static void python_timer_recalculate(){
+	uint64_t next_interval = 0, gcd, residual;
+	size_t u;
+
+	//find lower interval bounds
+	for(u = 0; u < intervals; u++){
+		if(interval[u].interval && (!next_interval || interval[u].interval < next_interval)){
+			next_interval = interval[u].interval;
+		}
+	}
+
+	if(next_interval){
+		for(u = 0; u < intervals; u++){
+			if(interval[u].interval){
+				//calculate gcd of current interval and this timers interval
+				gcd = interval[u].interval;
+				while(gcd){
+					residual = next_interval % gcd;
+					next_interval = gcd;
+					gcd = residual;
+				}
+
+				//10msec is absolute lower limit and minimum gcd due to rounding
+				if(next_interval == 10){
+					break;
+				}
+			}
+		}
+	}
+
+	timer_interval = next_interval;
 }
 
 static int python_configure(char* option, char* value){
@@ -64,7 +117,7 @@ static PyObject* mmpy_output(PyObject* self, PyObject* args){
 	const char* channel_name = NULL;
 	channel* chan = NULL;
 	channel_value val = {
-		0
+		{0}
 	};
 	size_t u;
 
@@ -137,6 +190,163 @@ static PyObject* mmpy_input_value(PyObject* self, PyObject* args){
 	return mmpy_channel_value(self, args, 1);
 }
 
+static PyObject* mmpy_timestamp(PyObject* self, PyObject* args){
+	return PyLong_FromUnsignedLong(mm_timestamp());
+}
+
+static PyObject* mmpy_interval(PyObject* self, PyObject* args){
+	instance* inst = *((instance**) PyModule_GetState(self));
+	python_instance_data* data = (python_instance_data*) inst->impl;
+	unsigned long updated_interval = 0;
+	PyObject* reference = NULL;
+	size_t u;
+
+	if(!PyArg_ParseTuple(args, "Ok", &reference, &updated_interval)){
+		return NULL;
+	}
+
+	if(!PyCallable_Check(reference)){
+		PyErr_SetString(PyExc_TypeError, "interval() requires a callable");
+		return NULL;
+	}
+
+	//round interval
+	if(updated_interval % 10 < 5){
+		updated_interval -= updated_interval % 10;
+	}
+	else{
+		updated_interval += (10 - (updated_interval % 10));
+	}
+
+	//find reference
+	for(u = 0; u < intervals; u++){
+		if(interval[u].interpreter == data->interpreter
+				&& PyObject_RichCompareBool(reference, interval[u].reference, Py_EQ) == 1){
+			DBGPF("Updating interval to %" PRIu64 " msec", updated_interval);
+			break;
+		}
+	}
+
+	//register new interval
+	if(u == intervals && updated_interval){
+		//create new interval slot
+		DBGPF("Registering interval with %" PRIu64 " msec", updated_interval);
+		interval = realloc(interval, (intervals + 1) * sizeof(mmpy_timer));
+		if(!interval){
+			intervals = 0;
+			LOG("Failed to allocate memory");
+			return NULL;
+		}
+		Py_INCREF(reference);
+		interval[intervals].delta = 0;
+		interval[intervals].reference = reference;
+		interval[intervals].interpreter = data->interpreter;
+		intervals++;
+	}
+
+	//update if existing or created
+	if(u < intervals){
+		interval[u].interval = updated_interval;
+		python_timer_recalculate();
+	}
+
+	Py_INCREF(Py_None);
+	return Py_None;
+}
+
+static PyObject* mmpy_manage_fd(PyObject* self, PyObject* args){
+	instance* inst = *((instance**) PyModule_GetState(self));
+	python_instance_data* data = (python_instance_data*) inst->impl;
+	PyObject* handler = NULL, *sock = NULL, *fileno = NULL;
+	size_t u = 0, last_free = 0;
+	int fd = -1;
+
+	if(!PyArg_ParseTuple(args, "OO", &handler, &sock)){
+		return NULL;
+	}
+
+	if(handler != Py_None && !PyCallable_Check(handler)){
+		PyErr_SetString(PyExc_TypeError, "manage() requires either None or a callable");
+		return NULL;
+	}
+
+	fileno = PyObject_CallMethod(sock, "fileno", NULL);
+	if(!fileno || fileno == Py_None || !PyLong_Check(fileno)){
+		PyErr_SetString(PyExc_TypeError, "manage() requires a socket-like object");
+		return NULL;
+	}
+
+	fd = PyLong_AsLong(fileno);
+	if(fd < 0){
+		PyErr_SetString(PyExc_TypeError, "manage() requires a (connected) socket-like object");
+		return NULL;
+	}
+
+	//check if this socket instance was already registered
+	last_free = data->sockets;
+	for(u = 0; u < data->sockets; u++){
+		if(!data->socket[u].socket){
+			last_free = u;
+		}
+		else if(PyObject_RichCompareBool(sock, data->socket[u].socket, Py_EQ) == 1){
+			break;
+		}
+	}
+
+	if(u < data->sockets){
+		//modify existing socket
+		Py_XDECREF(data->socket[u].handler);
+		if(handler != Py_None){
+			DBGPF("Updating handler for fd %d on %s", fd, inst->name);
+			data->socket[u].handler = handler;
+			Py_INCREF(handler);
+		}
+		else{
+			DBGPF("Unregistering fd %d on %s", fd, inst->name);
+			mm_manage_fd(data->socket[u].fd, BACKEND_NAME, 0, NULL);
+			Py_XDECREF(data->socket[u].socket);
+			data->socket[u].handler = NULL;
+			data->socket[u].socket = NULL;
+			data->socket[u].fd = -1;
+		}
+	}
+	else if(handler != Py_None){
+		//check that the fd is not already registered with another socket instance
+		for(u = 0; u < data->sockets; u++){
+			if(data->socket[u].fd == fd){
+				//FIXME this might also raise an exception
+				LOGPF("Descriptor already registered with another socket on instance %s", inst->name);
+				Py_INCREF(Py_None);
+				return Py_None;
+			}
+		}
+
+		DBGPF("Registering new fd %d on %s", fd, inst->name);
+		if(last_free == data->sockets){
+			//allocate a new socket instance
+			data->socket = realloc(data->socket, (data->sockets + 1) * sizeof(mmpy_socket));
+			if(!data->socket){
+				data->sockets = 0;
+				LOG("Failed to allocate memory");
+				return NULL;
+			}
+			data->sockets++;
+		}
+
+		//store new reference
+		//FIXME check this for errors
+		mm_manage_fd(fd, BACKEND_NAME, 1, inst);
+		data->socket[last_free].fd = fd;
+		Py_INCREF(handler);
+		data->socket[last_free].handler = handler;
+		Py_INCREF(sock);
+		data->socket[last_free].socket = sock;
+	}
+
+	Py_INCREF(Py_None);
+	return Py_None;
+}
+
 static int mmpy_exec(PyObject* module) {
 	instance** inst = (instance**) PyModule_GetState(module);
 	//FIXME actually use interpreter dict (from python 3.8) here at some point
@@ -146,7 +356,7 @@ static int mmpy_exec(PyObject* module) {
 		return 0;
 	}
 
-	//TODO raise exception
+	PyErr_SetString(PyExc_AssertionError, "Failed to pass instance pointer for initialization");
 	return -1;
 }
 
@@ -184,6 +394,9 @@ static PyObject* mmpy_init(){
 		{"inputvalue", mmpy_input_value, METH_VARARGS, "Get last input value for a channel"},
 		{"outputvalue", mmpy_output_value, METH_VARARGS, "Get the last output value for a channel"},
 		{"current", mmpy_current_handler, METH_VARARGS, "Get the name of the currently executing channel handler"},
+		{"timestamp", mmpy_timestamp, METH_VARARGS, "Get the core timestamp (in milliseconds)"},
+		{"manage", mmpy_manage_fd, METH_VARARGS, "(Un-)register a socket or file descriptor for notifications"},
+		{"interval", mmpy_interval, METH_VARARGS, "Register or update an interval handler"},
 		{0}
 	};
 
@@ -324,12 +537,66 @@ static int python_set(instance* inst, size_t num, channel** c, channel_value* v)
 		}
 	}
 
+	//release interpreter
 	PyEval_ReleaseThread(data->interpreter);
 	return 0;
 }
 
 static int python_handle(size_t num, managed_fd* fds){
-	//TODO implement some kind of intervaling functionality before people get it in their heads to start `import threading`
+	instance* inst = NULL;
+	python_instance_data* data = NULL;
+	PyObject* result = NULL;
+	size_t u, p;
+
+	//handle intervals
+	if(timer_interval){
+		uint64_t delta = mm_timestamp() - last_timestamp;
+		last_timestamp = mm_timestamp();
+
+		//add delta to all active timers
+		for(u = 0; u < intervals; u++){
+			if(interval[u].interval){
+				interval[u].delta += delta;
+
+				//if timer expired, call handler
+				if(interval[u].delta >= interval[u].interval){
+					interval[u].delta %= interval[u].interval;
+
+					//swap to interpreter
+					PyEval_RestoreThread(interval[u].interpreter);
+					//call handler
+					result = PyObject_CallFunction(interval[u].reference, NULL);
+					Py_XDECREF(result);
+					//release interpreter
+					PyEval_ReleaseThread(interval[u].interpreter);
+					DBGPF("Calling interval handler %" PRIsize_t, u);
+				}
+			}
+		}
+	}
+
+	for(u = 0; u < num; u++){
+		inst = (instance*) fds[u].impl;
+		data = (python_instance_data*) inst->impl;
+
+		//swap to interpreter
+		PyEval_RestoreThread(data->interpreter);
+
+		//handle callbacks
+		for(p = 0; p < data->sockets; p++){
+			if(data->socket[p].socket
+					&& data->socket[p].fd == fds[u].fd){
+				//FIXME maybe close/unregister the socket on handling errors
+				DBGPF("Calling descriptor handler on %s for fd %d", inst->name, data->socket[p].fd);
+				result = PyObject_CallFunction(data->socket[p].handler, "O", data->socket[p].socket);
+				Py_XDECREF(result);
+			}
+		}
+
+		//release interpreter
+		PyEval_ReleaseThread(data->interpreter);
+	}
+
 	return 0;
 }
 
@@ -396,6 +663,19 @@ static int python_shutdown(size_t n, instance** inst){
 
 		for(u = 0; u < n; u++){
 			data = (python_instance_data*) inst[u]->impl;
+
+			//close sockets
+			for(p = 0; p < data->sockets; p++){
+				close(data->socket[p].fd); //FIXME does python do this on its own?
+				Py_XDECREF(data->socket[p].socket);
+				Py_XDECREF(data->socket[p].handler);
+			}
+
+			//release interval references
+			for(p = 0; p <intervals; p++){
+				Py_XDECREF(interval[p].reference);
+			}
+
 			DBGPF("Shutting down interpreter for instance %s", inst[u]->name);
 			//swap to interpreter and end it, GIL is held after this but state is NULL
 			PyThreadState_Swap(data->interpreter);

@@ -20,9 +20,9 @@ c_green=$(tput  setaf 2)
 
 VAR_DESTDIR=""                  # Unused
 VAR_PREFIX="/usr"
-VAR_PLUGINS="$VAR_PREFIX/lib/midimonster"
+VAR_PLUGINS="$VAR_PREFIX/lib/midimonster"		# Reassigned in func. ARGS to update "$VAR_PREFIX" when an argument is set.
 VAR_DEFAULT_CFG="/etc/midimonster/midimonster.cfg"
-VAR_EXAMPLE_CFGS="$VAR_PREFIX/share/midimonster"
+VAR_EXAMPLE_CFGS="$VAR_PREFIX/share/midimonster"	# Reassigned in func. ARGS to update "$VAR_PREFIX" when an argument is set.
 
 
 ################################################ SETUP ################################################
@@ -36,6 +36,8 @@ ARGS () {
 			--prefix=*)
 				VAR_PREFIX="${i#*=}"
 				VAR_PREFIX_I="1"
+				VAR_PLUGINS="$VAR_PREFIX/lib/midimonster"
+				VAR_EXAMPLE_CFGS="$VAR_PREFIX/share/midimonster"
 			;;
 			--plugins=*)
 				VAR_PLUGINS="${i#*=}"
@@ -134,7 +136,7 @@ INSTALL-PREP () {
 	)
 	NIGHTLY_CHECK
 	printf "Preparation done.\n\n"
-	printf "${bold}If you don't know what you're doing, just hit enter.${normal}\n\n"
+	printf "${bold}If you don't know what you're doing, just hit enter a few times.${normal}\n\n"
 	if [ -z "$VAR_PREFIX_I" ]; then
 		read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX
 		VAR_PREFIX="${input:-$VAR_PREFIX}"

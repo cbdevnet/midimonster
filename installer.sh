@@ -38,6 +38,7 @@ ARGS () {
 				VAR_PREFIX_I="1"
 				VAR_PLUGINS="$VAR_PREFIX/lib/midimonster"
 				VAR_EXAMPLE_CFGS="$VAR_PREFIX/share/midimonster"
+				VAR_EXAMPLE_CFGS="$VAR_PREFIX/share/midimonster"
 			;;
 			--plugins=*)
 				VAR_PLUGINS="${i#*=}"
@@ -138,8 +139,10 @@ INSTALL-PREP () {
 	printf "Preparation done.\n\n"
 	printf "${bold}If you don't know what you're doing, just hit enter a few times.${normal}\n\n"
 	if [ -z "$VAR_PREFIX_I" ]; then
-		read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX
+		read -e -i "$VAR_PREFIX" -p "PREFIX (Install root directory): " input # Reads VAR_PREFIX then update containing vars
 		VAR_PREFIX="${input:-$VAR_PREFIX}"
+		VAR_PLUGINS="$VAR_PREFIX/lib/midimonster"	# Update prefix-containing variables.
+		VAR_EXAMPLE_CFGS="$VAR_PREFIX/share/midimonster"	# Update prefix-containing variables.
 	fi
 
 	if [ -z "$VAR_PLUGINS_I" ]; then

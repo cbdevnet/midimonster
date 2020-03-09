@@ -13,10 +13,12 @@ latest_version=$(curl --silent "https://api.github.com/repos/cbdevnet/midimonste
 makeargs=all                    # Build args
 
 normal=$(tput sgr0)
+dim=$(tput dim)
 bold=$(tput bold)
-bold2=$(tput smso)
-c_red=$(tput  setaf 1)
-c_green=$(tput  setaf 2)
+uline=$(tput smul)
+c_red=$(tput setaf 1)
+c_green=$(tput setaf 2)
+c_mag=$(tput setaf 5)
 
 VAR_DESTDIR=""                  # Unused
 VAR_PREFIX="/usr"
@@ -67,16 +69,17 @@ ARGS () {
 			-fu|--forceupdate)
 				UPDATER_FORCE="1"
 			;;    
-			-h|--help|*)				# [WIP messages]
+			-h|--help|*)		# Help messages
 				printf "${bold}Usage:${normal} ${0} ${c_green}[OPTIONS]${normal}"
-				printf "\n	${c_green}--prefix${normal} ${c_red}<path>${normal}		Sets the prefix"
-				printf "\n	${c_green}--plugins${normal} ${c_red}<path>${normal}	Sets the plugin path"
-				printf "\n	${c_green}--defcfg${normal} ${c_red}<path>${normal}		Sets the config path"
-				printf "\n	${c_green}--examples${normal} ${c_red}<path>${normal}	Sets the example configs path\n"
-				printf "\n	${c_green}--dev${normal}		Install nightly version (combine with --forceupdate to upgrade to nightly version)"
+				printf "\n	${c_green}--prefix${normal} ${c_red}<path>${normal}		Sets the prefix		${c_mag}Default:${normal} ${dim}%s  ${normal}" "$VAR_PREFIX"
+				printf "\n	${c_green}--plugins${normal} ${c_red}<path>${normal}	Sets the plugin path	${c_mag}Default:${normal} ${dim}%s  ${normal}" "$VAR_PLUGINS"
+				printf "\n	${c_green}--defcfg${normal} ${c_red}<path>${normal}		Sets the config path	${c_mag}Default:${normal} ${dim}%s  ${normal}" "$VAR_DEFAULT_CFG"
+				printf "\n	${c_green}--examples${normal} ${c_red}<path>${normal}	Sets the example configs path	${c_mag}Default:${normal} ${dim}%s  ${normal}\n" "$VAR_EXAMPLE_CFGS"
+				printf "\n	${c_green}--dev${normal}		Install nightly version"
 				printf "\n   ${c_green}-d,  --default${normal}	Use default values to install"
-				printf "\n   ${c_green}-fu, --forceupdate${normal}	Force the  updater to update without a version check (Can be used to upgrade to the nightly version)"
-				printf "\n   ${c_green}-h,  --help${normal}		Show this message\n"
+				printf "\n   ${c_green}-fu, --forceupdate${normal}	Force the  updater to update without a version check"
+				printf "\n   ${c_green}-h,  --help${normal}		Show this message"
+				printf "\n	${uline}${bold}${c_mag}Each argument can be overwritten by another, the last one is used!${normal}\n"
 				exit 1
 			;;
 		esac

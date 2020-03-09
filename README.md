@@ -172,6 +172,10 @@ chmod +x ./installer.sh
 ./installer.sh
 ```
 
+The installer can also be used for automating installations by specifying additional
+command line arguments. To see a list of valid arguments, run the installer with the
+`--help` argument.
+
 The installer script can also update MIDIMonster to the latest version automatically,
 using a configuration file generated during the installation.
 To do so, run `midimonster-updater` as root on your system after using the installer.
@@ -187,8 +191,9 @@ dpkg -i <file>.deb
 ### Building from source
 
 To build the MIDIMonster directly from the sources, you'll need some libraries that provide
-support for the protocols to translate. When building from source, you can also to exclude
-backends (for example, if you don't need them or don't want to install their prerequisites).
+support for the protocols to translate. When building from source, you can also choose to
+exclude backends (for example, if you don't need them or don't want to install their
+prerequisites).
 
 * `libasound2-dev` (for the ALSA MIDI backend)
 * `libevdev-dev` (for the evdev backend)

@@ -34,8 +34,6 @@ The MIDI backend supports mapping different MIDI events to MIDIMonster channels.
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
-The earlier syntax of `<type><channel>.<index>` is officially deprecated but still supported for compatibility
-reasons. This support may be removed at some future time.
 
 The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 

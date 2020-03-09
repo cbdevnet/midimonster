@@ -111,39 +111,22 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 		.label = 0
 	};
 
-	//support deprecated syntax for a transition period...
-	uint8_t old_syntax = 0;
-	char* channel;
-
+	char* channel = NULL;
 	if(!strncmp(spec, "ch", 2)){
 		channel = spec + 2;
 		if(!strncmp(spec, "channel", 7)){
 			channel = spec + 7;
 		}
 	}
-	else if(!strncmp(spec, "cc", 2)){
-		ident.fields.type = cc;
-		channel = spec + 2;
-		old_syntax = 1;
-	}
-	else if(!strncmp(spec, "note", 4)){
-		ident.fields.type = note;
-		channel = spec + 4;
-		old_syntax = 1;
-	}
-	else if(!strncmp(spec, "nrpn", 4)){
-		ident.fields.type = nrpn;
-		channel = spec + 4;
-		old_syntax = 1;
-	}
-	else{
-		LOGPF("Unknown control type in %s", spec);
+
+	if(!channel){
+		LOGPF("Invalid channel specification %s", spec);
 		return NULL;
 	}
 
 	ident.fields.channel = strtoul(channel, &channel, 10);
 	if(ident.fields.channel > 15){
-		LOGPF("Channel out of range in spec %s", spec);
+		LOGPF("MIDI channel out of range in spec %s", spec);
 		return NULL;
 	}
 
@@ -154,33 +137,31 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 	//skip the period
 	channel++;
 
-	if(!old_syntax){
-		if(!strncmp(channel, "cc", 2)){
-			ident.fields.type = cc;
-			channel += 2;
-		}
-		else if(!strncmp(channel, "note", 4)){
-			ident.fields.type = note;
-			channel += 4;
-		}
-		else if(!strncmp(channel, "nrpn", 4)){
-			ident.fields.type = nrpn;
-			channel += 4;
-		}
-		else if(!strncmp(channel, "pressure", 8)){
-			ident.fields.type = pressure;
-			channel += 8;
-		}
-		else if(!strncmp(channel, "pitch", 5)){
-			ident.fields.type = pitchbend;
-		}
-		else if(!strncmp(channel, "aftertouch", 10)){
-			ident.fields.type = aftertouch;
-		}
-		else{
-			LOGPF("Unknown control type in %s", spec);
-			return NULL;
-		}
+	if(!strncmp(channel, "cc", 2)){
+		ident.fields.type = cc;
+		channel += 2;
+	}
+	else if(!strncmp(channel, "note", 4)){
+		ident.fields.type = note;
+		channel += 4;
+	}
+	else if(!strncmp(channel, "nrpn", 4)){
+		ident.fields.type = nrpn;
+		channel += 4;
+	}
+	else if(!strncmp(channel, "pressure", 8)){
+		ident.fields.type = pressure;
+		channel += 8;
+	}
+	else if(!strncmp(channel, "pitch", 5)){
+		ident.fields.type = pitchbend;
+	}
+	else if(!strncmp(channel, "aftertouch", 10)){
+		ident.fields.type = aftertouch;
+	}
+	else{
+		LOGPF("Unknown control type in %s", spec);
+		return NULL;
 	}
 
 	ident.fields.control = strtoul(channel, NULL, 10);

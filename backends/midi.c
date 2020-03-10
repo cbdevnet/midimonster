@@ -13,9 +13,7 @@ enum /*_midi_channel_type*/ {
 	cc,
 	pressure,
 	aftertouch,
-	pitchbend,
-	nrpn,
-	sysmsg
+	pitchbend
 };
 
 static struct {
@@ -145,10 +143,6 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 		ident.fields.type = note;
 		channel += 4;
 	}
-	else if(!strncmp(channel, "nrpn", 4)){
-		ident.fields.type = nrpn;
-		channel += 4;
-	}
 	else if(!strncmp(channel, "pressure", 8)){
 		ident.fields.type = pressure;
 		channel += 8;
@@ -205,9 +199,6 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 			case aftertouch:
 				snd_seq_ev_set_chanpress(&ev, ident.fields.channel, v[u].normalised * 127.0);
 				break;
-			case nrpn:
-				//FIXME set to nrpn output
-				break;
 		}
 
 		snd_seq_event_output(sequencer, &ev);
@@ -215,6 +206,24 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	snd_seq_drain_output(sequencer);
 	return 0;
+}
+
+static char* midi_type_name(uint8_t type){
+	switch(type){
+		case none:
+			return "none";
+		case note:
+			return "note";
+		case cc:
+			return "cc";
+		case pressure:
+			return "pressure";
+		case aftertouch:
+			return "aftertouch";
+		case pitchbend:
+			return "pitch";
+	}
+	return "unknown";
 }
 
 static int midi_handle(size_t num, managed_fd* fds){
@@ -234,59 +243,45 @@ static int midi_handle(size_t num, managed_fd* fds){
 	while(snd_seq_event_input(sequencer, &ev) > 0){
 		event_type = NULL;
 		ident.label = 0;
+
+		ident.fields.channel = ev->data.note.channel;
+		ident.fields.control = ev->data.note.note;
+		val.normalised = (double) ev->data.note.velocity / 127.0;
+
 		switch(ev->type){
 			case SND_SEQ_EVENT_NOTEON:
 			case SND_SEQ_EVENT_NOTEOFF:
 			case SND_SEQ_EVENT_NOTE:
 				ident.fields.type = note;
-				ident.fields.channel = ev->data.note.channel;
-				ident.fields.control = ev->data.note.note;
-				val.normalised = (double)ev->data.note.velocity / 127.0;
 				if(ev->type == SND_SEQ_EVENT_NOTEOFF){
    					val.normalised = 0;
 				}
-				event_type = "note";
 				break;
 			case SND_SEQ_EVENT_KEYPRESS:
 				ident.fields.type = pressure;
-				ident.fields.channel = ev->data.note.channel;
-				ident.fields.control = ev->data.note.note;
-				val.normalised = (double)ev->data.note.velocity / 127.0;
-				event_type = "pressure";
 				break;
 			case SND_SEQ_EVENT_CHANPRESS:
 				ident.fields.type = aftertouch;
 				ident.fields.channel = ev->data.control.channel;
-				val.normalised = (double)ev->data.control.value / 127.0;
-				event_type = "aftertouch";
+				val.normalised = (double) ev->data.control.value / 127.0;
 				break;
 			case SND_SEQ_EVENT_PITCHBEND:
 				ident.fields.type = pitchbend;
 				ident.fields.channel = ev->data.control.channel;
-				val.normalised = ((double)ev->data.control.value + 8192) / 16383.0;
-				event_type = "pitch";
+				val.normalised = ((double) ev->data.control.value + 8192) / 16383.0;
 				break;
 			case SND_SEQ_EVENT_CONTROLLER:
 				ident.fields.type = cc;
 				ident.fields.channel = ev->data.control.channel;
 				ident.fields.control = ev->data.control.param;
-				val.raw.u64 = ev->data.control.value;
-				val.normalised = (double)ev->data.control.value / 127.0;
-				event_type = "cc";
-				break;
-			case SND_SEQ_EVENT_CONTROL14:
-			case SND_SEQ_EVENT_NONREGPARAM:
-			case SND_SEQ_EVENT_REGPARAM:
-				//FIXME value calculation
-				ident.fields.type = nrpn;
-				ident.fields.channel = ev->data.control.channel;
-				ident.fields.control = ev->data.control.param;
+				val.normalised = (double) ev->data.control.value / 127.0;
 				break;
 			default:
 				LOG("Ignored event of unsupported type");
 				continue;
 		}
 
+		event_type = midi_type_name(ident.fields.type);
 		inst = mm_instance_find(BACKEND_NAME, ev->dest.port);
 		if(!inst){
 			//FIXME might want to return failure

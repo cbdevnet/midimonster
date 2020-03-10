@@ -9,6 +9,7 @@
 #else
 #define MM_API __attribute__((dllexport))
 #endif
+#define BACKEND_NAME "core"
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
@@ -325,17 +326,125 @@ static int args_parse(int argc, char** argv, char** cfg_file){
 	return 0;
 }
 
-int main(int argc, char** argv){
-	fd_set all_fds, read_fds;
+static int core_process(size_t nfds, managed_fd* signaled_fds){
 	event_collection* secondary = NULL;
-	struct timeval tv;
-	size_t u, n;
+	size_t u;
+
+	//run backend processing, collect events
+	DBGPF("%lu backend FDs signaled\n", nfds);
+	if(backends_handle(nfds, signaled_fds)){
+		return 1;
+	}
+
+	while(primary->n){
+		//swap primary and secondary event collectors
+		DBGPF("Swapping event collectors, %lu events in primary\n", primary->n);
+		for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
+			if(primary != event_pool + u){
+				secondary = primary;
+				primary = event_pool + u;
+				break;
+			}
+		}
+
+		//push collected events to target backends
+		if(secondary->n && backends_notify(secondary->n, secondary->channel, secondary->value)){
+			fprintf(stderr, "Backends failed to handle output\n");
+			return 1;
+		}
+
+		//reset the event count
+		secondary->n = 0;
+	}
+
+	return 0;
+}
+
+static int core_loop(){
+	fd_set all_fds, read_fds;
 	managed_fd* signaled_fds = NULL;
-	int rv = EXIT_FAILURE, error, maxfd = -1;
-	char* cfg_file = DEFAULT_CFG;
+	struct timeval tv;
+	int error, maxfd = -1;
+	size_t n, u;
 	#ifdef _WIN32
 	char* error_message = NULL;
+	#else
+	struct timespec ts;
 	#endif
+
+	FD_ZERO(&all_fds);
+
+	//process events
+	while(!shutdown_requested){
+		//rebuild fd set if necessary
+		if(fd_set_dirty){
+			all_fds = fds_collect(&maxfd);
+			signaled_fds = realloc(signaled_fds, fds * sizeof(managed_fd));
+			if(!signaled_fds){
+				fprintf(stderr, "Failed to allocate memory\n");
+				return 1;
+			}
+			fd_set_dirty = 0;
+		}
+
+		//wait for & translate events
+		read_fds = all_fds;
+		tv = backend_timeout();
+
+		//check whether there are any fds active, windows does not like select() without descriptors
+		if(maxfd >= 0){
+			error = select(maxfd + 1, &read_fds, NULL, NULL, &tv);
+			if(error < 0){
+				#ifndef _WIN32
+				fprintf(stderr, "select failed: %s\n", strerror(errno));
+				#else
+				FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 
+						NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error_message, 0, NULL);
+				fprintf(stderr, "select failed: %s\n", error_message);
+				LocalFree(error_message);
+				error_message = NULL;
+				#endif
+				free(signaled_fds);
+				return 1;
+			}
+		}
+		else{
+			DBGPF("No descriptors, sleeping for %zu msec", tv.tv_sec * 1000 + tv.tv_usec / 1000);
+			#ifdef _WIN32
+			Sleep(tv.tv_sec * 1000 + tv.tv_usec / 1000);
+			#else
+			ts.tv_sec = tv.tv_sec;
+			ts.tv_nsec = tv.tv_usec * 1000;
+			error = nanosleep(&ts, NULL);
+			#endif
+		}
+
+		//update this iteration's timestamp
+		update_timestamp();
+
+		//find all signaled fds
+		n = 0;
+		for(u = 0; u < fds; u++){
+			if(fd[u].fd >= 0 && FD_ISSET(fd[u].fd, &read_fds)){
+				signaled_fds[n] = fd[u];
+				n++;
+			}
+		}
+
+		//fetch and process events
+		if(core_process(n, signaled_fds)){
+			free(signaled_fds);
+			return 1;
+		}
+	}
+
+	free(signaled_fds);
+	return 0;
+}
+
+int main(int argc, char** argv){
+	int rv = EXIT_FAILURE;
+	char* cfg_file = DEFAULT_CFG;
 
 	//parse commandline arguments
 	if(args_parse(argc, argv, &cfg_file)){
@@ -347,7 +456,6 @@ int main(int argc, char** argv){
 		return EXIT_FAILURE;
 	}
 
-	FD_ZERO(&all_fds);
 	//initialize backends
 	if(plugins_load(PLUGINS)){
 		fprintf(stderr, "Failed to initialize a backend\n");
@@ -377,80 +485,17 @@ int main(int argc, char** argv){
 
 	signal(SIGINT, signal_handler);
 
-	//process events
-	while(!shutdown_requested){
-		//rebuild fd set if necessary
-		if(fd_set_dirty){
-			all_fds = fds_collect(&maxfd);
-			signaled_fds = realloc(signaled_fds, fds * sizeof(managed_fd));
-			if(!signaled_fds){
-				fprintf(stderr, "Failed to allocate memory\n");
-				goto bail;
-			}
-			fd_set_dirty = 0;
-		}
-
-		//wait for & translate events
-		read_fds = all_fds;
-		tv = backend_timeout();
-		error = select(maxfd + 1, &read_fds, NULL, NULL, &tv);
-		if(error < 0){
-			#ifndef _WIN32
-			fprintf(stderr, "select failed: %s\n", strerror(errno));
-			#else
-			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 
-					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error_message, 0, NULL);
-			fprintf(stderr, "select failed: %s\n", error_message);
-			LocalFree(error_message);
-			error_message = NULL;
-			#endif
-			break;
-		}
-
-		//find all signaled fds
-		n = 0;
-		for(u = 0; u < fds; u++){
-			if(fd[u].fd >= 0 && FD_ISSET(fd[u].fd, &read_fds)){
-				signaled_fds[n] = fd[u];
-				n++;
-			}
-		}
-
-		//update this iteration's timestamp
-		update_timestamp();
-
-		//run backend processing, collect events
-		DBGPF("%lu backend FDs signaled\n", n);
-		if(backends_handle(n, signaled_fds)){
-			goto bail;
-		}
-
-		while(primary->n){
-			//swap primary and secondary event collectors
-			DBGPF("Swapping event collectors, %lu events in primary\n", primary->n);
-			for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
-				if(primary != event_pool + u){
-					secondary = primary;
-					primary = event_pool + u;
-					break;
-				}
-			}
-
-			//push collected events to target backends
-			if(secondary->n && backends_notify(secondary->n, secondary->channel, secondary->value)){
-				fprintf(stderr, "Backends failed to handle output\n");
-				goto bail;
-			}
-
-			//reset the event count
-			secondary->n = 0;
-		}
+	if(!fds){
+		fprintf(stderr, "No descriptors registered for multiplexing\n");
 	}
 
-	rv = EXIT_SUCCESS;
+	//run the core loop
+	if(!core_loop()){
+		rv = EXIT_SUCCESS;
+	}
+
 bail:
 	//free all data
-	free(signaled_fds);
 	backends_stop();
 	channels_free();
 	instances_free();

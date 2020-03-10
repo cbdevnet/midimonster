@@ -7,3 +7,4 @@ make event collectors threadsafe to stop marshalling data...
 collect & check backend API version
 windows strerror
 move all connection establishment to _start to be able to hot-stop/start all backends
+only call _handle and _interval on backends with instances

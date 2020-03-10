@@ -4,6 +4,7 @@
 #else
 #define MM_API __attribute__((dllexport))
 #endif
+#define BACKEND_NAME "core/be"
 #include "midimonster.h"
 #include "backend.h"
 
@@ -227,10 +228,12 @@ struct timeval backend_timeout(){
 		if(backends[u].interval){
 			res = backends[u].interval();
 			if((res / 1000) < secs){
+				DBGPF("Updating interval to %" PRIu32 " msecs by request from %s", res, backends[u].name);
 				secs = res / 1000;
 				msecs = res % 1000;
 			}
 			else if(res / 1000 == secs && (res % 1000) < msecs){
+				DBGPF("Updating interval to %" PRIu32 " msecs by request from %s", res, backends[u].name);
 				msecs = res % 1000;
 			}
 		}

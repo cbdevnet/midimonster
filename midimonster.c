@@ -377,7 +377,7 @@ static int core_loop(){
 	//process events
 	while(!shutdown_requested){
 		//rebuild fd set if necessary
-		if(fd_set_dirty){
+		if(fd_set_dirty || !signaled_fds){
 			all_fds = fds_collect(&maxfd);
 			signaled_fds = realloc(signaled_fds, fds * sizeof(managed_fd));
 			if(!signaled_fds){
@@ -415,7 +415,7 @@ static int core_loop(){
 			#else
 			ts.tv_sec = tv.tv_sec;
 			ts.tv_nsec = tv.tv_usec * 1000;
-			error = nanosleep(&ts, NULL);
+			nanosleep(&ts, NULL);
 			#endif
 		}
 

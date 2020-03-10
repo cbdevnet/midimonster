@@ -164,6 +164,11 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	}
 	chan_a--;
 
+	//check output capabilities
+	if((flags & mmchannel_output) && !data->dest_len){
+		LOGPF("Channel %s.%s mapped for output, but instance is not configured for output (missing destination)", inst->name, spec);
+	}
+
 	//secondary channel setup
 	if(*spec_next == '+'){
 		chan_b = strtoul(spec_next + 1, NULL, 10);

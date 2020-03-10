@@ -231,6 +231,11 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	}
 	chan_a--;
 
+	//check output capabilities
+	if((flags & mmchannel_output) && !data->xmit_prio){
+		LOGPF("Channel %s.%s mapped for output, but instance is not configured for output (no priority set)", inst->name, spec);
+	}
+
 	//if wide channel, mark fine
 	if(*spec_next == '+'){
 		chan_b = strtoul(spec_next + 1, NULL, 10);

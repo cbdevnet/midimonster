@@ -37,6 +37,7 @@ typedef struct /*_artnet_universe_model*/ {
 	uint8_t in[512];
 	uint8_t out[512];
 	uint16_t map[512];
+	channel channel[512];
 } artnet_universe;
 
 typedef struct /*_artnet_instance_model*/ {

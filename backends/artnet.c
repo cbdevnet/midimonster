@@ -104,12 +104,18 @@ static int artnet_configure(char* option, char* value){
 
 static int artnet_instance(instance* inst){
 	artnet_instance_data* data = calloc(1, sizeof(artnet_instance_data));
+	size_t u;
+
 	if(!data){
 		LOG("Failed to allocate memory");
 		return 1;
 	}
 
 	data->net = default_net;
+	for(u = 0; u < sizeof(data->data.channel) / sizeof(channel); u++){
+		data->data.channel[u].ident = u;
+		data->data.channel[u].instance = inst;
+	}
 
 	inst->impl = data;
 	return 0;
@@ -197,7 +203,7 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	}
 	data->data.map[chan_a] = (*spec_next == '+') ? (MAP_COARSE | chan_b) : (MAP_SINGLE | chan_a);
 
-	return mm_channel(inst, chan_a, 1);
+	return data->data.channel + chan_a;
 }
 
 static int artnet_transmit(instance* inst){
@@ -233,7 +239,7 @@ static int artnet_transmit(instance* inst){
 
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
 	uint32_t frame_delta = 0;
-	size_t u, mark = 0;
+	size_t u, mark = 0, channel_offset = 0;
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	if(!data->dest_len){
@@ -242,22 +248,23 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	}
 
 	for(u = 0; u < num; u++){
-		if(IS_WIDE(data->data.map[c[u]->ident])){
+		channel_offset = c[u]->ident;
+		if(IS_WIDE(data->data.map[channel_offset])){
 			uint32_t val = v[u].normalised * ((double) 0xFFFF);
 			//the primary (coarse) channel is the one registered to the core, so we don't have to check for that
-			if(data->data.out[c[u]->ident] != ((val >> 8) & 0xFF)){
+			if(data->data.out[channel_offset] != ((val >> 8) & 0xFF)){
 				mark = 1;
-				data->data.out[c[u]->ident] = (val >> 8) & 0xFF;
+				data->data.out[channel_offset] = (val >> 8) & 0xFF;
 			}
 
-			if(data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] != (val & 0xFF)){
+			if(data->data.out[MAPPED_CHANNEL(data->data.map[channel_offset])] != (val & 0xFF)){
 				mark = 1;
-				data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] = val & 0xFF;
+				data->data.out[MAPPED_CHANNEL(data->data.map[channel_offset])] = val & 0xFF;
 			}
 		}
-		else if(data->data.out[c[u]->ident] != (v[u].normalised * 255.0)){
+		else if(data->data.out[channel_offset] != (v[u].normalised * 255.0)){
 			mark = 1;
-			data->data.out[c[u]->ident] = v[u].normalised * 255.0;
+			data->data.out[channel_offset] = v[u].normalised * 255.0;
 		}
 	}
 
@@ -310,10 +317,10 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 		if(data->data.map[p] & MAP_MARK){
 			data->data.map[p] &= ~MAP_MARK;
 			if(data->data.map[p] & MAP_FINE){
-				chan = mm_channel(inst, MAPPED_CHANNEL(data->data.map[p]), 0);
+				chan = data->data.channel + MAPPED_CHANNEL(data->data.map[p]);
 			}
 			else{
-				chan = mm_channel(inst, p, 0);
+				chan = data->data.channel + p;
 			}
 
 			if(!chan){

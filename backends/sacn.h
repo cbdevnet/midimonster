@@ -36,6 +36,7 @@ typedef struct /*_sacn_universe_model*/ {
 	uint8_t in[512];
 	uint8_t out[512];
 	uint16_t map[512];
+	channel channel[512];
 } sacn_universe;
 
 typedef struct /*_sacn_instance_model*/ {

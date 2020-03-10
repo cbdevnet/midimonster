@@ -209,12 +209,20 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 }
 
 static int sacn_instance(instance* inst){
-	inst->impl = calloc(1, sizeof(sacn_instance_data));
-	if(!inst->impl){
+	sacn_instance_data* data = calloc(1, sizeof(sacn_instance_data));
+	size_t u;
+
+	if(!data){
 		LOG("Failed to allocate memory");
 		return 1;
 	}
 
+	for(u = 0; u < sizeof(data->data.channel) / sizeof(channel); u++){
+		data->data.channel[u].ident = u;
+		data->data.channel[u].instance = inst;
+	}
+
+	inst->impl = data;
 	return 0;
 }
 
@@ -264,7 +272,7 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	}
 
 	data->data.map[chan_a] = (*spec_next == '+') ? (MAP_COARSE | chan_b) : (MAP_SINGLE | chan_a);
-	return mm_channel(inst, chan_a, 1);
+	return data->data.channel + chan_a;
 }
 
 static int sacn_transmit(instance* inst){
@@ -424,10 +432,10 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 			//unmark and get channel
 			inst_data->data.map[u] &= ~MAP_MARK;
 			if(inst_data->data.map[u] & MAP_FINE){
-				chan = mm_channel(inst, MAPPED_CHANNEL(inst_data->data.map[u]), 0);
+				chan = inst_data->data.channel + MAPPED_CHANNEL(inst_data->data.map[u]);
 			}
 			else{
-				chan = mm_channel(inst, u, 0);
+				chan = inst_data->data.channel + u;
 			}
 
 			if(!chan){

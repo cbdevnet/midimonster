@@ -3,6 +3,8 @@
 The ArtNet backend provides read-write access to the UDP-based ArtNet protocol for lighting
 fixture control.
 
+Art-Net™ Designed by and Copyright Artistic Licence Holdings Ltd.
+
 #### Global configuration
 
 | Option	| Example value		| Default value 	| Description		|

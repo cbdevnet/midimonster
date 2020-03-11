@@ -431,11 +431,9 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 		if(inst_data->data.map[u] & MAP_MARK){
 			//unmark and get channel
 			inst_data->data.map[u] &= ~MAP_MARK;
+			chan = inst_data->data.channel + u;
 			if(inst_data->data.map[u] & MAP_FINE){
 				chan = inst_data->data.channel + MAPPED_CHANNEL(inst_data->data.map[u]);
-			}
-			else{
-				chan = inst_data->data.channel + u;
 			}
 
 			if(!chan){

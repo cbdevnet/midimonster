@@ -316,11 +316,9 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 	for(p = 0; p <= max_mark; p++){
 		if(data->data.map[p] & MAP_MARK){
 			data->data.map[p] &= ~MAP_MARK;
+			chan = data->data.channel + p;
 			if(data->data.map[p] & MAP_FINE){
 				chan = data->data.channel + MAPPED_CHANNEL(data->data.map[p]);
-			}
-			else{
-				chan = data->data.channel + p;
 			}
 
 			if(!chan){

@@ -21,7 +21,7 @@ if [ "$TASK" = "spellcheck" ]; then
 	fi
 
 	# Run codespell to find some more
-	cs_results=$(codespell --check-filenames --check-hidden --quiet 2 --regex "[a-zA-Z0-9][\\-'a-zA-Z0-9]+[a-zA-Z0-9]" $spellcheck_files 2>&1)
+	cs_results=$(codespell --check-hidden --quiet 2 --regex "[a-zA-Z0-9][\\-'a-zA-Z0-9]+[a-zA-Z0-9]" $spellcheck_files 2>&1)
 	cs_errors=$(wc -l <<< "$cs_results")
 	if [ "$cs_errors" -ne 0 ]; then
 		printf "Codespell found %s errors:\n\n" "$cs_errors"
@@ -31,12 +31,40 @@ if [ "$TASK" = "spellcheck" ]; then
 		printf "Codespell reports no errors\n"
 	fi
 	exit "$result"
-elif [ "$TASK" = 'sanitize' ]; then
+elif [ "$TASK" = "codesmell" ]; then
+	result=0
+
+	if [ -z "$(which lizard)" ]; then
+		printf "Installing lizard...\n"
+		pip3 install lizard
+	fi
+
+	# Run shellcheck for all shell scripts
+	printf "Running shellcheck...\n"
+	shell_files="$(find . -type f -iname \*.sh)"
+	xargs shellcheck -Cnever -s bash <<< "$shell_files"
+	if [ "$?" -ne "0" ]; then
+		result=1
+	fi
+
+	# Run cloc for some stats
+	printf "Code statistics:\n\n"
+	cloc ./
+
+	# Run lizard for the project
+	printf "Running lizard for code complexity analysis\n"
+	lizard ./
+	if [ "$?" -ne "0" ]; then
+		result=1
+	fi
+
+	exit "$result"
+elif [ "$TASK" = "sanitize" ]; then
 	# Run sanitized compile
 	travis_fold start "make_sanitize"
 	make sanitize;
 	travis_fold end "make_sanitize"
-elif [ "$TASK" = 'windows' ]; then
+elif [ "$TASK" = "windows" ]; then
 	travis_fold start "make_windows"
 	make windows;
 	make -C backends lua.dll

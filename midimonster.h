@@ -234,10 +234,12 @@ MM_API instance* mm_instance_find(char* backend, uint64_t ident);
  * matching `ident`, a pointer to it is returned.
  * This API is just a convenience function. The array of channels is
  * only used for mapping internally, creating and managing your own
- * channel store is possible.
+ * channel store is possible. When returning pointers from a
+ * backend-local channel store, the returned pointers must stay
+ * valid over the lifetime of the instance.
  * For each channel with a non-NULL `impl` field registered using
  * this function, the backend will receive a call to its channel_free
- * function.
+ * function (if it exists).
  */
 MM_API channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
 

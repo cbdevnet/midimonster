@@ -7,7 +7,7 @@ before_script:
  - export -f travis_fold
 
 script:
- - "bash -ex .travis-ci.sh"
+ - "bash .travis-ci.sh"
 
 addons:
   apt:
@@ -35,6 +35,8 @@ addons:
      - *core_build
      - mingw-w64
     packages: &linters
+     - python3
+     - python3-pip
      - lintian
      - codespell
      - shellcheck
@@ -92,7 +94,6 @@ jobs:
       compiler: clang
       env:
       - TASK='sanitize'
-  allow_failures:
     - os: linux
       dist: bionic
       env: TASK='codesmell'
@@ -107,6 +108,13 @@ jobs:
         apt:
           packages:
            - *linters
+  allow_failures:
+    - os: linux
+      dist: bionic
+      env: TASK='codesmell'
+    - os: linux
+      dist: bionic
+      env: TASK='spellcheck'
 
 env:
   global:

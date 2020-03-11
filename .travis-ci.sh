@@ -3,10 +3,10 @@
 if [ "$TASK" = "spellcheck" ]; then
 	result=0
 	# Create list of files to be spellchecked
-	spellcheck_files=$(find -type f | grep -v ".git/")
+	spellcheck_files=$(find . -type f | grep -v ".git/")
 
 	# Run spellintian to find spelling errors
-	sl_results=$(spellintian $spellcheck_files 2>&1)
+	sl_results=$(xargs spellintian 2>&1 <<< "$spellcheck_files")
 
 	sl_errors=$(wc -l <<< "$sl_results")
 	sl_errors_dups=$((grep "\(duplicate word\)" | wc -l) <<< "$sl_results")
@@ -21,7 +21,7 @@ if [ "$TASK" = "spellcheck" ]; then
 	fi
 
 	# Run codespell to find some more
-	cs_results=$(codespell --check-hidden --quiet 2 --regex "[a-zA-Z0-9][\\-'a-zA-Z0-9]+[a-zA-Z0-9]" $spellcheck_files 2>&1)
+	cs_results=$(xargs codespell --quiet 2 --regex "[a-zA-Z0-9][\\-'a-zA-Z0-9]+[a-zA-Z0-9]" <<< "$spellcheck_files" 2>&1)
 	cs_errors=$(wc -l <<< "$cs_results")
 	if [ "$cs_errors" -ne 0 ]; then
 		printf "Codespell found %s errors:\n\n" "$cs_errors"
@@ -100,7 +100,7 @@ else
 		cp ./backends/*.md ./deployment/docs/
 		cp -r ./configs ./deployment/
 		cd ./deployment
-		tar czf "midimonster-$(git describe)-$TRAVIS_OS_NAME.tgz" *
+		tar czf "midimonster-$(git describe)-$TRAVIS_OS_NAME.tgz" ./
 		find . ! -iname '*.tgz' -delete
 		travis_fold end "deploy_unix"
 	fi

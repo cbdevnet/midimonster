@@ -12,8 +12,6 @@ script:
 addons:
   apt:
     packages: &base_build
-     # This is the absolute minimum for configure to pass
-     # Non C++ based tasks use it so they can run make builtfiles
      - ccache
     packages: &core_build
      # This is all the bits we need to enable all options
@@ -36,6 +34,11 @@ addons:
     packages: &core_build_windows
      - *core_build
      - mingw-w64
+    packages: &linters
+     - lintian
+     - codespell
+     - shellcheck
+     - cloc
 
 jobs:
   fast_finish: true
@@ -74,30 +77,6 @@ jobs:
         apt:
           packages:
            - *core_build_clang_latest
-    - os: linux
-      dist: bionic
-      env: TASK='spellintian'
-      addons:
-        apt:
-          packages:
-           - *core_build
-           - moreutils
-    - os: linux
-      dist: bionic
-      env: TASK='spellintian-duplicates'
-      addons:
-        apt:
-          packages:
-           - *core_build
-           - moreutils
-    - os: linux
-      dist: bionic
-      env: TASK='codespell'
-      addons:
-        apt:
-          packages:
-           - *core_build
-           - moreutils
     - os: osx
       osx_image: xcode10.2
       compiler: clang
@@ -116,10 +95,18 @@ jobs:
   allow_failures:
     - os: linux
       dist: bionic
-      env: TASK='spellintian-duplicates'
+      env: TASK='codesmell'
+      addons:
+        apt:
+          packages:
+           - *linters
     - os: linux
       dist: bionic
-      env: TASK='codespell'
+      env: TASK='spellcheck'
+      addons:
+        apt:
+          packages:
+           - *linters
 
 env:
   global:
@@ -135,9 +122,6 @@ cache:
 
 before_cache:
   - ccache -s # see how many hits ccache got
-
-install:
-  - if [ "$TASK" = "codespell" ]; then pip install --user git+https://github.com/codespell-project/codespell.git; fi
 
 before_install:
 # Travis clones with --branch, which omits tags. Since we use them for the version string at build time, fetch them

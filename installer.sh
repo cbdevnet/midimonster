@@ -210,13 +210,13 @@ clear
 
 # Check whether we have the privileges to install stuff
 if [ "$user" != "root" ]; then
-	printf "The installer requires root privileges to install the midimonster system-wide\n"
+	printf "The installer/updater requires root privileges to install the midimonster system-wide\n"
 	exit 1
 fi
 
 # Check if we can download the sources
 if [ "$(wget -q --spider http://github.com)" ]; then
-	printf "The installer requires internet connectivity to download the midimonster sources\n"
+	printf "The installer/updater requires internet connectivity to download the midimonster sources\n"
 	exit 1
 fi
 

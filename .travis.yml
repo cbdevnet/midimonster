@@ -154,6 +154,15 @@ before_install:
 # Download libraries to link with on Windows
  - if [ "$TASK" == "windows" ]; then mkdir libs; wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip; unzip lua53.zip lua53.dll; mv lua53.dll libs; fi
 
+notifications:
+ irc:
+  channels:
+   - "rc.hackint.org#midimonster"
+  on_success: change # default: always
+  on_failure: always # default: always
+  nick: MIDIMonster CI
+  use_notice: true
+
 deploy:
  provider: releases
  file_glob: true

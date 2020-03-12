@@ -160,7 +160,7 @@ notifications:
    - "irc.hackint.org#midimonster"
   on_success: change # default: always
   on_failure: always # default: always
-  nick: MIDIMonster CI
+  nick: mm_ci
   use_notice: true
 
 deploy:

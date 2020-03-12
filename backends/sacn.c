@@ -374,8 +374,8 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 			//check if ratelimiting engaged
 			if(frame_delta < SACN_FRAME_TIMEOUT){
 				global_cfg.fd[data->fd_index].universe[u].mark = 1;
-				if(!global_cfg.next_frame || global_cfg.next_frame > (SACN_KEEPALIVE_INTERVAL - frame_delta)){
-					global_cfg.next_frame = (SACN_KEEPALIVE_INTERVAL - frame_delta);
+				if(!global_cfg.next_frame || global_cfg.next_frame > (SACN_FRAME_TIMEOUT - frame_delta)){
+					global_cfg.next_frame = (SACN_FRAME_TIMEOUT - frame_delta);
 				}
 				return 0;
 			}

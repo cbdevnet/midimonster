@@ -280,8 +280,8 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 		//check output rate limit, request next frame
 		if(frame_delta < ARTNET_FRAME_TIMEOUT){
 			artnet_fd[data->fd_index].output_instance[u].mark = 1;
-			if(!next_frame || next_frame > (ARTNET_KEEPALIVE_INTERVAL - frame_delta)){
-				next_frame = (ARTNET_KEEPALIVE_INTERVAL - frame_delta);
+			if(!next_frame || next_frame > (ARTNET_FRAME_TIMEOUT - frame_delta)){
+				next_frame = (ARTNET_FRAME_TIMEOUT - frame_delta);
 			}
 			return 0;
 		}

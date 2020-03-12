@@ -70,18 +70,38 @@ ARGS(){
 			;;
 			-fu|--forceupdate)
 				UPDATER_FORCE="1"
-			;; 
+			;;
+			-supd|--selfupdate)
+				NIGHTLY=""
+				self_update
+				rmdir "$tmp_path"
+				exit 0
+			;;
+			-insup|--installupdater)
+				NIGHTLY=""
+				install_updater
+				rmdir "$tmp_path"
+				exit 0
+			;;
+			-insdep|--installdeps)
+				install_dependencies
+				rmdir "$tmp_path"
+				exit 0
+			;;
 			-h|--help|*)
 				assign_defaults
 				printf "${bold}Usage:${normal} ${0} ${c_green}[OPTIONS]${normal}"
-				printf "\n\t${c_green}--prefix${normal} ${c_red}<path>${normal}\t\tSet the installation prefix\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PREFIX"
-				printf "\n\t${c_green}--plugins${normal} ${c_red}<path>${normal}\tSet the plugin install path\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PLUGINS"
-				printf "\n\t${c_green}--defcfg${normal} ${c_red}<path>${normal}\t\tSet the default configuration path\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_DEFAULT_CFG"
-				printf "\n\t${c_green}--examples${normal} ${c_red}<path>${normal}\tSet the path for example configurations\t${c_mag}Default:${normal} ${dim}%s${normal}\n" "$VAR_EXAMPLE_CFGS"
-				printf "\n\t${c_green}--dev${normal}\t\t\tInstall nightly version"
-				printf "\n\t${c_green}-d, --default${normal}\t\tUse default values to install"
-				printf "\n\t${c_green}-h, --help${normal}\t\tShow this message"
-				printf "\n\t${c_green}-fu, --forceupdate${normal}\tForce the updater to update without a version check"
+				printf "\n\t${c_green} --prefix${normal} ${c_red}<path>${normal}\tSet the installation prefix\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PREFIX"
+				printf "\n\t${c_green} --plugins${normal} ${c_red}<path>${normal}\tSet the plugin install path\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PLUGINS"
+				printf "\n\t${c_green} --defcfg${normal} ${c_red}<path>${normal}\tSet the default configuration path\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_DEFAULT_CFG"
+				printf "\n\t${c_green} --examples${normal} ${c_red}<path>${normal}\tSet the path for example configurations\t${c_mag}Default:${normal} ${dim}%s${normal}\n" "$VAR_EXAMPLE_CFGS"
+				printf "\n\t${c_green}  --dev${normal}\t\t\tInstall nightly version"
+				printf "\n ${c_green}-d,\t  --default${normal}\t\tUse default values to install"
+				printf "\n ${c_green}-fu,\t  --forceupdate${normal}\t\tForce the updater to update without a version check"
+				printf "\n ${c_green}-supd,\t  --selfupdate${normal}\t\tUpdates this script to the newest version"
+				printf "\n ${c_green}-insup,  --installupdater${normal}\tInstall the updater (Run with midimonster-updater)"
+				printf "\n ${c_green}-insdep, --installdeps${normal}\t\tInstall dependencies and exit"
+				printf "\n ${c_green}-h,\t  --help${normal}\t\tShow this message and exit"
 				printf "\n\t${uline}${bold}${c_mag}Each argument can be overwritten by another, the last one is used!${normal}\n"
 				rmdir "$tmp_path"
 				exit 1
@@ -105,7 +125,11 @@ install_dependencies(){
 }
 
 ask_questions(){
-	printf "${bold}If you don't know what you're doing, just hit enter a few times.${normal}\n\n"
+	# Only say if necessary
+	if [ -n "$VAR_PREFIX" ] || [ -n "$VAR_PLUGINS" ] || [ -n "$VAR_DEFAULT_CFG" ] || [ -n "$VAR_EXAMPLE_CFGS" ]; then
+		printf "${bold}If you don't know what you're doing, just hit enter a few times.${normal}\n\n"
+	fi
+	
 	if [ -z "$VAR_PREFIX" ]; then
 		read -e -i "$DEFAULT_PREFIX" -p "PREFIX (Install root directory): " input
 		VAR_PREFIX="${input:-$VAR_PREFIX}"
@@ -177,15 +201,36 @@ build(){
 
 # Save data for the updater
 save_config(){
-	rm -rf $updater_dir
-	printf "Copying updater to %s/updater.sh\n" "$updater_dir"
-	mkdir -p "$updater_dir"
-	cp "$0" "$updater_dir/updater.sh"
-	printf "Creating symlin /usr/bin/midimonster-updater\n"
-	ln -s "$updater_dir/updater.sh" "/usr/bin/midimonster-updater"
-	chmod +x "$updater_dir/updater.sh"
+	rm -f "$updater_dir/updater.conf"
+	mkdir -p "$updater_dir"	
 	printf "Exporting updater config\n"
 	printf "VAR_PREFIX=%s\nVAR_PLUGINS=%s\nVAR_DEFAULT_CFG=%s\nVAR_DESTDIR=%s\nVAR_EXAMPLE_CFGS=%s\n" "$VAR_PREFIX" "$VAR_PLUGINS" "$VAR_DEFAULT_CFG" "$VAR_DESTDIR" "$VAR_EXAMPLE_CFGS" > "$updater_dir/updater.conf"
+}
+
+# Updates this script either from the downloaded sources or the remote repository.
+self_update(){
+	mkdir -p "$updater_dir"
+	if [ "$NIGHTLY" = "1" ]; then
+		cp -u "$tmp_path/installer.sh" "$0"
+	elif [ "$NIGHTLY" != "1" ]; then
+		wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh -O "$0"
+	fi
+	chmod +x "$0"
+}
+
+install_updater(){
+	mkdir -p "$updater_dir"
+	if [ "$NIGHTLY" = "1" ]; then
+		printf "Copying updater to %s/updater.sh\n" "$updater_dir"
+		cp -u "$tmp_path/installer.sh" "$updater_dir/updater.sh"
+	else
+		printf "Downloading updater to %s/updater.sh\n" "$updater_dir"
+		wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh -O "$updater_dir/updater.sh"
+	fi
+	chmod +x "$updater_dir/updater.sh"
+	printf "Creating symlink /usr/bin/midimonster-updater\n"
+	ln -s "$updater_dir/updater.sh" "/usr/bin/midimonster-updater"
+	printf "Done.\n"
 }
 
 error_handler(){
@@ -243,12 +288,15 @@ if [ -f "$updater_dir/updater.conf" ] || [ "$UPDATER_FORCE" = "1" ]; then
 
 	# Run updater steps
 	prepare_repo
+	install_updater
+	save_config
 	build
 else
 	# Run installer steps
 	install_dependencies
 	prepare_repo
 	ask_questions
+	install_updater
 	save_config
 	build
 fi

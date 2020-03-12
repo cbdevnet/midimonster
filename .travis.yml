@@ -157,7 +157,7 @@ before_install:
 notifications:
  irc:
   channels:
-   - "rc.hackint.org#midimonster"
+   - "irc.hackint.org#midimonster"
   on_success: change # default: always
   on_failure: always # default: always
   nick: MIDIMonster CI

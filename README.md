@@ -172,7 +172,7 @@ chmod +x ./installer.sh
 ./installer.sh
 ```
 
-The installer can also be used for automating installations by specifying additional
+The installer can also be used for automating installations or upgrades by specifying additional
 command line arguments. To see a list of valid arguments, run the installer with the
 `--help` argument.
 

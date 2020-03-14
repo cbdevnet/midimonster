@@ -436,11 +436,6 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 				chan = inst_data->data.channel + MAPPED_CHANNEL(inst_data->data.map[u]);
 			}
 
-			if(!chan){
-				LOGPF("Active channel %" PRIsize_t " on %s not known to core", u, inst->name);
-				return 1;
-			}
-
 			//generate value
 			if(IS_WIDE(inst_data->data.map[u])){
 				inst_data->data.map[MAPPED_CHANNEL(inst_data->data.map[u])] &= ~MAP_MARK;

@@ -388,7 +388,7 @@ static int config_line(char* line){
 				return 1;
 			}
 
-			current_instance = mm_instance();
+			current_instance = mm_instance(current_backend);
 			if(!current_instance){
 				return 1;
 			}

@@ -321,11 +321,6 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 				chan = data->data.channel + MAPPED_CHANNEL(data->data.map[p]);
 			}
 
-			if(!chan){
-				LOGPF("Active channel %" PRIsize_t " on %s not known to core", p, inst->name);
-				return 1;
-			}
-
 			if(IS_WIDE(data->data.map[p])){
 				data->data.map[MAPPED_CHANNEL(data->data.map[p])] &= ~MAP_MARK;
 				wide_val = data->data.in[p] << ((data->data.map[p] & MAP_COARSE) ? 8 : 0);

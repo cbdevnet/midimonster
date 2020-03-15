@@ -311,6 +311,9 @@ int backends_stop(){
 	size_t u, n;
 	instance** inst = NULL;
 
+	//channels before instances to support proper shutdown procedures
+	channels_free();
+
 	//shut down the registry
 	for(u = 0; u < registry.n; u++){
 		//fetch list of instances
@@ -335,7 +338,6 @@ int backends_stop(){
 		registry.instances[u] = NULL;
 	}
 
-	channels_free();
 	free(registry.backends);
 	free(registry.instances);
 	registry.n = 0;

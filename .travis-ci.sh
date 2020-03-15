@@ -21,7 +21,7 @@ if [ "$TASK" = "spellcheck" ]; then
 	fi
 
 	# Run codespell to find some more
-	cs_results=$(xargs codespell --quiet 2 --regex "[a-zA-Z0-9][\\-'a-zA-Z0-9]+[a-zA-Z0-9]" <<< "$spellcheck_files" 2>&1)
+	cs_results=$(xargs codespell --quiet 2 <<< "$spellcheck_files" 2>&1)
 	cs_errors=$(wc -l <<< "$cs_results")
 	if [ "$cs_errors" -ne 0 ]; then
 		printf "Codespell found %s errors:\n\n" "$cs_errors"
@@ -62,11 +62,15 @@ elif [ "$TASK" = "codesmell" ]; then
 elif [ "$TASK" = "sanitize" ]; then
 	# Run sanitized compile
 	travis_fold start "make_sanitize"
-	make sanitize;
+	if make sanitize; then
+		exit "$?"
+	fi
 	travis_fold end "make_sanitize"
 elif [ "$TASK" = "windows" ]; then
 	travis_fold start "make_windows"
-	make windows;
+	if make windows; then
+		exit "$?"
+	fi
 	make -C backends lua.dll
 	travis_fold end "make_windows"
 	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
@@ -87,7 +91,9 @@ elif [ "$TASK" = "windows" ]; then
 else
 	# Otherwise compile as normal
 	travis_fold start "make"
-	make full;
+	if make full; then
+		exit "$?"
+	fi
 	travis_fold end "make"
 	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
 		travis_fold start "deploy_unix"

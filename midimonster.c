@@ -466,8 +466,6 @@ int main(int argc, char** argv){
 	if(config_read(cfg_file)){
 		fprintf(stderr, "Failed to read configuration file %s\n", cfg_file);
 		backends_stop();
-		channels_free();
-		instances_free();
 		map_free();
 		fds_free();
 		plugins_close();
@@ -497,8 +495,6 @@ int main(int argc, char** argv){
 bail:
 	//free all data
 	backends_stop();
-	channels_free();
-	instances_free();
 	map_free();
 	fds_free();
 	event_free();

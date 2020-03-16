@@ -26,13 +26,13 @@ latest_version="$(curl --silent "https://api.github.com/repos/cbdevnet/midimonst
 # make invocation arguments
 makeargs="all"
 
-normal=$(tput sgr0)
-dim=$(tput dim)
-bold=$(tput bold)
-uline=$(tput smul)
-c_red=$(tput setaf 1)
-c_green=$(tput setaf 2)
-c_mag=$(tput setaf 5)
+normal="$(tput sgr0)"
+dim="$(tput dim)"
+bold="$(tput bold)"
+uline="$(tput smul)"
+c_red="$(tput setaf 1)"
+c_green="$(tput setaf 2)"
+c_mag="$(tput setaf 5)"
 
 DEFAULT_PREFIX="/usr"
 DEFAULT_PLUGINPATH="/lib/midimonster"
@@ -49,7 +49,7 @@ assign_defaults(){
 
 ARGS(){
 	for i in "$@"; do
-		case $i in
+		case "$i" in
 			--prefix=*)
 				VAR_PREFIX="${i#*=}"
 			;;
@@ -71,37 +71,28 @@ ARGS(){
 			-fu|--forceupdate)
 				UPDATER_FORCE="1"
 			;;
-			-supd|--selfupdate)
-				NIGHTLY=""
-				self_update
-				rmdir "$tmp_path"
+			--install-updater)
+				NIGHTLY=1 prepare_repo
+				install_script
 				exit 0
 			;;
-			-insup|--installupdater)
-				NIGHTLY=""
-				install_updater
-				rmdir "$tmp_path"
-				exit 0
-			;;
-			-insdep|--installdeps)
+			--install-dependencies)
 				install_dependencies
-				rmdir "$tmp_path"
 				exit 0
 			;;
 			-h|--help|*)
 				assign_defaults
 				printf "${bold}Usage:${normal} ${0} ${c_green}[OPTIONS]${normal}"
-				printf "\n\t${c_green} --prefix${normal} ${c_red}<path>${normal}\tSet the installation prefix\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PREFIX"
-				printf "\n\t${c_green} --plugins${normal} ${c_red}<path>${normal}\tSet the plugin install path\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PLUGINS"
-				printf "\n\t${c_green} --defcfg${normal} ${c_red}<path>${normal}\tSet the default configuration path\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_DEFAULT_CFG"
-				printf "\n\t${c_green} --examples${normal} ${c_red}<path>${normal}\tSet the path for example configurations\t${c_mag}Default:${normal} ${dim}%s${normal}\n" "$VAR_EXAMPLE_CFGS"
-				printf "\n\t${c_green}  --dev${normal}\t\t\tInstall nightly version"
-				printf "\n ${c_green}-d,\t  --default${normal}\t\tUse default values to install"
-				printf "\n ${c_green}-fu,\t  --forceupdate${normal}\t\tForce the updater to update without a version check"
-				printf "\n ${c_green}-supd,\t  --selfupdate${normal}\t\tUpdates this script to the newest version"
-				printf "\n ${c_green}-insup,  --installupdater${normal}\tInstall the updater (Run with midimonster-updater)"
-				printf "\n ${c_green}-insdep, --installdeps${normal}\t\tInstall dependencies and exit"
-				printf "\n ${c_green}-h,\t  --help${normal}\t\tShow this message and exit"
+				printf "\n\t${c_green}--prefix${normal} ${c_red}<path>${normal}\t\tSet the installation prefix\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PREFIX"
+				printf "\n\t${c_green}--plugins${normal} ${c_red}<path>${normal}\tSet the plugin install path\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PLUGINS"
+				printf "\n\t${c_green}--defcfg${normal} ${c_red}<path>${normal}\t\tSet the default configuration path\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_DEFAULT_CFG"
+				printf "\n\t${c_green}--examples${normal} ${c_red}<path>${normal}\tSet the path for example configurations\t${c_mag}Default:${normal} ${dim}%s${normal}\n" "$VAR_EXAMPLE_CFGS"
+				printf "\n\t${c_green}--dev${normal}\t\t\t\tInstall nightly version"
+				printf "\n\t${c_green}-d, --default${normal}\t\t\tUse default values to install"
+				printf "\n\t${c_green}-fu, --forceupdate${normal}\t\tForce the updater to update without a version check"
+				printf "\n\t${c_green}--install-updater${normal}\t\tInstall the updater (Run with midimonster-updater)"
+				printf "\n\t${c_green}--install-dependencies${normal}\t\tInstall dependencies and exit"
+				printf "\n\t${c_green}-h, --help${normal}\t\t\tShow this message and exit"
 				printf "\n\t${uline}${bold}${c_mag}Each argument can be overwritten by another, the last one is used!${normal}\n"
 				rmdir "$tmp_path"
 				exit 1
@@ -116,7 +107,7 @@ install_dependencies(){
 	for dependency in ${deps[@]}; do
 		if [ "$(dpkg-query -W -f='${Status}' "$dependency" 2>/dev/null | grep -c "ok installed")" -eq 0 ]; then
 			printf "Installing %s\n" "$dependency"
-			apt-get install $dependency
+			apt-get install "$dependency"
 		else
 			printf "%s already installed!\n" "$dependency"
 		fi
@@ -181,7 +172,7 @@ prepare_repo(){
 		printf "Finding latest stable version...\n"
 		last_tag=$(git describe --abbrev=0)
 		printf "Checking out %s...\n" "$last_tag"
-		git checkout -f -q $last_tag
+		git checkout -f -q "$last_tag"
 	fi
 }
 
@@ -207,30 +198,14 @@ save_config(){
 	printf "VAR_PREFIX=%s\nVAR_PLUGINS=%s\nVAR_DEFAULT_CFG=%s\nVAR_DESTDIR=%s\nVAR_EXAMPLE_CFGS=%s\n" "$VAR_PREFIX" "$VAR_PLUGINS" "$VAR_DEFAULT_CFG" "$VAR_DESTDIR" "$VAR_EXAMPLE_CFGS" > "$updater_dir/updater.conf"
 }
 
-# Updates this script either from the downloaded sources or the remote repository.
-self_update(){
+# Updates this script using the one from the checked out repo (containing the requested version)
+install_script(){
 	mkdir -p "$updater_dir"
-	if [ "$NIGHTLY" = "1" ]; then
-		cp -u "$tmp_path/installer.sh" "$0"
-	elif [ "$NIGHTLY" != "1" ]; then
-		wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh -O "$0"
-	fi
-	chmod +x "$0"
-}
-
-install_updater(){
-	mkdir -p "$updater_dir"
-	if [ "$NIGHTLY" = "1" ]; then
-		printf "Copying updater to %s/updater.sh\n" "$updater_dir"
-		cp -u "$tmp_path/installer.sh" "$updater_dir/updater.sh"
-	else
-		printf "Downloading updater to %s/updater.sh\n" "$updater_dir"
-		wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh -O "$updater_dir/updater.sh"
-	fi
+	printf "Copying updater to %s/updater.sh\n" "$updater_dir"
+	cp "$tmp_path/installer.sh" "$updater_dir/updater.sh"
 	chmod +x "$updater_dir/updater.sh"
 	printf "Creating symlink /usr/bin/midimonster-updater\n"
 	ln -s "$updater_dir/updater.sh" "/usr/bin/midimonster-updater"
-	printf "Done.\n"
 }
 
 error_handler(){
@@ -238,7 +213,7 @@ error_handler(){
 	exit 1
 }
 
-cleanup() {
+cleanup(){
 	if [ -d "$tmp_path" ]; then
 		printf "Cleaning up temporary files...\n"
 		rm -rf "$tmp_path"
@@ -288,7 +263,7 @@ if [ -f "$updater_dir/updater.conf" ] || [ "$UPDATER_FORCE" = "1" ]; then
 
 	# Run updater steps
 	prepare_repo
-	install_updater
+	install_script
 	save_config
 	build
 else
@@ -296,7 +271,7 @@ else
 	install_dependencies
 	prepare_repo
 	ask_questions
-	install_updater
+	install_script
 	save_config
 	build
 fi

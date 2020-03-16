@@ -247,6 +247,8 @@ MM_API channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
  * Register (manage = 1) or unregister (manage = 0) a file descriptor
  * to be selected on. The backend will be notified when the descriptor
  * becomes ready to read via its registered mmbackend_process_fd call.
+ * The `impl` argument will be provided within the corresponding
+ * managed_fd structure upon callback.
  */
 MM_API int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 

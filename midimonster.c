@@ -29,23 +29,32 @@ typedef struct /*_mm_channel_mapping*/ {
 	channel** to;
 } channel_mapping;
 
-static size_t mappings = 0;
-static channel_mapping* map = NULL;
+static struct {
+	//routing_hash is set up for 256 buckets
+	size_t entries[256];
+	channel_mapping* map[256];
+
+	event_collection pool[2];
+	event_collection* events;
+} routing = {
+	.events = routing.pool
+};
+
 static size_t fds = 0;
 static managed_fd* fd = NULL;
 static volatile sig_atomic_t fd_set_dirty = 1;
 static uint64_t global_timestamp = 0;
 
-static event_collection event_pool[2] = {
-	{0},
-	{0}
-};
-static event_collection* primary = event_pool;
-
 volatile static sig_atomic_t shutdown_requested = 0;
 
 static void signal_handler(int signum){
 	shutdown_requested = 1;
+}
+
+static size_t routing_hash(channel* key){
+	uint64_t repr = (uint64_t) key;
+	//return 8bit hash for 256 buckets, not ideal but it works
+	return (repr ^ (repr >> 8) ^ (repr >> 16) ^ (repr >> 24) ^ (repr >> 32)) & 0xFF;
 }
 
 MM_API uint64_t mm_timestamp(){
@@ -67,53 +76,66 @@ static void update_timestamp(){
 }
 
 int mm_map_channel(channel* from, channel* to){
-	size_t u, m;
+	size_t u, m, bucket = routing_hash(from);
+
 	//find existing source mapping
-	for(u = 0; u < mappings; u++){
-		if(map[u].from == from){
+	for(u = 0; u < routing.entries[bucket]; u++){
+		if(routing.map[bucket][u].from == from){
 			break;
 		}
 	}
 
 	//create new entry
-	if(u == mappings){
-		map = realloc(map, (mappings + 1) * sizeof(channel_mapping));
-		if(!map){
+	if(u == routing.entries[bucket]){
+		routing.map[bucket] = realloc(routing.map[bucket], (routing.entries[bucket] + 1) * sizeof(channel_mapping));
+		if(!routing.map[bucket]){
+			routing.entries[bucket] = 0;
 			fprintf(stderr, "Failed to allocate memory\n");
 			return 1;
 		}
-		memset(map + mappings, 0, sizeof(channel_mapping));
-		mappings++;
-		map[u].from = from;
+
+		memset(routing.map[bucket] + routing.entries[bucket], 0, sizeof(channel_mapping));
+		routing.entries[bucket]++;
+		routing.map[bucket][u].from = from;
 	}
 
 	//check whether the target is already mapped
-	for(m = 0; m < map[u].destinations; m++){
-		if(map[u].to[m] == to){
+	for(m = 0; m < routing.map[bucket][u].destinations; m++){
+		if(routing.map[bucket][u].to[m] == to){
 			return 0;
 		}
 	}
 
-	map[u].to = realloc(map[u].to, (map[u].destinations + 1) * sizeof(channel*));
-	if(!map[u].to){
+	//add a mapping target
+	routing.map[bucket][u].to = realloc(routing.map[bucket][u].to, (routing.map[bucket][u].destinations + 1) * sizeof(channel*));
+	if(!routing.map[bucket][u].to){
 		fprintf(stderr, "Failed to allocate memory\n");
-		map[u].destinations = 0;
+		routing.map[bucket][u].destinations = 0;
 		return 1;
 	}
 
-	map[u].to[map[u].destinations] = to;
-	map[u].destinations++;
+	routing.map[bucket][u].to[routing.map[bucket][u].destinations] = to;
+	routing.map[bucket][u].destinations++;
 	return 0;
 }
 
-static void map_free(){
-	size_t u;
-	for(u = 0; u < mappings; u++){
-		free(map[u].to);
+static void routing_cleanup(){
+	size_t u, n;
+
+	for(u = 0; u < sizeof(routing.map) / sizeof(routing.map[0]); u++){
+		for(n = 0; n < routing.entries[u]; n++){
+			free(routing.map[u][n].to);
+		}
+		free(routing.map[u]);
+		routing.map[u] = NULL;
+		routing.entries[u] = 0;
 	}
-	free(map);
-	mappings = 0;
-	map = NULL;
+
+	for(u = 0; u < sizeof(routing.pool) / sizeof(routing.pool[0]); u++){
+		free(routing.pool[u].channel);
+		free(routing.pool[u].value);
+		routing.pool[u].alloc = 0;
+	}
 }
 
 MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
@@ -170,7 +192,6 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 static void fds_free(){
 	size_t u;
 	for(u = 0; u < fds; u++){
-		//TODO free impl
 		if(fd[u].fd >= 0){
 			close(fd[u].fd);
 			fd[u].fd = -1;
@@ -182,54 +203,44 @@ static void fds_free(){
 }
 
 MM_API int mm_channel_event(channel* c, channel_value v){
-	size_t u, p;
+	size_t u, p, bucket = routing_hash(c);
 
 	//find mapped channels
-	for(u = 0; u < mappings; u++){
-		if(map[u].from == c){
+	for(u = 0; u < routing.entries[bucket]; u++){
+		if(routing.map[bucket][u].from == c){
 			break;
 		}
 	}
 
-	if(u == mappings){
+	if(u == routing.entries[bucket]){
 		//target-only channel
 		return 0;
 	}
 
 	//resize event structures to fit additional events
-	if(primary->n + map[u].destinations >= primary->alloc){
-		primary->channel = realloc(primary->channel, (primary->alloc + map[u].destinations) * sizeof(channel*));
-		primary->value = realloc(primary->value, (primary->alloc + map[u].destinations) * sizeof(channel_value));
+	if(routing.events->n + routing.map[bucket][u].destinations >= routing.events->alloc){
+		routing.events->channel = realloc(routing.events->channel, (routing.events->alloc + routing.map[bucket][u].destinations) * sizeof(channel*));
+		routing.events->value = realloc(routing.events->value, (routing.events->alloc + routing.map[bucket][u].destinations) * sizeof(channel_value));
 
-		if(!primary->channel || !primary->value){
+		if(!routing.events->channel || !routing.events->value){
 			fprintf(stderr, "Failed to allocate memory\n");
-			primary->alloc = 0;
-			primary->n = 0;
+			routing.events->alloc = 0;
+			routing.events->n = 0;
 			return 1;
 		}
 
-		primary->alloc += map[u].destinations;
+		routing.events->alloc += routing.map[bucket][u].destinations;
 	}
 
 	//enqueue channel events
 	//FIXME this might lead to one channel being mentioned multiple times in an apply call
-	for(p = 0; p < map[u].destinations; p++){
-		primary->channel[primary->n + p] = map[u].to[p];
-		primary->value[primary->n + p] = v;
+	memcpy(routing.events->channel + routing.events->n, routing.map[bucket][u].to, routing.map[bucket][u].destinations * sizeof(channel*));
+	for(p = 0; p < routing.map[bucket][u].destinations; p++){
+		routing.events->value[routing.events->n + p] = v;
 	}
 
-	primary->n += map[u].destinations;
+	routing.events->n += routing.map[bucket][u].destinations;
 	return 0;
-}
-
-static void event_free(){
-	size_t u;
-
-	for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
-		free(event_pool[u].channel);
-		free(event_pool[u].value);
-		event_pool[u].alloc = 0;
-	}
 }
 
 static void version(){
@@ -336,13 +347,13 @@ static int core_process(size_t nfds, managed_fd* signaled_fds){
 		return 1;
 	}
 
-	while(primary->n){
+	while(routing.events->n){
 		//swap primary and secondary event collectors
-		DBGPF("Swapping event collectors, %lu events in primary\n", primary->n);
-		for(u = 0; u < sizeof(event_pool) / sizeof(event_collection); u++){
-			if(primary != event_pool + u){
-				secondary = primary;
-				primary = event_pool + u;
+		DBGPF("Swapping event collectors, %lu events in primary\n", routing.events->n);
+		for(u = 0; u < sizeof(routing.pool) / sizeof(routing.pool[0]); u++){
+			if(routing.events != routing.pool + u){
+				secondary = routing.events;
+				routing.events = routing.pool + u;
 				break;
 			}
 		}
@@ -466,7 +477,7 @@ int main(int argc, char** argv){
 	if(config_read(cfg_file)){
 		fprintf(stderr, "Failed to read configuration file %s\n", cfg_file);
 		backends_stop();
-		map_free();
+		routing_cleanup();
 		fds_free();
 		plugins_close();
 		config_free();
@@ -495,9 +506,8 @@ int main(int argc, char** argv){
 bail:
 	//free all data
 	backends_stop();
-	map_free();
+	routing_cleanup();
 	fds_free();
-	event_free();
 	plugins_close();
 	config_free();
 	platform_shutdown();

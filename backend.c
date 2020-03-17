@@ -55,7 +55,7 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 	channel_value xval;
 	channel* xchnl = NULL;
 
-	for(u = 0; u < nev && !rv; u++){
+	for(u = 0; u < nev && !rv; u = n){
 		//sort for this instance
 		n = u + 1;
 		for(p = u + 1; p < nev; p++){
@@ -75,7 +75,6 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 		//TODO eliminate duplicates
 		DBGPF("Calling handler for instance %s with %" PRIsize_t " events\n", c[u]->instance->name, n - u);
 		rv |= c[u]->instance->backend->handle(c[u]->instance, n - u, c + u, v + u);
-		u = n;
 	}
 
 	return 0;

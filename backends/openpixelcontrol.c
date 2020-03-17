@@ -495,11 +495,11 @@ static ssize_t openpixel_client_headerdata(instance* inst, openpixel_client* cli
 		}
 		else{
 			client->buffer = openpixel_buffer_find(data, client->hdr.strip, 1);
-		}
-		//if no buffer or mode mismatch, ignore data
-		if(client->buffer < 0
-				|| data->mode != client->hdr.mode){
-			client->buffer = -2; //mark for ignore
+			//if no buffer or mode mismatch, ignore data
+			if(client->buffer < 0
+					|| data->mode != client->hdr.mode){
+				client->buffer = -2; //mark for ignore
+			}
 		}
 		client->left = be16toh(client->hdr.length);
 		client->offset = 0;

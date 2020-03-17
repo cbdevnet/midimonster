@@ -456,6 +456,7 @@ static int core_loop(){
 int main(int argc, char** argv){
 	int rv = EXIT_FAILURE;
 	char* cfg_file = DEFAULT_CFG;
+	size_t u, n = 0, max = 0;
 
 	//parse commandline arguments
 	if(args_parse(argc, argv, &cfg_file)){
@@ -493,6 +494,14 @@ int main(int argc, char** argv){
 	}
 
 	signal(SIGINT, signal_handler);
+
+	//count and report mappings
+	for(u = 0; u < sizeof(routing.map) / sizeof(routing.map[0]); u++){
+		n += routing.entries[u];
+		max = max(max, routing.entries[u]);
+	}
+	LOGPF("Routing %" PRIsize_t " sources, largest bucket has %" PRIsize_t " entries",
+			n, max);
 
 	if(!fds){
 		fprintf(stderr, "No descriptors registered for multiplexing\n");

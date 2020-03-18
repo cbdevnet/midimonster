@@ -29,6 +29,8 @@ typedef struct /*_lua_instance_data*/ {
 	double* input;
 	double* output;
 	lua_State* interpreter;
+
+	char* default_handler;
 } lua_instance_data;
 
 typedef struct /*_lua_interval_callback*/ {

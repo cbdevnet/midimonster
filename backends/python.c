@@ -378,6 +378,11 @@ static int python_configure_instance(instance* inst, char* option, char* value){
 		PyEval_ReleaseThread(data->interpreter);
 		return 0;
 	}
+	else if(!strcmp(option, "default-handler")){
+		free(data->default_handler);
+		data->default_handler = strdup(value);
+		return 0;
+	}
 
 	LOGPF("Unknown instance parameter %s for instance %s", option, inst->name);
 	return 1;
@@ -600,38 +605,56 @@ static int python_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
+static PyObject* python_resolve_symbol(char* spec_raw){
+	char* module_name = NULL, *object_name = NULL, *spec = strdup(spec_raw);
+	PyObject* module = NULL, *result = NULL;
+
+	module = PyImport_AddModule("__main__");
+	object_name = spec;
+	module_name = strchr(object_name, '.');
+	if(module_name){
+		*module_name = 0;
+		//returns borrowed reference
+		module = PyImport_AddModule(object_name);
+
+		if(!module){
+			LOGPF("Module %s for symbol %s.%s is not loaded", object_name, object_name, module_name + 1);
+			return NULL;
+		}
+
+		object_name = module_name + 1;
+
+		//returns new reference
+		result = PyObject_GetAttrString(module, object_name);
+	}
+
+	free(spec);
+	return result;
+}
+
 static int python_start(size_t n, instance** inst){
 	python_instance_data* data = NULL;
-	PyObject* module = NULL;
 	size_t u, p;
-	char* module_name = NULL, *channel_name = NULL;
 
 	//resolve channel references to handler functions
 	for(u = 0; u < n; u++){
 		data = (python_instance_data*) inst[u]->impl;
+		DBGPF("Starting up instance %s", inst[u]->name);
 
 		//switch to interpreter
 		PyEval_RestoreThread(data->interpreter);
+
+		if(data->default_handler){
+			data->handler = python_resolve_symbol(data->default_handler);
+		}
+
 		for(p = 0; p < data->channels; p++){
-			module = PyImport_AddModule("__main__");
-			channel_name = data->channel[p].name;
-			module_name = strchr(channel_name, '.');
-			if(module_name){
-				*module_name = 0;
-				//returns borrowed reference
-				module = PyImport_AddModule(channel_name);
-
-				if(!module){
-					LOGPF("Module %s for qualified channel %s.%s is not loaded on instance %s", channel_name, channel_name, module_name + 1, inst[u]->name);
-					return 1;
-				}
-
-				*module_name = '.';
-				channel_name = module_name + 1;
+			if(!strchr(data->channel[p].name, '.') && data->handler){
+				data->channel[p].handler = data->handler;
 			}
-
-			//returns new reference
-			data->channel[p].handler = PyObject_GetAttrString(module, channel_name);
+			else{
+				data->channel[p].handler = python_resolve_symbol(data->channel[p].name);
+			}
 		}
 
 		//release interpreter
@@ -654,6 +677,7 @@ static int python_shutdown(size_t n, instance** inst){
 			Py_XDECREF(data->channel[p].handler);
 		}
 		free(data->channel);
+		free(data->default_handler);
 		//do not free data here, needed for shutting down interpreters
 	}
 
@@ -675,6 +699,7 @@ static int python_shutdown(size_t n, instance** inst){
 			for(p = 0; p <intervals; p++){
 				Py_XDECREF(interval[p].reference);
 			}
+			Py_XDECREF(data->handler);
 
 			DBGPF("Shutting down interpreter for instance %s", inst[u]->name);
 			//swap to interpreter and end it, GIL is held after this but state is NULL

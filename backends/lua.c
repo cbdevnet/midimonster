@@ -308,6 +308,11 @@ static int lua_configure_instance(instance* inst, char* option, char* value){
 		}
 		return 0;
 	}
+	else if(!strcmp(option, "default-handler")){
+		free(data->default_handler);
+		data->default_handler = strdup(value);
+		return 0;
+	}
 
 	LOGPF("Unknown instance configuration parameter %s for instance %s", option, inst->name);
 	return 1;
@@ -461,7 +466,8 @@ static int lua_start(size_t n, instance** inst){
 		data = (lua_instance_data*) inst[u]->impl;
 		for(p = 0; p < data->channels; p++){
 			//exclude reserved names
-			if(strcmp(data->channel_name[p], "output")
+			if(!data->default_handler
+					&& strcmp(data->channel_name[p], "output")
 					&& strcmp(data->channel_name[p], "input_value")
 					&& strcmp(data->channel_name[p], "output_value")
 					&& strcmp(data->channel_name[p], "input_channel")
@@ -471,6 +477,14 @@ static int lua_start(size_t n, instance** inst){
 				data->reference[p] = luaL_ref(data->interpreter, LUA_REGISTRYINDEX);
 				if(data->reference[p] == LUA_REFNIL){
 					data->reference[p] = LUA_NOREF;
+				}
+			}
+			else if(data->default_handler){
+				lua_getglobal(data->interpreter, data->default_handler);
+				data->reference[p] = luaL_ref(data->interpreter, LUA_REGISTRYINDEX);
+				if(data->reference[p] == LUA_REFNIL){
+					data->reference[p] = LUA_NOREF;
+					LOGPF("Failed to resolve default handler function %s on instance %s", data->default_handler, inst[u]->name);
 				}
 			}
 		}
@@ -504,6 +518,7 @@ static int lua_shutdown(size_t n, instance** inst){
 		free(data->reference);
 		free(data->input);
 		free(data->output);
+		free(data->default_handler);
 		free(inst[u]->impl);
 	}
 

@@ -6,6 +6,7 @@ to route, generate and manipulate channel events using the Python 3 scripting la
 Every instance has its own interpreter, which can be loaded with multiple Python modules.
 These modules may contain member functions accepting a single `float` parameter, which can
 then be used as target channels. For each incoming event, the handler function is called.
+Channels in the global scope may be assigned a default handler function.
 
 Python modules may also register `socket` objects (and an associated callback function) with
 the MIDIMonster core, which will then alert the module when there is data ready to be read.
@@ -67,9 +68,10 @@ The `python` backend does not take any global configuration.
 
 #### Instance configuration
 
-| Option	| Example value		| Default value 	| Description					|
-|---------------|-----------------------|-----------------------|-----------------------------------------------|
-| `module`	| `my_handlers.py`	| none			| (Path to) Python module source file, relative to configuration file location |
+| Option		| Example value		| Default value 	| Description					|
+|-----------------------|-----------------------|-----------------------|-----------------------------------------------|
+| `module`		| `my_handlers.py`	| none			| (Path to) Python module source file, relative to configuration file location |
+| `default-handler`	| `mu_handlers.default`	| none			| Function to be called as handler for all top-level channels (not belonging to a module) |
 
 A single instance may have multiple `module` options specified. This will make all handlers available within their
 module namespaces (see the section on channel specification).

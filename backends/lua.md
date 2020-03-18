@@ -6,7 +6,8 @@ and  manipulate events using the Lua scripting language.
 Every instance has its own interpreter state which can be loaded with custom handler scripts.
 
 To process incoming channel events, the MIDIMonster calls corresponding Lua functions (if they exist)
-with the value (as a Lua `number` type) as parameter.
+with the value (as a Lua `number` type) as parameter. Alternatively, a designated default channel handler
+may be supplied in the configuration.
 
 The following functions are provided within the Lua interpreter for interaction with the MIDIMonster
 
@@ -42,9 +43,10 @@ The `lua` backend does not take any global configuration.
 
 #### Instance configuration
 
-| Option	| Example value		| Default value 	| Description		|
-|---------------|-----------------------|-----------------------|-----------------------|
-| `script`	| `script.lua`		| none			| Lua source file (relative to configuration file)|
+| Option		| Example value		| Default value 	| Description		|
+|-----------------------|-----------------------|-----------------------|-----------------------|
+| `script`		| `script.lua`		| none			| Lua source file (relative to configuration file) |
+| `default-handler`	| `handler`		| none			| Name of a function to be called as handler for all incoming channels (instead of the per-channel handlers) |
 
 A single instance may have multiple `script` options specified, which will all be read cumulatively.
 

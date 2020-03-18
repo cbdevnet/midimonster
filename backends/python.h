@@ -41,4 +41,7 @@ typedef struct /*_python_instance_data*/ {
 	size_t channels;
 	mmpython_channel* channel;
 	mmpython_channel* current_channel;
+
+	char* default_handler;
+	PyObject* handler;
 } python_instance_data;

@@ -19,23 +19,40 @@ The following functions are provided within the Lua interpreter for interaction 
 | `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel |
 | `input_channel()`		| `print(input_channel())`	| Returns the name of the input channel whose handler function is currently running or `nil` if in an `interval`'ed function (or the initial parse step) |
 | `timestamp()`			| `print(timestamp())`		| Returns the core timestamp for this iteration with millisecond resolution. This is not a performance timer, but intended for timeouting, etc |
+| `thread(function)`		| `thread(run_show)`		| Run a function as a Lua thread (see below) |
+| `sleep(number)`		| `sleep(100)`			| Suspend current thread for time specified in milliseconds |
 
 Example script:
-```
+```lua
 function bar(value)
-	output("foo", value / 2)
+	output("foo", value / 2);
 end
 
 step = 0
 function toggle()
-	output("bar", step * 1.0)
+	output("bar", step * 1.0);
 	step = (step + 1) % 2;
 end
 
+function run_show()
+	while(true) do
+		sleep(1000);
+		output("narf", 0);
+		sleep(1000);
+		output("narf", 1.0);
+	end
+end
+
 interval(toggle, 1000)
+thread(run_show)
 ```
 
 Input values range between 0.0 and 1.0, output values are clamped to the same range.
+
+Threads are implemented as Lua coroutines, not operating system threads. This means that
+cooperative multithreading is required, which can be achieved by calling the `sleep(number)`
+function from within a running thread. Calling that function from any other context is
+not supported.
 
 #### Global configuration
 
@@ -61,9 +78,10 @@ lua1.foo > lua2.bar
 
 #### Known bugs / problems
 
-Using any of the interface functions (`output`, `interval`, `input_value`, `output_value`, `input_channel`,
-`timestamp`) as an input channel name to a Lua instance will not call any handler functions.
-Using these names as arguments to the output and value interface functions works as intended.
+Using any of the interface functions (`output`, `interval`, etc.) as an input channel name to a
+Lua instance will not call any handler functions. Using these names as arguments to the output and
+value interface functions works as intended. When using a default handler, the default handler will
+be called.
 
 Output values will not trigger corresponding input event handlers unless the channel is mapped
 back in the MIDIMonster configuration. This is intentional.

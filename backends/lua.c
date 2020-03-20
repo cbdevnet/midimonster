@@ -10,6 +10,7 @@
 
 #define LUA_REGISTRY_KEY "_midimonster_lua_instance"
 #define LUA_REGISTRY_CURRENT_CHANNEL "_midimonster_lua_channel"
+#define LUA_REGISTRY_CURRENT_THREAD "_midimonster_lua_thread"
 
 static size_t timers = 0;
 static lua_timer* timer = NULL;
@@ -19,6 +20,9 @@ static int timer_fd = -1;
 #else
 static uint64_t last_timestamp;
 #endif
+
+static size_t threads = 0;
+static lua_thread* thread = NULL;
 
 MM_PLUGIN_API int init(){
 	backend lua = {
@@ -86,6 +90,12 @@ static int lua_update_timerfd(){
 			interval = timer[n].interval;
 		}
 	}
+
+	for(n = 0; n < threads; n++){
+		if(thread[n].timeout && (!interval || thread[n].timeout < interval)){
+			interval = thread[n].timeout;
+		}
+	}
 	DBGPF("Recalculating timers, minimum is %" PRIu64, interval);
 
 	//calculate gcd of all timers if any are active
@@ -100,7 +110,8 @@ static int lua_update_timerfd(){
 					gcd = residual;
 				}
 				//since we round everything, 10 is the lowest interval we get
-				if(interval == 10){
+				if(interval <= 10){
+					interval = 10;
 					break;
 				}
 			}
@@ -123,6 +134,89 @@ static int lua_update_timerfd(){
 	timerfd_settime(timer_fd, 0, &timer_config, NULL);
 	#endif
 	timer_interval = interval;
+	return 0;
+}
+
+static void lua_thread_resume(size_t current_thread){
+	//push coroutine reference
+	lua_pushstring(thread[current_thread].thread, LUA_REGISTRY_CURRENT_THREAD);
+	lua_pushnumber(thread[current_thread].thread, current_thread);
+	lua_settable(thread[current_thread].thread, LUA_REGISTRYINDEX);
+
+	//call thread main
+	DBGPF("Resuming thread %" PRIsize_t " on %s", current_thread, thread[current_thread].instance->name);
+	if(lua_resume(thread[current_thread].thread, NULL, 0) != LUA_YIELD){
+		DBGPF("Thread %" PRIsize_t " on %s terminated", current_thread, thread[current_thread].instance->name);
+		thread[current_thread].timeout = 0;
+	}
+
+	//remove coroutine reference
+	lua_pushstring(thread[current_thread].thread, LUA_REGISTRY_CURRENT_THREAD);
+	lua_pushnil(thread[current_thread].thread);
+	lua_settable(thread[current_thread].thread, LUA_REGISTRYINDEX);
+}
+
+static int lua_callback_thread(lua_State* interpreter){
+	instance* inst = NULL;
+	size_t u = threads;
+	if(lua_gettop(interpreter) != 1){
+		LOGPF("Thread function called with %d arguments, expected function", lua_gettop(interpreter));
+		return 0;
+	}
+
+	luaL_checktype(interpreter, 1, LUA_TFUNCTION);
+
+	//get instance pointer from registry
+	lua_pushstring(interpreter, LUA_REGISTRY_KEY);
+	lua_gettable(interpreter, LUA_REGISTRYINDEX);
+	inst = (instance*) lua_touserdata(interpreter, -1);
+
+	//make space for a new thread
+	thread = realloc(thread, (threads + 1) * sizeof(lua_thread));
+	if(!thread){
+		threads = 0;
+		LOG("Failed to allocate memory");
+		return 0;
+	}
+	threads++;
+
+	thread[u].thread = lua_newthread(interpreter);
+	thread[u].instance = inst;
+	thread[u].timeout = 0;
+	thread[u].reference = luaL_ref(interpreter, LUA_REGISTRYINDEX);
+
+	DBGPF("Registered thread %" PRIsize_t " on %s", threads, inst->name);
+
+	//push thread main
+	luaL_checktype(interpreter, 1, LUA_TFUNCTION);
+	lua_pushvalue(interpreter, 1);
+	lua_xmove(interpreter, thread[u].thread, 1);
+
+	lua_thread_resume(u);
+	lua_update_timerfd();
+	return 0;
+}
+
+static int lua_callback_sleep(lua_State* interpreter){
+	uint64_t timeout = 0;
+	size_t current_thread = threads;
+	if(lua_gettop(interpreter) != 1){
+		LOGPF("Sleep function called with %d arguments, expected number", lua_gettop(interpreter));
+		return 0;
+	}
+
+	timeout = luaL_checkinteger(interpreter, 1);
+
+	lua_pushstring(interpreter, LUA_REGISTRY_CURRENT_THREAD);
+	lua_gettable(interpreter, LUA_REGISTRYINDEX);
+
+	current_thread = luaL_checkinteger(interpreter, -1);
+
+	if(current_thread < threads){
+		DBGPF("Yielding for %" PRIu64 "msec on thread %" PRIsize_t, timeout, current_thread);
+		thread[current_thread].timeout = timeout;
+		lua_yield(interpreter, 0);
+	}
 	return 0;
 }
 
@@ -341,6 +435,8 @@ static int lua_instance(instance* inst){
 	lua_register(data->interpreter, "output_value", lua_callback_output_value);
 	lua_register(data->interpreter, "input_channel", lua_callback_input_channel);
 	lua_register(data->interpreter, "timestamp", lua_callback_timestamp);
+	lua_register(data->interpreter, "thread", lua_callback_thread);
+	lua_register(data->interpreter, "sleep", lua_callback_sleep);
 
 	//store instance pointer to the lua state
 	lua_pushstring(data->interpreter, LUA_REGISTRY_KEY);
@@ -454,6 +550,17 @@ static int lua_handle(size_t num, managed_fd* fds){
 			}
 		}
 	}
+
+	//check for threads to wake up
+	for(n = 0; n < threads; n++){
+		if(thread[n].timeout && delta >= thread[n].timeout){
+			lua_thread_resume(n);
+			lua_update_timerfd();
+		}
+		else if(thread[n].timeout){
+			thread[n].timeout -= delta;
+		}
+	}
 	return 0;
 }
 
@@ -468,6 +575,8 @@ static int lua_start(size_t n, instance** inst){
 			//exclude reserved names
 			if(!data->default_handler
 					&& strcmp(data->channel_name[p], "output")
+					&& strcmp(data->channel_name[p], "thread")
+					&& strcmp(data->channel_name[p], "sleep")
 					&& strcmp(data->channel_name[p], "input_value")
 					&& strcmp(data->channel_name[p], "output_value")
 					&& strcmp(data->channel_name[p], "input_channel")
@@ -526,6 +635,9 @@ static int lua_shutdown(size_t n, instance** inst){
 	free(timer);
 	timer = NULL;
 	timers = 0;
+	free(thread);
+	thread = NULL;
+	threads = 0;
 	#ifdef MMBACKEND_LUA_TIMERFD
 	close(timer_fd);
 	timer_fd = -1;

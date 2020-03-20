@@ -39,3 +39,10 @@ typedef struct /*_lua_interval_callback*/ {
 	lua_State* interpreter;
 	int reference;
 } lua_timer;
+
+typedef struct /*_lua_coroutine*/ {
+	instance* instance;
+	lua_State* thread;
+	int reference;
+	uint64_t timeout;
+} lua_thread;

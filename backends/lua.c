@@ -245,13 +245,13 @@ static int lua_callback_output(lua_State* interpreter){
 
 	//find correct channel & output value
 	for(n = 0; n < data->channels; n++){
-		if(!strcmp(channel_name, data->channel_name[n])){
+		if(!strcmp(channel_name, data->channel[n].name)){
 			channel = mm_channel(inst, n, 0);
 			if(!channel){
 				return 0;
 			}
 			mm_channel_event(channel, val);
-			data->output[n] = val.normalised;
+			data->channel[n].out = val.normalised;
 			return 0;
 		}
 	}
@@ -357,8 +357,8 @@ static int lua_callback_value(lua_State* interpreter, uint8_t input){
 
 	//find correct channel & return value
 	for(n = 0; n < data->channels; n++){
-		if(!strcmp(channel_name, data->channel_name[n])){
-			lua_pushnumber(interpreter, (input) ? data->input[n] : data->output[n]);
+		if(!strcmp(channel_name, data->channel[n].name)){
+			lua_pushnumber(interpreter, (input) ? data->channel[n].in : data->channel[n].out);
 			return 1;
 		}
 	}
@@ -453,26 +453,23 @@ static channel* lua_channel(instance* inst, char* spec, uint8_t flags){
 
 	//find matching channel
 	for(u = 0; u < data->channels; u++){
-		if(!strcmp(spec, data->channel_name[u])){
+		if(!strcmp(spec, data->channel[u].name)){
 			break;
 		}
 	}
 
 	//allocate new channel
 	if(u == data->channels){
-		data->channel_name = realloc(data->channel_name, (u + 1) * sizeof(char*));
-		data->reference = realloc(data->reference, (u + 1) * sizeof(int));
-		data->input = realloc(data->input, (u + 1) * sizeof(double));
-		data->output = realloc(data->output, (u + 1) * sizeof(double));
-		if(!data->channel_name || !data->reference || !data->input || !data->output){
+		data->channel = realloc(data->channel, (data->channels + 1) * sizeof(lua_channel_data));
+		if(!data->channel){
 			LOG("Failed to allocate memory");
+			data->channels = 0;
 			return NULL;
 		}
 
-		data->reference[u] = LUA_NOREF;
-		data->input[u] = data->output[u] = 0.0;
-		data->channel_name[u] = strdup(spec);
-		if(!data->channel_name[u]){
+		data->channel[u].in = data->channel[u].out = 0.0;
+		data->channel[u].name = strdup(spec);
+		if(!data->channel[u].name){
 			LOG("Failed to allocate memory");
 			return NULL;
 		}
@@ -483,23 +480,24 @@ static channel* lua_channel(instance* inst, char* spec, uint8_t flags){
 }
 
 static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
-	size_t n = 0;
+	size_t n = 0, ident;
 	lua_instance_data* data = (lua_instance_data*) inst->impl;
 
 	//handle all incoming events
 	for(n = 0; n < num; n++){
-		data->input[c[n]->ident] = v[n].normalised;
+		ident = c[n]->ident;
+		data->channel[ident].in = v[n].normalised;
 		//call lua channel handlers if present
-		if(data->reference[c[n]->ident] != LUA_NOREF){
+		if(data->channel[ident].reference != LUA_NOREF){
 			//push the channel name
 			lua_pushstring(data->interpreter, LUA_REGISTRY_CURRENT_CHANNEL);
-			lua_pushstring(data->interpreter, data->channel_name[c[n]->ident]);
+			lua_pushstring(data->interpreter, data->channel[ident].name);
 			lua_settable(data->interpreter, LUA_REGISTRYINDEX);
 
-			lua_rawgeti(data->interpreter, LUA_REGISTRYINDEX, data->reference[c[n]->ident]);
+			lua_rawgeti(data->interpreter, LUA_REGISTRYINDEX, data->channel[ident].reference);
 			lua_pushnumber(data->interpreter, v[n].normalised);
 			if(lua_pcall(data->interpreter, 1, 0, 0) != LUA_OK){
-				LOGPF("Failed to call handler for %s.%s: %s", inst->name, data->channel_name[c[n]->ident], lua_tostring(data->interpreter, -1));
+				LOGPF("Failed to call handler for %s.%s: %s", inst->name, data->channel[ident].name, lua_tostring(data->interpreter, -1));
 				lua_pop(data->interpreter, 1);
 			}
 		}
@@ -564,37 +562,51 @@ static int lua_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
+static int lua_resolve_symbol(lua_State* interpreter, char* symbol){
+	int reference = LUA_REFNIL;
+
+	//exclude reserved names
+	if(!strcmp(symbol, "output")
+			|| !strcmp(symbol, "thread")
+			|| !strcmp(symbol, "sleep")
+			|| !strcmp(symbol, "input_value")
+			|| !strcmp(symbol, "output_value")
+			|| !strcmp(symbol, "input_channel")
+			|| !strcmp(symbol, "timestamp")
+			|| !strcmp(symbol, "interval")){
+		return LUA_NOREF;
+	}
+
+	lua_getglobal(interpreter, symbol);
+	reference = luaL_ref(interpreter, LUA_REGISTRYINDEX);
+	if(reference == LUA_REFNIL){
+		return LUA_NOREF;
+	}
+	return reference;
+}
+
 static int lua_start(size_t n, instance** inst){
 	size_t u, p;
 	lua_instance_data* data = NULL;
+	int default_handler;
 
 	//resolve channels to their handler functions
 	for(u = 0; u < n; u++){
 		data = (lua_instance_data*) inst[u]->impl;
-		for(p = 0; p < data->channels; p++){
-			//exclude reserved names
-			if(!data->default_handler
-					&& strcmp(data->channel_name[p], "output")
-					&& strcmp(data->channel_name[p], "thread")
-					&& strcmp(data->channel_name[p], "sleep")
-					&& strcmp(data->channel_name[p], "input_value")
-					&& strcmp(data->channel_name[p], "output_value")
-					&& strcmp(data->channel_name[p], "input_channel")
-					&& strcmp(data->channel_name[p], "timestamp")
-					&& strcmp(data->channel_name[p], "interval")){
-				lua_getglobal(data->interpreter, data->channel_name[p]);
-				data->reference[p] = luaL_ref(data->interpreter, LUA_REGISTRYINDEX);
-				if(data->reference[p] == LUA_REFNIL){
-					data->reference[p] = LUA_NOREF;
-				}
+		default_handler = LUA_NOREF;
+
+		//try to resolve default handler if given
+		if(data->default_handler){
+			default_handler = lua_resolve_symbol(data->interpreter, data->default_handler);
+			if(default_handler == LUA_NOREF){
+				LOGPF("Failed to resolve default handler %s on %s", data->default_handler, inst[u]->name);
 			}
-			else if(data->default_handler){
-				lua_getglobal(data->interpreter, data->default_handler);
-				data->reference[p] = luaL_ref(data->interpreter, LUA_REGISTRYINDEX);
-				if(data->reference[p] == LUA_REFNIL){
-					data->reference[p] = LUA_NOREF;
-					LOGPF("Failed to resolve default handler function %s on instance %s", data->default_handler, inst[u]->name);
-				}
+		}
+
+		for(p = 0; p < data->channels; p++){
+			data->channel[p].reference = default_handler;
+			if(!data->default_handler){
+				data->channel[p].reference = lua_resolve_symbol(data->interpreter, data->channel[p].name);
 			}
 		}
 	}
@@ -621,12 +633,9 @@ static int lua_shutdown(size_t n, instance** inst){
 		lua_close(data->interpreter);
 		//cleanup channel data
 		for(p = 0; p < data->channels; p++){
-			free(data->channel_name[p]);
+			free(data->channel[p].name);
 		}
-		free(data->channel_name);
-		free(data->reference);
-		free(data->input);
-		free(data->output);
+		free(data->channel);
 		free(data->default_handler);
 		free(inst[u]->impl);
 	}

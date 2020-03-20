@@ -78,7 +78,8 @@ static void python_timer_recalculate(){
 				}
 
 				//10msec is absolute lower limit and minimum gcd due to rounding
-				if(next_interval == 10){
+				if(next_interval <= 10){
+					next_interval = 10;
 					break;
 				}
 			}

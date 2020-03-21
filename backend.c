@@ -16,9 +16,21 @@ static struct {
 	.n = 0
 };
 
-//TODO move channel store into registry
-static size_t nchannels = 0;
-static channel** channels = NULL;
+//the global channel store was converted from a naive list to a hashmap of lists for performance reasons
+static struct {
+	//channelstore hash is set up for 256 buckets
+	size_t n[256];
+	channel** entry[256];
+} channels = {
+	.n = {
+		0
+	}
+};
+
+static size_t channelstore_hash(instance* inst, uint64_t ident){
+	uint64_t repr = ((uint64_t) inst) ^ ident;
+	return (repr ^ (repr >> 8) ^ (repr >> 16) ^ (repr >> 24) ^ (repr >> 32)) & 0xFF;
+}
 
 int backends_handle(size_t nfds, managed_fd* fds){
 	size_t u, p, n;
@@ -81,11 +93,12 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 }
 
 MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
-	size_t u;
-	for(u = 0; u < nchannels; u++){
-		if(channels[u]->instance == inst && channels[u]->ident == ident){
-			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing\n", ident, inst->name);
-			return channels[u];
+	size_t u, bucket = channelstore_hash(inst, ident);
+	for(u = 0; u < channels.n[bucket]; u++){
+		if(channels.entry[bucket][u]->instance == inst
+				&& channels.entry[bucket][u]->ident == ident){
+			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing (%" PRIsize_t " search steps)\n", ident, inst->name, u);
+			return channels.entry[bucket][u];
 		}
 	}
 
@@ -94,24 +107,23 @@ MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 		return NULL;
 	}
 
-	DBGPF("Creating previously unknown channel %" PRIu64 " on instance %s\n", ident, inst->name);
-	channel** new_chan = realloc(channels, (nchannels + 1) * sizeof(channel*));
-	if(!new_chan){
+	DBGPF("Creating previously unknown channel %" PRIu64 " on instance %s, bucket %" PRIsize_t "\n", ident, inst->name, bucket);
+	channels.entry[bucket] = realloc(channels.entry[bucket], (channels.n[bucket] + 1) * sizeof(channel*));
+	if(!channels.entry[bucket]){
 		fprintf(stderr, "Failed to allocate memory\n");
-		nchannels = 0;
+		channels.n[bucket] = 0;
 		return NULL;
 	}
 
-	channels = new_chan;
-	channels[nchannels] = calloc(1, sizeof(channel));
-	if(!channels[nchannels]){
+	channels.entry[bucket][channels.n[bucket]] = calloc(1, sizeof(channel));
+	if(!channels.entry[bucket][channels.n[bucket]]){
 		fprintf(stderr, "Failed to allocate memory\n");
 		return NULL;
 	}
 
-	channels[nchannels]->instance = inst;
-	channels[nchannels]->ident = ident;
-	return channels[nchannels++];
+	channels.entry[bucket][channels.n[bucket]]->instance = inst;
+	channels.entry[bucket][channels.n[bucket]]->ident = ident;
+	return channels.entry[bucket][(channels.n[bucket]++)];
 }
 
 instance* mm_instance(backend* b){
@@ -190,21 +202,6 @@ MM_API int mm_backend_instances(char* name, size_t* ninst, instance*** inst){
 	}
 	return 1;
 }
-
-void channels_free(){
-	size_t u;
-	for(u = 0; u < nchannels; u++){
-		DBGPF("Destroying channel %" PRIu64 " on instance %s\n", channels[u]->ident, channels[u]->instance->name);
-		if(channels[u]->impl && channels[u]->instance->backend->channel_free){
-			channels[u]->instance->backend->channel_free(channels[u]);
-		}
-		free(channels[u]);
-		channels[u] = NULL;
-	}
-	free(channels);
-	nchannels = 0;
-}
-
 
 backend* backend_match(char* name){
 	size_t u;
@@ -304,6 +301,24 @@ int backends_start(){
 		rv |= current;
 	}
 	return rv;
+}
+
+static void channels_free(){
+	size_t u, p;
+	for(u = 0; u < sizeof(channels.n) / sizeof(channels.n[0]); u++){
+		DBGPF("Cleaning up channel registry bucket %" PRIsize_t " with %" PRIsize_t " channels", u, channels.n[u]);
+		for(p = 0; p < channels.n[u]; p++){
+			DBGPF("Destroying channel %" PRIu64 " on instance %s\n", channels.entry[u][p]->ident, channels.entry[u][p]->instance->name);
+			//call the channel_free function if the backend supports it
+			if(channels.entry[u][p]->impl && channels.entry[u][p]->instance->backend->channel_free){
+				channels.entry[u][p]->instance->backend->channel_free(channels.entry[u][p]);
+			}
+			free(channels.entry[u][p]);
+		}
+		free(channels.entry[u]);
+		channels.entry[u] = NULL;
+		channels.n[u] = 0;
+	}
 }
 
 int backends_stop(){

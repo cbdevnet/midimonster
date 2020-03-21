@@ -116,7 +116,6 @@ static PyObject* mmpy_output(PyObject* self, PyObject* args){
 	instance* inst = *((instance**) PyModule_GetState(self));
 	python_instance_data* data = (python_instance_data*) inst->impl;
 	const char* channel_name = NULL;
-	channel* chan = NULL;
 	channel_value val = {
 		{0}
 	};
@@ -127,19 +126,22 @@ static PyObject* mmpy_output(PyObject* self, PyObject* args){
 	}
 
 	val.normalised = clamp(val.normalised, 1.0, 0.0);
+	//if not started yet, create any requested channels so we can set them at load time
+	if(!last_timestamp){
+		python_channel(inst, (char*) channel_name, mmchannel_output);
+	}
 
 	for(u = 0; u < data->channels; u++){
 		if(!strcmp(data->channel[u].name, channel_name)){
 			DBGPF("Setting channel %s.%s to %f", inst->name, channel_name, val.normalised);
-			chan = mm_channel(inst, u, 0);
-			//this should never happen
-			if(!chan){
-				LOGPF("Failed to fetch parsed channel %s.%s", inst->name, channel_name);
-				break;
-			}
 			data->channel[u].out = val.normalised;
-			mm_channel_event(chan, val);
-			break;
+			if(!last_timestamp){
+				data->channel[u].mark = 1;
+			}
+			else{
+				mm_channel_event(mm_channel(inst, u, 0), val);
+			}
+			return 0;
 		}
 	}
 
@@ -636,6 +638,7 @@ static PyObject* python_resolve_symbol(char* spec_raw){
 static int python_start(size_t n, instance** inst){
 	python_instance_data* data = NULL;
 	size_t u, p;
+	channel_value v;
 
 	//resolve channel references to handler functions
 	for(u = 0; u < n; u++){
@@ -655,6 +658,11 @@ static int python_start(size_t n, instance** inst){
 			}
 			else{
 				data->channel[p].handler = python_resolve_symbol(data->channel[p].name);
+			}
+			//push initial values
+			if(data->channel[p].mark){
+				v.normalised = data->channel[p].out;
+				mm_channel_event(mm_channel(inst[u], p, 0), v);
 			}
 		}
 

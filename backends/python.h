@@ -16,6 +16,7 @@ typedef struct /*_python_channel_data*/ {
 	PyObject* handler;
 	double in;
 	double out;
+	uint8_t mark;
 } mmpython_channel;
 
 typedef struct /*_mmpy_registered_socket*/ {

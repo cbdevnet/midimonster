@@ -17,9 +17,8 @@ static lua_timer* timer = NULL;
 uint64_t timer_interval = 0;
 #ifdef MMBACKEND_LUA_TIMERFD
 static int timer_fd = -1;
-#else
-static uint64_t last_timestamp;
 #endif
+static uint64_t last_timestamp = 0;
 
 static size_t threads = 0;
 static lua_thread* thread = NULL;
@@ -224,7 +223,6 @@ static int lua_callback_output(lua_State* interpreter){
 	size_t n = 0;
 	channel_value val;
 	const char* channel_name = NULL;
-	channel* channel = NULL;
 	instance* inst = NULL;
 	lua_instance_data* data = NULL;
 
@@ -243,15 +241,21 @@ static int lua_callback_output(lua_State* interpreter){
 	channel_name = lua_tostring(interpreter, 1);
 	val.normalised = clamp(luaL_checknumber(interpreter, 2), 1.0, 0.0);
 
+	//if not started yet, create any requested channels so scripts may set them at load time
+	if(!last_timestamp && channel_name){
+		lua_channel(inst, (char*) channel_name, mmchannel_output);
+	}
+
 	//find correct channel & output value
 	for(n = 0; n < data->channels; n++){
 		if(!strcmp(channel_name, data->channel[n].name)){
-			channel = mm_channel(inst, n, 0);
-			if(!channel){
-				return 0;
-			}
-			mm_channel_event(channel, val);
 			data->channel[n].out = val.normalised;
+			if(!last_timestamp){
+				data->channel[n].mark = 1;
+			}
+			else{
+				mm_channel_event(mm_channel(inst, n, 0), val);
+			}
 			return 0;
 		}
 	}
@@ -589,6 +593,7 @@ static int lua_start(size_t n, instance** inst){
 	size_t u, p;
 	lua_instance_data* data = NULL;
 	int default_handler;
+	channel_value v;
 
 	//resolve channels to their handler functions
 	for(u = 0; u < n; u++){
@@ -608,6 +613,11 @@ static int lua_start(size_t n, instance** inst){
 			if(!data->default_handler){
 				data->channel[p].reference = lua_resolve_symbol(data->interpreter, data->channel[p].name);
 			}
+			//push initial values
+			if(data->channel[p].mark){
+				v.normalised = data->channel[p].out;
+				mm_channel_event(mm_channel(inst[u], p, 0), v);
+			}
 		}
 	}
 
@@ -617,9 +627,8 @@ static int lua_start(size_t n, instance** inst){
 	if(mm_manage_fd(timer_fd, BACKEND_NAME, 1, NULL)){
 		return 1;
 	}
-	#else
-	last_timestamp = mm_timestamp();
 	#endif
+	last_timestamp = mm_timestamp();
 	return 0;
 }
 

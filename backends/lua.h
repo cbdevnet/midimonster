@@ -27,6 +27,7 @@ typedef struct /*_lua_channel*/ {
 	int reference;
 	double in;
 	double out;
+	uint8_t mark;
 } lua_channel_data;
 
 typedef struct /*_lua_instance_data*/ {

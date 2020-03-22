@@ -7,7 +7,7 @@
 
 /* Core version unless set by the build process */
 #ifndef MIDIMONSTER_VERSION
-	#define MIDIMONSTER_VERSION "v0.3-dist"
+	#define MIDIMONSTER_VERSION "v0.5-dist"
 #endif
 
 /* Set backend name if unset */
@@ -93,8 +93,9 @@ struct _managed_fd;
  * 		Parse backend-global configuration options from the user-supplied
  * 		configuration file. Returning a non-zero value fails config parsing.
  * 	* mmbackend_instance
- * 		Allocate space for a backend instance. Returning NULL signals an out-of-memory
- * 		condition and terminates the program.
+ * 		Allocate the backend-specific data parts of the supplied instance
+ * 		structure. Returning non-zero signals an error condition and
+ * 		terminates the program.
  * 	* mmbackend_configure_instance
  * 		Parse instance configuration from the user-supplied configuration
  * 		file. Returning a non-zero value fails config parsing.
@@ -135,7 +136,7 @@ struct _managed_fd;
  *		Return value is currently ignored.
  */
 typedef int (*mmbackend_handle_event)(struct _backend_instance* inst, size_t channels, struct _backend_channel** c, struct _channel_value* v);
-typedef struct _backend_instance* (*mmbackend_create_instance)();
+typedef int (*mmbackend_create_instance)(struct _backend_instance* inst);
 typedef struct _backend_channel* (*mmbackend_parse_channel)(struct _backend_instance* instance, char* spec, uint8_t flags);
 typedef void (*mmbackend_free_channel)(struct _backend_channel* c);
 typedef int (*mmbackend_configure)(char* option, char* value);
@@ -189,33 +190,10 @@ typedef struct _backend_instance {
 	char* name;
 } instance;
 
-/*
- * Channel specification glob
- */
-typedef struct /*_mm_channel_glob*/ {
-	size_t offset[2];
-	union {
-		void* impl;
-		uint64_t u64[2];
-	} limits;
-	uint64_t values;
-} channel_glob;
-
-/*
- * (Multi-)Channel specification
- */
-typedef struct /*_mm_channel_spec*/ {
-	char* spec;
-	uint8_t internal;
-	size_t channels;
-	size_t globs;
-	channel_glob* glob;
-} channel_spec;
-
 /* 
  * Instance channel structure
- * Backends may either manage their own channel registry
- * or use the memory returned by mm_channel()
+ * Backends may either manage their own channel registry or use the global
+ * channel store via the mm_channel() API
  */
 typedef struct _backend_channel {
 	instance* instance;
@@ -224,7 +202,7 @@ typedef struct _backend_channel {
 } channel;
 
 /*
- * File descriptor management structure
+ * File descriptor structure passed for backend handling
  * Register for the core event loop using mm_manage_fd()
  */
 typedef struct _managed_fd {
@@ -233,68 +211,48 @@ typedef struct _managed_fd {
 	void* impl;
 } managed_fd;
 
-/* Internal channel mapping structure - Core use only */
-typedef struct /*_mm_channel_mapping*/ {
-	channel* from;
-	size_t destinations;
-	channel** to;
-} channel_mapping;
-
 /*
  * Register a new backend.
  */
 MM_API int mm_backend_register(backend b);
 
 /*
- * Provides a pointer to a newly (zero-)allocated instance.
- * All instance pointers need to be allocated via this API
- * in order to be assignable from the configuration parser.
- * This API should be called from the mmbackend_create_instance
- * call of your backend.
- *
- * Instances returned from this call are freed by midimonster.
- * The contents of the impl members should be freed in the
- * mmbackend_shutdown procedure of the backend, eg. by querying
- * all instances for the backend.
- */
-MM_API instance* mm_instance();
-
-/*
  * Finds an instance matching the specified backend and identifier.
- * Since setting an identifier for an instance is optional,
- * this may not work depending on the backend.
- * Instance identifiers may for example be set in the backends
- * mmbackend_start call.
+ * Since setting an identifier for an instance is optional, this may not work
+ * depending on the backend. Instance identifiers may for example be set in the
+ * backends mmbackend_start call.
  */
 MM_API instance* mm_instance_find(char* backend, uint64_t ident);
 
 /*
- * Provides a pointer to a channel structure, pre-filled with
- * the provided instance reference and identifier.
- * The `create` parameter is a boolean flag indicating whether
- * a channel matching the `ident` parameter should be created if
- * none exists. If the instance already registered a channel
- * matching `ident`, a pointer to it is returned.
- * This API is just a convenience function. The array of channels is
- * only used for mapping internally, creating and managing your own
- * channel store is possible.
+ * Provides a pointer to a channel structure, pre-filled with the provided
+ * instance reference and identifier.
+ * The `create` parameter is a boolean flag indicating whether a channel
+ * matching the `ident` parameter should be created in the global channel store
+ * if none exists yet. If the instance already registered a channel matching
+ * `ident`, a pointer to the existing channel is returned.
+ * This API is just a convenience function. Creating and managing a
+ * backend-internal channel store is possible (and encouraged for performance
+ * reasons). When returning pointers from a backend-local channel store, the
+ * returned pointers must stay valid over the lifetime of the instance and
+ * provide valid `instance` members, as they are used for callbacks.
  * For each channel with a non-NULL `impl` field registered using
  * this function, the backend will receive a call to its channel_free
- * function.
+ * function (if it exists).
  */
 MM_API channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
-//TODO channel* mm_channel_find()
 
 /*
- * Register (manage = 1) or unregister (manage = 0) a file descriptor
- * to be selected on. The backend will be notified when the descriptor
- * becomes ready to read via its registered mmbackend_process_fd call.
+ * Register (manage = 1) or unregister (manage = 0) a file descriptor to be
+ * selected on. The backend will be notified when the descriptor becomes ready
+ * to read via its registered mmbackend_process_fd call. The `impl` argument
+ * will be provided within the corresponding managed_fd structure upon callback.
  */
 MM_API int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 
 /*
- * Notifies the core of a channel event. Called by backends to
- * inject events gathered from their backing implementation.
+ * Notifies the core of a channel event. Called by backends to inject events
+ * gathered from their backing implementation.
  */
 MM_API int mm_channel_event(channel* c, channel_value v);
 
@@ -306,14 +264,14 @@ MM_API int mm_backend_instances(char* backend, size_t* n, instance*** i);
 
 /*
  * Query an internal timestamp, which is updated every core iteration.
- * This timestamp should not be used as a performance counter, but can be
- * used for timeouting. Resolution is milliseconds.
+ * This timestamp should not be used as a performance counter, but can be used
+ * for timeouting. Resolution is milliseconds.
  */
 MM_API uint64_t mm_timestamp();
 
 /*
- * Create a channel-to-channel mapping. This API should not
- * be used by backends. It is only exported for core modules.
+ * Create a channel-to-channel mapping. This API should not be used by backends.
+ * It is only exported for core modules.
  */
 int mm_map_channel(channel* from, channel* to);
 #endif

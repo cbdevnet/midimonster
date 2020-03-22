@@ -1,9 +1,10 @@
 #include "midimonster.h"
 
 MM_PLUGIN_API int init();
+static uint32_t sacn_interval();
 static int sacn_configure(char* option, char* value);
 static int sacn_configure_instance(instance* instance, char* option, char* value);
-static instance* sacn_instance();
+static int sacn_instance(instance* inst);
 static channel* sacn_channel(instance* instance, char* spec, uint8_t flags);
 static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int sacn_handle(size_t num, managed_fd* fds);
@@ -12,7 +13,11 @@ static int sacn_shutdown(size_t n, instance** inst);
 
 #define SACN_PORT "5568"
 #define SACN_RECV_BUF 8192
-#define SACN_KEEPALIVE_INTERVAL 2000
+//spec 6.6.2.1
+#define SACN_KEEPALIVE_INTERVAL 1000
+//spec 6.6.1
+#define SACN_FRAME_TIMEOUT 20
+#define SACN_SYNTHESIZE_MARGIN 10
 #define SACN_DISCOVERY_TIMEOUT 9000
 #define SACN_PDU_MAGIC "ASC-E1.17\0\0\0"
 
@@ -31,10 +36,12 @@ typedef struct /*_sacn_universe_model*/ {
 	uint8_t in[512];
 	uint8_t out[512];
 	uint16_t map[512];
+	channel channel[512];
 } sacn_universe;
 
 typedef struct /*_sacn_instance_model*/ {
 	uint16_t uni;
+	uint8_t realtime;
 	uint8_t xmit_prio;
 	uint8_t cid_filter[16];
 	uint8_t filter_enabled;
@@ -54,11 +61,16 @@ typedef union /*_sacn_instance_id*/ {
 	uint64_t label;
 } sacn_instance_id;
 
+typedef struct /*_sacn_output_universe*/ {
+	uint16_t universe;
+	uint64_t last_frame;
+	uint8_t mark;
+} sacn_output_universe;
+
 typedef struct /*_sacn_socket*/ {
 	int fd;
 	size_t universes;
-	uint16_t* universe;
-	uint64_t* last_frame;
+	sacn_output_universe* universe;
 } sacn_fd;
 
 #pragma pack(push, 1)

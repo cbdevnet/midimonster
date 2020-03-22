@@ -1,0 +1,22 @@
+#include "midimonster.h"
+
+0 ICON "midimonster.ico"
+1 VERSIONINFO
+BEGIN
+	BLOCK "StringFileInfo"
+	BEGIN
+		BLOCK "040904E4"
+		BEGIN
+			VALUE "CompanyName", "control8r"
+			VALUE "FileDescription", "MIDIMonster"
+			VALUE "InternalName", "MIDIMonster Core (Windows Build)"
+			VALUE "FileVersion", MIDIMONSTER_VERSION
+			VALUE "OriginalFilename", "midimonster.exe"
+			VALUE "ProductName", "MIDIMonster"
+		END
+	END
+	BLOCK "VarFileInfo"
+	BEGIN
+		VALUE "Translation", 0x0409, 1252
+	END
+END

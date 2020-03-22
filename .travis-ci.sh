@@ -1,84 +1,113 @@
 #!/bin/bash
 
-# This script is triggered from the script section of .travis.yml
-# It runs the appropriate commands depending on the task requested.
+if [ "$TASK" = "spellcheck" ]; then
+	result=0
+	# Create list of files to be spellchecked
+	spellcheck_files=$(find . -type f | grep -v ".git/")
 
-set -e
+	# Run spellintian to find spelling errors
+	sl_results=$(xargs spellintian 2>&1 <<< "$spellcheck_files")
 
-COVERITY_SCAN_BUILD_URL="https://scan.coverity.com/scripts/travisci_build_coverity_scan.sh"
+	sl_errors=$(wc -l <<< "$sl_results")
+	sl_errors_dups=$((grep "\(duplicate word\)" | wc -l) <<< "$sl_results")
+	sl_errors_nodups=$((grep -v "\(duplicate word\)" | wc -l) <<< "$sl_results")
 
-SPELLINGBLACKLIST=$(cat <<-BLACKLIST
-      -wholename "./.git/*"
-BLACKLIST
-)
+	if [ "$sl_errors" -ne 0 ]; then
+		printf "Spellintian found %s errors (%s spelling, %s duplicate words):\n\n" "$sl_errors" "$sl_errors_nodups" "$sl_errors_dups"
+		printf "%s\n\n" "$sl_results"
+		result=1
+	else
+		printf "Spellintian reports no errors\n"
+	fi
 
-if [[ $TASK = 'spellintian' ]]; then
-  # run spellintian only if it is the requested task, ignoring duplicate words
-  spellingfiles=$(eval "find ./ -type f -and ! \( \
-      $SPELLINGBLACKLIST \
-      \) | xargs")
-  # count the number of spellintian errors, ignoring duplicate words
-  spellingerrors=$(zrun spellintian $spellingfiles 2>&1 | grep -v "\(duplicate word\)" | wc -l)
-  if [[ $spellingerrors -ne 0 ]]; then
-    # print the output for info
-    zrun spellintian $spellingfiles | grep -v "\(duplicate word\)"
-    echo "Found $spellingerrors spelling errors via spellintian, ignoring duplicates"
-    exit 1;
-  else
-    echo "Found $spellingerrors spelling errors via spellintian, ignoring duplicates"
-  fi;
-elif [[ $TASK = 'spellintian-duplicates' ]]; then
-  # run spellintian only if it is the requested task
-  spellingfiles=$(eval "find ./ -type f -and ! \( \
-      $SPELLINGBLACKLIST \
-      \) | xargs")
-  # count the number of spellintian errors
-  spellingerrors=$(zrun spellintian $spellingfiles 2>&1 | wc -l)
-  if [[ $spellingerrors -ne 0 ]]; then
-    # print the output for info
-    zrun spellintian $spellingfiles
-    echo "Found $spellingerrors spelling errors via spellintian"
-    exit 1;
-  else
-    echo "Found $spellingerrors spelling errors via spellintian"
-  fi;
-elif [[ $TASK = 'codespell' ]]; then
-  # run codespell only if it is the requested task
-  spellingfiles=$(eval "find ./ -type f -and ! \( \
-      $SPELLINGBLACKLIST \
-      \) | xargs")
-  # count the number of codespell errors
-  spellingerrors=$(zrun codespell --check-filenames --check-hidden --quiet 2 --regex "[a-zA-Z0-9][\\-'a-zA-Z0-9]+[a-zA-Z0-9]" $spellingfiles 2>&1 | wc -l)
-  if [[ $spellingerrors -ne 0 ]]; then
-    # print the output for info
-    zrun codespell --check-filenames --check-hidden --quiet 2 --regex "[a-zA-Z0-9][\\-'a-zA-Z0-9]+[a-zA-Z0-9]" $spellingfiles
-    echo "Found $spellingerrors spelling errors via codespell"
-    exit 1;
-  else
-    echo "Found $spellingerrors spelling errors via codespell"
-  fi;
-elif [[ $TASK = 'coverity' ]]; then
-  # Run Coverity Scan unless token is zero length
-  # The Coverity Scan script also relies on a number of other COVERITY_SCAN_
-  # variables set in .travis.yml
-  if [[ ${#COVERITY_SCAN_TOKEN} -ne 0 ]]; then
-    curl -s $COVERITY_SCAN_BUILD_URL | bash
-  else
-    echo "Skipping Coverity Scan as no token found, probably a Pull Request"
-  fi;
-elif [[ $TASK = 'sanitize' ]]; then
-  # Run sanitized compile
-  travis_fold start "make_sanitize"
-  make sanitize;
-  travis_fold end "make_sanitize"
-elif [[ $TASK = 'windows' ]]; then
-  # Run sanitized compile
-  travis_fold start "make_windows"
-  make windows;
-  travis_fold end "make_windows"
+	# Run codespell to find some more
+	cs_results=$(xargs codespell --quiet 2 <<< "$spellcheck_files" 2>&1)
+	cs_errors=$(wc -l <<< "$cs_results")
+	if [ "$cs_errors" -ne 0 ]; then
+		printf "Codespell found %s errors:\n\n" "$cs_errors"
+		printf "%s\n\n" "$cs_results"
+		result=1
+	else
+		printf "Codespell reports no errors\n"
+	fi
+	exit "$result"
+elif [ "$TASK" = "codesmell" ]; then
+	result=0
+
+	if [ -z "$(which lizard)" ]; then
+		printf "Installing lizard...\n"
+		pip3 install lizard
+	fi
+
+	# Run shellcheck for all shell scripts
+	printf "Running shellcheck...\n"
+	shell_files="$(find . -type f -iname \*.sh)"
+	xargs shellcheck -Cnever -s bash <<< "$shell_files"
+	if [ "$?" -ne "0" ]; then
+		result=1
+	fi
+
+	# Run cloc for some stats
+	printf "Code statistics:\n\n"
+	cloc ./
+
+	# Run lizard for the project
+	printf "Running lizard for code complexity analysis\n"
+	lizard ./
+	if [ "$?" -ne "0" ]; then
+		result=1
+	fi
+
+	exit "$result"
+elif [ "$TASK" = "sanitize" ]; then
+	# Run sanitized compile
+	travis_fold start "make_sanitize"
+	if make sanitize; then
+		exit "$?"
+	fi
+	travis_fold end "make_sanitize"
+elif [ "$TASK" = "windows" ]; then
+	travis_fold start "make_windows"
+	if make windows; then
+		exit "$?"
+	fi
+	make -C backends lua.dll
+	travis_fold end "make_windows"
+	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
+		travis_fold start "deploy_windows"
+		mkdir ./deployment
+		mkdir ./deployment/backends
+		mkdir ./deployment/docs
+		cp ./midimonster.exe ./deployment/
+		cp ./backends/*.dll ./deployment/backends/
+		cp ./monster.cfg ./deployment/monster.cfg
+		cp ./backends/*.md ./deployment/docs/
+		cp -r ./configs ./deployment/
+		cd ./deployment
+		zip -r "./midimonster-$(git describe)-windows.zip" "./"
+		find . ! -iname '*.zip' -delete
+		travis_fold end "deploy_windows"
+	fi
 else
-  # Otherwise compile as normal
-  travis_fold start "make"
-  make full;
-  travis_fold end "make"
+	# Otherwise compile as normal
+	travis_fold start "make"
+	if make full; then
+		exit "$?"
+	fi
+	travis_fold end "make"
+	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
+		travis_fold start "deploy_unix"
+		mkdir ./deployment
+		mkdir ./deployment/backends
+		mkdir ./deployment/docs
+		cp ./midimonster ./deployment/
+		cp ./backends/*.so ./deployment/backends/
+		cp ./monster.cfg ./deployment/monster.cfg
+		cp ./backends/*.md ./deployment/docs/
+		cp -r ./configs ./deployment/
+		cd ./deployment
+		tar czf "midimonster-$(git describe)-$TRAVIS_OS_NAME.tgz" ./
+		find . ! -iname '*.tgz' -delete
+		travis_fold end "deploy_unix"
+	fi
 fi

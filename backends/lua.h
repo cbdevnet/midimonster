@@ -12,7 +12,7 @@
 MM_PLUGIN_API int init();
 static int lua_configure(char* option, char* value);
 static int lua_configure_instance(instance* inst, char* option, char* value);
-static instance* lua_instance();
+static int lua_instance(instance* inst);
 static channel* lua_channel(instance* inst, char* spec, uint8_t flags);
 static int lua_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int lua_handle(size_t num, managed_fd* fds);
@@ -22,13 +22,20 @@ static int lua_shutdown(size_t n, instance** inst);
 static uint32_t lua_interval();
 #endif
 
+typedef struct /*_lua_channel*/ {
+	char* name;
+	int reference;
+	double in;
+	double out;
+	uint8_t mark;
+} lua_channel_data;
+
 typedef struct /*_lua_instance_data*/ {
 	size_t channels;
-	char** channel_name;
-	int* reference;
-	double* input;
-	double* output;
+	lua_channel_data* channel;
+
 	lua_State* interpreter;
+	char* default_handler;
 } lua_instance_data;
 
 typedef struct /*_lua_interval_callback*/ {
@@ -37,3 +44,10 @@ typedef struct /*_lua_interval_callback*/ {
 	lua_State* interpreter;
 	int reference;
 } lua_timer;
+
+typedef struct /*_lua_coroutine*/ {
+	instance* instance;
+	lua_State* thread;
+	int reference;
+	uint64_t timeout;
+} lua_thread;

@@ -4,9 +4,10 @@
 #include "midimonster.h"
 
 MM_PLUGIN_API int init();
+static uint32_t artnet_interval();
 static int artnet_configure(char* option, char* value);
 static int artnet_configure_instance(instance* instance, char* option, char* value);
-static instance* artnet_instance();
+static int artnet_instance(instance* inst);
 static channel* artnet_channel(instance* instance, char* spec, uint8_t flags);
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int artnet_handle(size_t num, managed_fd* fds);
@@ -16,7 +17,11 @@ static int artnet_shutdown(size_t n, instance** inst);
 #define ARTNET_PORT "6454"
 #define ARTNET_VERSION 14
 #define ARTNET_RECV_BUF 4096
-#define ARTNET_KEEPALIVE_INTERVAL 2000
+
+#define ARTNET_KEEPALIVE_INTERVAL 1000
+//limit transmit rate to at most 44 packets per second (1000/44 ~= 22)
+#define ARTNET_FRAME_TIMEOUT 20
+#define ARTNET_SYNTHESIZE_MARGIN 10
 
 #define MAP_COARSE 0x0200
 #define MAP_FINE 0x0400
@@ -32,6 +37,7 @@ typedef struct /*_artnet_universe_model*/ {
 	uint8_t in[512];
 	uint8_t out[512];
 	uint16_t map[512];
+	channel channel[512];
 } artnet_universe;
 
 typedef struct /*_artnet_instance_model*/ {
@@ -52,11 +58,16 @@ typedef union /*_artnet_instance_id*/ {
 	uint64_t label;
 } artnet_instance_id;
 
+typedef struct /*_artnet_fd_universe*/ {
+	uint64_t label;
+	uint64_t last_frame;
+	uint8_t mark;
+} artnet_output_universe;
+
 typedef struct /*_artnet_fd*/ {
 	int fd;
 	size_t output_instances;
-	artnet_instance_id* output_instance;
-	uint64_t* last_frame;
+	artnet_output_universe* output_instance;
 } artnet_descriptor;
 
 #pragma pack(push, 1)

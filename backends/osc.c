@@ -562,21 +562,16 @@ static int osc_configure_instance(instance* inst, char* option, char* value){
 	return 1;
 }
 
-static instance* osc_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int osc_instance(instance* inst){
 	osc_instance_data* data = calloc(1, sizeof(osc_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 
 	data->fd = -1;
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static channel* osc_map_channel(instance* inst, char* spec, uint8_t flags){

@@ -26,6 +26,7 @@ This has the side effect of mirroring the output of instances on those descripto
 | `destination`	| `10.2.2.2`		| Universe multicast	| Destination address for unicast output. If unset, the multicast destination for the specified universe is used. |
 | `from`	| `0xAA 0xBB` ...	| none			| 16-byte input source CID filter. Setting this option filters the input stream for this universe. |
 | `unicast`	| `1`			| `0`			| Prevent this instance from joining its universe multicast group |
+| `realtime`	| `1`			| `0`			| Disable the recommended rate-limiting (approx. 44 packets per second) for this instance |
 
 Note that instances accepting multicast input also process unicast frames directed at them, while
 instances in `unicast` mode will not receive multicast frames.
@@ -49,9 +50,6 @@ A normal channel that is part of a wide channel can not be mapped individually.
 #### Known bugs / problems
 
 The DMX start code of transmitted and received universes is fixed as `0`.
-
-The (upper) limit on packet transmission rate mandated by section 6.6.1 of the sACN specification is disregarded.
-The rate of packet transmission is influenced by the rate of incoming mapped events on the instance.
 
 Universe synchronization is currently not supported, though this feature may be implemented in the future.
 

@@ -1,52 +1,68 @@
 # The MIDIMonster
+<img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
 
-Named for its scary math, the MIDIMonster is a universal translation
-tool between multi-channel absolute-value-based control and/or bus protocols.
+[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
+[![IRC Channel](https://static.midimonster.net/hackint-badge.svg)](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster)
+
+Named for its scary math, the MIDIMonster is a universal control and translation
+tool for multi-channel absolute-value-based control and/or bus protocols.
 
 Currently, the MIDIMonster supports the following protocols:
 
-| Protocol			| Operating Systems	| Notes				| Backends			|
-|-------------------------------|-----------------------|-------------------------------|-------------------------------|
+| Protocol / Interface		| Operating Systems	| Notes				| Backends				|
+|-------------------------------|-----------------------|-------------------------------|---------------------------------------|
 | MIDI				| Linux, Windows, OSX	| Linux: via ALSA/JACK, OSX: via JACK | [`midi`](backends/midi.md), [`winmidi`](backends/winmidi.md), [`jack`](backends/jack.md) |
-| ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)|
-| Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)	|
-| OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)	|
-| evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)	|
-| Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)	|
-| MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
-| JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)	|
+| ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)	|
+| Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)		|
+| OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)		|
+| OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
+| evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)		|
+| Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)		|
+| MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
+| JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)		|
+| Lua Scripting			| Linux, Windows, OSX	|				| [`lua`](backends/lua.md)		|
+| Python Scripting		| Linux, OSX		|				| [`python`](backends/python.md)	|
+| Loopback			| Linux, Windows, OSX	|				| [`loopback`](backends/loopback.md)	|
 
-with additional flexibility provided by a [Lua scripting environment](backends/lua.md).
+With these features, the MIDIMonster allows users to control any channel on any of these protocols, and translate any channel on
+one protocol into channel(s) on any other (or the same) supported protocol, for example to:
 
-The MIDIMonster allows the user to translate any channel on one protocol into channel(s)
-on any other (or the same) supported protocol, for example to:
-
-* Translate MIDI Control Changes into Notes ([Example configuration](configs/unifest-17.cfg))
+* Translate MIDI Control Changes into MIDI Notes ([Example configuration](configs/unifest-17.cfg))
 * Translate MIDI Notes into ArtNet or sACN ([Example configuration](configs/launchctl-sacn.cfg))
 * Translate OSC messages into MIDI ([Example configuration](configs/midi-osc.cfg))
-* Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua)) to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
+* Dynamically generate, route and modify events using the Lua programming language ([Example configuration](configs/lua.cfg) and [Script](configs/demo.lua))
+	to create your own lighting controller or run effects on TouchOSC (Flying faders demo [configuration](configs/flying-faders.cfg) and [script](configs/flying-faders.lua))
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))
 * Play games, type, or control your mouse using MIDI controllers ([Example configuration](configs/midi-mouse.cfg))
 
-[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster) [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
+If you encounter a bug or suspect a problem with a protocol implementation, please
+[open an Issue](https://github.com/cbdevnet/midimonster/issues) or get in touch with us via
+IRC on [Hackint in `#midimonster`](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster).
+We are happy to hear from you!
 
 # Table of Contents
 
-  * [Usage](#usage)
-  * [Configuration](#configuration)
-  * [Backend documentation](#backend-documentation)
-  * [Building](#building)
-    + [Prerequisites](#prerequisites)
-    + [Build](#build)
-  * [Development](#development)
+* [Usage](#usage)
+* [Configuration](#configuration)
+* [Backend documentation](#backend-documentation)
+* [Installation](#installation)
+	+ [Using the installer](#using-the-installer)
+	+ [Building from source](#building-from-source)
+		- [Building for Linux/OSX](#building-for-linuxosx)
+		- [Building for Packaging](#building-for-packaging)
+		- [Building for Windows](#building-for-windows)
+* [Development](#development)
 
 ## Usage
 
 The MIDImonster takes as it's first argument the name of an optional configuration file
 to use (`monster.cfg` is used as default if none is specified). The configuration
 file syntax is explained in the next section.
+
+The current MIDIMonster version can be queried by passing *-v* as command-line argument.
 
 ## Configuration
 
@@ -76,10 +92,14 @@ To make an instance available for mapping channels, it requires at least the
 `[<backend-name> <instance-name>]` configuration stanza. Most backends require
 additional configuration for their instances.
 
+Backend and instance configuration options can also be overridden via command line
+arguments using the syntax `-b <backend>.<option>=<value>` for backend options
+and `-i <instance>.<option>=<value>` for instance options. These overrides
+are applied when the backend/instance is first mentioned in the configuration file.
+
 ### Channel mapping
 
 The `[map]` section consists of lines of channel-to-channel assignments, reading like
-
 ```
 instance.channel-a < instance.channel-b
 instance.channel-a > instance.channel-b
@@ -98,7 +118,7 @@ The last line is a shorter way to create a bi-directional mapping.
 
 To make mapping large contiguous sets of channels easier, channel names may contain
 expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers
-delimiting a range of channels.  Multiple such expressions may be used in one channel
+delimiting a range of channels. Multiple such expressions may be used in one channel
 specification, with the rightmost expression being incremented (or decremented) first for
 evaluation.
 
@@ -106,7 +126,6 @@ Both sides of a multi-channel assignment need to have the same number of channel
 side must have exactly one channel.
 
 Example multi-channel mapping:
-
 ```
 instance-a.channel{1..10} > instance-b.{10..1}
 ```
@@ -126,35 +145,88 @@ special information. These documentation files are located in the `backends/` di
 * [`loopback` backend documentation](backends/loopback.md)
 * [`ola` backend documentation](backends/ola.md)
 * [`osc` backend documentation](backends/osc.md)
+* [`openpixelcontrol` backend documentation](backends/openpixelcontrol.md)
 * [`lua` backend documentation](backends/lua.md)
+* [`python` backend documentation](backends/python.md)
 * [`maweb` backend documentation](backends/maweb.md)
 
-## Building
+## Installation
 
-This section will explain how to build the provided sources to be able to run
-`midimonster`.
+This section will explain how to build and install the MIDIMonster.
+Development is mainly done on Linux, but builds for OSX and Windows
+are possible.
 
-### Prerequisites
+Binary builds for all supported systems are available for download on the
+[Release page](https://github.com/cbdevnet/midimonster/releases).
 
-In order to build the MIDIMonster, you'll need some libraries that provide
-support for the protocols to translate.
+### Using the installer
+
+The easiest way to install MIDIMonster and its dependencies on a Linux system
+is the [installer script](installer.sh).
+
+The following commands download the installer, make it executable and finally, start it:
+
+```
+wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
+chmod +x ./installer.sh
+./installer.sh
+```
+
+The installer can also be used for automating installations or upgrades by specifying additional
+command line arguments. To see a list of valid arguments, run the installer with the
+`--help` argument.
+
+The installer script can also update MIDIMonster to the latest version automatically,
+using a configuration file generated during the installation.
+To do so, run `midimonster-updater` as root on your system after using the installer.
+
+If you prefer to install a Debian package you can download the `.deb` file from our
+[Release page](https://github.com/cbdevnet/midimonster/releases).
+To install the package, run the following command as the root user:
+
+```
+dpkg -i <file>.deb
+```
+
+### Building from source
+
+To build the MIDIMonster directly from the sources, you'll need some libraries that provide
+support for the protocols to translate. When building from source, you can also choose to
+exclude backends (for example, if you don't need them or don't want to install their
+prerequisites).
 
 * `libasound2-dev` (for the ALSA MIDI backend)
 * `libevdev-dev` (for the evdev backend)
 * `liblua5.3-dev` (for the lua backend)
 * `libola-dev` (for the optional OLA backend)
 * `libjack-jackd2-dev` (for the JACK backend)
-* `pkg-config` (as some projects and systems like to spread their files around)
 * `libssl-dev` (for the MA Web Remote backend)
+* `python3-dev` (for the Python backend)
+* `pkg-config` (as some projects and systems like to spread their files around)
 * A C compiler
 * GNUmake
 
 To build for Windows, the package `mingw-w64` provides a cross-compiler that can
 be used to build a subset of the backends as well as the core.
 
-### Build
+#### Building for Linux/OSX
 
 For Linux and OSX, just running `make` in the source directory should do the trick.
+
+Some backends have been marked as optional as they require rather large additional software to be installed,
+for example the `ola` backend. To create a build including these, run `make full`.
+
+To install a source build with `make install`, please familiarize yourself with the build parameters
+as specified in the next section.
+
+Backends may also be built selectively by running `make <backendfile>` in the `backends/` directory,
+for example
+
+```
+make jack.so
+```
+
+#### Building for Packaging
 
 The build process accepts the following parameters, either from the environment or
 as arguments to the `make` invocation:
@@ -172,29 +244,6 @@ as arguments to the `make` invocation:
 Note that the same variables may have different default values depending on the target. This implies that
 builds that are destined to be installed require those variables to be set to the same value for the
 build and `install` targets.
-
-Some backends have been marked as optional as they require rather large additional software to be installed,
-for example the `ola` backend. To create a build including these, run `make full`.
-
-Backends may also be built selectively by running `make <backendfile>` in the `backends/` directory,
-for example
-
-```
-make jack.so
-```
-#### Using the installer
-
-For easy installation on Linux, the [installer script](installer.sh) can be used:
-
-```
-wget https://raw.githubusercontent.com/cbdevnet/midimonster/master/installer.sh ./
-chmod +x ./installer.sh
-./installer.sh
-```
-This tool can also update MIDImonster automatically using a configuration file generated by the installer.
-To do so, run `midimonster-updater` as root on your system after using the installer.
-
-#### Building for packaging or installation
 
 For system-wide install or packaging builds, the following steps are recommended:
 

@@ -3,6 +3,8 @@
 The ArtNet backend provides read-write access to the UDP-based ArtNet protocol for lighting
 fixture control.
 
+Art-Net™ Designed by and Copyright Artistic Licence Holdings Ltd.
+
 #### Global configuration
 
 | Option	| Example value		| Default value 	| Description		|
@@ -36,6 +38,3 @@ net1.1+2 > net2.5+123
 A normal channel that is part of a wide channel can not be mapped individually.
 
 #### Known bugs / problems
-
-The minimum inter-frame-time is disregarded, as the packet rate is determined by the rate of incoming
-channel events.

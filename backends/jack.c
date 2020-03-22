@@ -334,19 +334,13 @@ static int mmjack_configure_instance(instance* inst, char* option, char* value){
 	return 0;
 }
 
-static instance* mmjack_instance(){
-	instance* inst = mm_instance();
-	if(!inst){
-		return NULL;
-	}
-
+static int mmjack_instance(instance* inst){
 	inst->impl = calloc(1, sizeof(mmjack_instance_data));
 	if(!inst->impl){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
-
-	return inst;
+	return 0;
 }
 
 static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){

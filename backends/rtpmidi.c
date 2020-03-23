@@ -357,24 +357,17 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 	return 1;
 }
 
-static instance* rtpmidi_instance(){
-	rtpmidi_instance_data* data = NULL;
-	instance* inst = mm_instance();
-
-	if(!inst){
-		return NULL;
-	}
-
-	data = calloc(1, sizeof(rtpmidi_instance_data));
+static int rtpmidi_instance(instance* inst){
+	rtpmidi_instance_data* data = calloc(1, sizeof(rtpmidi_instance_data));
 	if(!data){
 		LOG("Failed to allocate memory");
-		return NULL;
+		return 1;
 	}
 	data->fd = -1;
 	data->control_fd = -1;
 
 	inst->impl = data;
-	return inst;
+	return 0;
 }
 
 static channel* rtpmidi_channel(instance* inst, char* spec, uint8_t flags){
@@ -910,7 +903,7 @@ static int rtpmidi_service(){
 					memcpy(&control_peer, &(data->peer[u].dest), sizeof(control_peer));
 					((struct sockaddr_in*) &control_peer)->sin_port = be16toh(htobe16(((struct sockaddr_in*) &control_peer)->sin_port) - 1);
 
-					sendto(data->control_fd, &sync, sizeof(apple_sync_frame), 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
+					sendto(data->control_fd, (char*) &sync, sizeof(apple_sync_frame), 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
 				}
 				else if(data->peer[p].active && !data->peer[p].learned && (mm_timestamp() / 1000) % 10 == 0){
 					//try to invite pre-defined unconnected applemidi peers
@@ -922,7 +915,7 @@ static int rtpmidi_service(){
 					//append session name to packet
 					memcpy(frame + sizeof(apple_command), data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME, strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1);
 
-					sendto(data->control_fd, invite, sizeof(apple_command) + strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1, 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
+					sendto(data->control_fd, (char*) invite, sizeof(apple_command) + strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1, 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
 				}
 			}
 		}
@@ -945,10 +938,6 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 			return 1;
 		}
 		cfg.last_service = mm_timestamp();
-	}
-
-	if(!num){
-		return 0;
 	}
 
 	for(u = 0; u < num; u++){

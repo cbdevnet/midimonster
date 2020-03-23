@@ -1,7 +1,7 @@
 .PHONY: all clean full
 LINUX_BACKENDS = midi.so evdev.so
 WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll rtpmidi.dll
-BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.dll
+BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.so
 OPTIONAL_BACKENDS = ola.so
 BACKEND_LIB = libmmbackend.o
 

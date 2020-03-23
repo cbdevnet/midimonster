@@ -6,7 +6,7 @@
 MM_PLUGIN_API int init();
 static int rtpmidi_configure(char* option, char* value);
 static int rtpmidi_configure_instance(instance* instance, char* option, char* value);
-static instance* rtpmidi_instance();
+static int rtpmidi_instance(instance* inst);
 static channel* rtpmidi_channel(instance* instance, char* spec, uint8_t flags);
 static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int rtpmidi_handle(size_t num, managed_fd* fds);

@@ -185,11 +185,6 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	};
 	size_t u;
 
-	//early exit
-	if(!num){
-		return 0;
-	}
-
 	if(!data->device_out){
 		LOGPF("Instance %s has no output device", inst->name);
 		return 0;

@@ -471,7 +471,8 @@ static channel* lua_channel(instance* inst, char* spec, uint8_t flags){
 			return NULL;
 		}
 
-		data->channel[u].in = data->channel[u].out = 0.0;
+		//initialize new channel
+		memset(data->channel + u, 0, sizeof(lua_channel_data));
 		data->channel[u].name = strdup(spec);
 		if(!data->channel[u].name){
 			LOG("Failed to allocate memory");

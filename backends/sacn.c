@@ -330,10 +330,6 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	uint32_t frame_delta = 0;
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
 
-	if(!num){
-		return 0;
-	}
-
 	if(!data->xmit_prio){
 		LOGPF("Instance %s not enabled for output (%" PRIsize_t " channel events)", inst->name, num);
 		return 0;
@@ -552,11 +548,6 @@ static int sacn_handle(size_t num, managed_fd* fds){
 			}
 
 		}
-	}
-
-	//early exit
-	if(!num){
-		return 0;
 	}
 
 	for(u = 0; u < num; u++){

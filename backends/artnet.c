@@ -378,11 +378,6 @@ static int artnet_handle(size_t num, managed_fd* fds){
 		}
 	}
 
-	if(!num){
-		//early exit
-		return 0;
-	}
-
 	for(u = 0; u < num; u++){
 		do{
 			bytes_read = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);

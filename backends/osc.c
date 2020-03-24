@@ -231,7 +231,7 @@ static int osc_path_validate(char* path, uint8_t allow_patterns){
 	char pattern_chars[] = "?[]{}*";
 	size_t u, c;
 	uint8_t square_open = 0, curly_open = 0;
-	
+
 	if(path[0] != '/'){
 		LOGPF("%s is not a valid OSC path: Missing root /", path);
 		return 1;
@@ -331,7 +331,7 @@ static int osc_path_match(char* pattern, char* path){
 					}
 
 					if(pattern[match_end + 1] == '-' && pattern[match_end + 2] != ']'){
-						if((pattern[match_end] > pattern[match_end + 2] 
+						if((pattern[match_end] > pattern[match_end + 2]
 									&& path[u] >= pattern[match_end + 2]
 									&& path[u] <= pattern[match_end])
 								|| (pattern[match_end] <= pattern[match_end + 2]
@@ -666,7 +666,7 @@ static int osc_output_channel(instance* inst, size_t channel){
 		memcpy(xmit_buf, data->root, strlen(data->root));
 		offset += strlen(data->root);
 	}
-	
+
 	memcpy(xmit_buf + offset, data->channel[channel].path, strlen(data->channel[channel].path));
 	offset += strlen(data->channel[channel].path) + 1;
 	offset = osc_align(offset);
@@ -703,16 +703,12 @@ static int osc_output_channel(instance* inst, size_t channel){
 static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t evt = 0, mark = 0;
 	int rv = 0;
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	osc_channel_ident ident = {
 		.label = 0
 	};
 	osc_parameter_value current;
 
-	if(!num){
-		return 0;
-	}
-
-	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	if(!data->dest_len){
 		LOGPF("Instance %s does not have a destination, output is disabled (%" PRIsize_t " channels)", inst->name, num);
 		return 0;
@@ -747,7 +743,7 @@ static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 			mark = 1;
 		}
 	}
-	
+
 	if(mark){
 		//output all marked channels
 		for(evt = 0; !rv && evt < num; evt++){

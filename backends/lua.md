@@ -13,14 +13,15 @@ The following functions are provided within the Lua interpreter for interaction 
 
 | Function			| Usage example			| Description				|
 |-------------------------------|-------------------------------|---------------------------------------|
-| `output(string, number)`	| `output("foo", 0.75)`		| Output a value event to a channel	|
+| `output(string, number)`	| `output("foo", 0.75)`		| Output a value event to a channel on this instance	|
 | `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms). Calling `interval` on a Lua function multiple times updates the interval. Specifying `0` as interval stops periodic calls to the function |
-| `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel	|
-| `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel |
+| `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel on this instance	|
+| `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel on this instance |
 | `input_channel()`		| `print(input_channel())`	| Returns the name of the input channel whose handler function is currently running or `nil` if in an `interval`'ed function (or the initial parse step) |
 | `timestamp()`			| `print(timestamp())`		| Returns the core timestamp for this iteration with millisecond resolution. This is not a performance timer, but intended for timeouting, etc |
 | `thread(function)`		| `thread(run_show)`		| Run a function as a Lua thread (see below) |
 | `sleep(number)`		| `sleep(100)`			| Suspend current thread for time specified in milliseconds |
+| `cleanup_handler(function)`	|				| Register a function to be called when the instance is destroyed (on MIDIMonster shutdown). One cleanup handler can be registered per instance. Calling this function when the instance already has a cleanup handler registered replaces the handler, returning the old one. |
 
 Example script:
 ```lua
@@ -43,8 +44,12 @@ function run_show()
 	end
 end
 
+function save_values()
+end
+
 interval(toggle, 1000)
 thread(run_show)
+cleanup_handler(save_values)
 ```
 
 Input values range between 0.0 and 1.0, output values are clamped to the same range.
@@ -85,6 +90,9 @@ be called.
 
 Output values will not trigger corresponding input event handlers unless the channel is mapped
 back in the MIDIMonster configuration. This is intentional.
+
+Output events generated from cleanup handlers called during shutdown will not be routed, as the core
+routing facility has already shut down at this point. There are no plans to change this behaviour.
 
 To build (and run) the `lua` backend on Windows, a compiled version of the Lua 5.3 library is required.
 For various reasons (legal, separations of concern, not wanting to ship binary data in the repository),

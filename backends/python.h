@@ -45,4 +45,5 @@ typedef struct /*_python_instance_data*/ {
 
 	char* default_handler;
 	PyObject* handler;
+	PyObject* cleanup_handler;
 } python_instance_data;

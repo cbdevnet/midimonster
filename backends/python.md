@@ -17,13 +17,14 @@ The `midimonster` module provides the following functions:
 
 | Function			| Usage example				| Description					|
 |-------------------------------|---------------------------------------|-----------------------------------------------|
-| `output(string, float)`	| `midimonster.output("foo", 0.75)`	| Output a value event to a channel		|
-| `inputvalue(string)`		| `midimonster.inputvalue("foo")`	| Get the last input value on a channel		|
-| `outputvalue(string)`		| `midimonster.outputvalue("bar")`	| Get the last output value on a channel 	|
+| `output(string, float)`	| `midimonster.output("foo", 0.75)`	| Output a value event to a channel on this instance |
+| `inputvalue(string)`		| `midimonster.inputvalue("foo")`	| Get the last input value on a channel	of this instance |
+| `outputvalue(string)`		| `midimonster.outputvalue("bar")`	| Get the last output value on a channel of this instance |
 | `current()`			| `print(midimonster.current())`	| Returns the name of the input channel whose handler function is currently running or `None` if the interpreter was called from another context |
 | `timestamp()`			| `print(midimonster.timestamp())`	| Get the internal core timestamp (in milliseconds)	|
 | `interval(function, long)`	| `midimonster.interval(toggle, 100)`	| Register a function to be called periodically. Interval is specified in milliseconds (accurate to 10msec). Calling `interval` with the same function again updates the interval. Specifying the interval as `0` cancels the interval |
-| `manage(function, socket)`	| `midimonster.manage(handler, socket)`| Register a (connected/listening) socket to the MIDIMonster core. Calls `function(socket)` when the socket is ready to read. Calling this method with `None` as the function argument unregisters the socket. A socket may only have one associated handler |
+| `manage(function, socket)`	| `midimonster.manage(handler, socket)`	| Register a (connected/listening) socket to the MIDIMonster core. Calls `function(socket)` when the socket is ready to read. Calling this method with `None` as the function argument unregisters the socket. A socket may only have one associated handler |
+| `cleanup_handler(function)`	| `midimonster.cleanup_handler(save_all)`| Register a function to be called when the instance is destroyed (on MIDIMonster shutdown). One cleanup handler can be registered per instance. Calling this function when the instance already has a cleanup handler registered replaces the handler, returning the old one. |
 
 Example Python module:
 ```python
@@ -48,12 +49,16 @@ def socket_handler(sock):
 def ping():
 	print(midimonster.timestamp())
 
+def save_positions():
+	# Store some data to disk
+
 # Register an interval
 midimonster.interval(ping, 1000)
 # Create and register a client socket (add error handling as you like)
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(("localhost", 8990))
 midimonster.manage(socket_handler, s)
+midimonster.cleanup_handler(save_positions)
 ```
 
 Input values range between 0.0 and 1.0, output values are clamped to the same range.
@@ -91,6 +96,9 @@ py1.out1 > py2.module.handler
 
 Output values will not trigger corresponding input event handlers unless the channel is mapped
 back in the MIDIMonster configuration. This is intentional.
+
+Output events generated from cleanup handlers called during shutdown will not be routed, as the core
+routing facility has already shut down at this point. There are no plans to change this behaviour.
 
 Importing a Python module named `midimonster` is probably a bad idea and thus unsupported.
 

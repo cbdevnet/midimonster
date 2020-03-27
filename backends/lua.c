@@ -274,10 +274,13 @@ static int lua_callback_cleanup_handler(lua_State* interpreter){
 		return 0;
 	}
 
-	luaL_checktype(interpreter, 1, LUA_TFUNCTION);
+	if(lua_type(interpreter, 1) != LUA_TFUNCTION && lua_type(interpreter, 1) != LUA_TNIL){
+		LOG("Cleanup handler function parameter was neither nil nor a function");
+		return 0;
+	}
 
 	data->cleanup_handler = luaL_ref(interpreter, LUA_REGISTRYINDEX);
-	if(current_handler == LUA_NOREF){
+	if(current_handler == LUA_NOREF || current_handler == LUA_REFNIL){
 		lua_pushnil(interpreter);
 		return 1;
 	}
@@ -656,7 +659,7 @@ static int lua_shutdown(size_t n, instance** inst){
 		data = (lua_instance_data*) inst[u]->impl;
 
 		//call cleanup function if one is registered
-		if(data->cleanup_handler != LUA_NOREF){
+		if(data->cleanup_handler != LUA_NOREF && data->cleanup_handler != LUA_REFNIL){
 			lua_rawgeti(data->interpreter, LUA_REGISTRYINDEX, data->cleanup_handler);
 			lua_pcall(data->interpreter, 0, 0, 0);
 		}

@@ -15,13 +15,13 @@ The following functions are provided within the Lua interpreter for interaction 
 |-------------------------------|-------------------------------|---------------------------------------|
 | `output(string, number)`	| `output("foo", 0.75)`		| Output a value event to a channel on this instance	|
 | `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms). Calling `interval` on a Lua function multiple times updates the interval. Specifying `0` as interval stops periodic calls to the function |
+| `cleanup_handler(function)`	| `cleanup_handler(shutdown)`	| Register a function to be called when the instance is destroyed (on MIDIMonster shutdown). One cleanup handler can be registered per instance. Calling this function when the instance already has a cleanup handler registered replaces the handler, returning the old one. |
 | `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel on this instance	|
 | `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel on this instance |
 | `input_channel()`		| `print(input_channel())`	| Returns the name of the input channel whose handler function is currently running or `nil` if in an `interval`'ed function (or the initial parse step) |
 | `timestamp()`			| `print(timestamp())`		| Returns the core timestamp for this iteration with millisecond resolution. This is not a performance timer, but intended for timeouting, etc |
 | `thread(function)`		| `thread(run_show)`		| Run a function as a Lua thread (see below) |
 | `sleep(number)`		| `sleep(100)`			| Suspend current thread for time specified in milliseconds |
-| `cleanup_handler(function)`	|				| Register a function to be called when the instance is destroyed (on MIDIMonster shutdown). One cleanup handler can be registered per instance. Calling this function when the instance already has a cleanup handler registered replaces the handler, returning the old one. |
 
 Example script:
 ```lua
@@ -45,6 +45,7 @@ function run_show()
 end
 
 function save_values()
+	-- Store state to a file, for example
 end
 
 interval(toggle, 1000)

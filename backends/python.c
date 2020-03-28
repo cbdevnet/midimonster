@@ -1,4 +1,5 @@
 #define BACKEND_NAME "python"
+#define DEBUG
 
 #define PY_SSIZE_T_CLEAN
 #include <string.h>
@@ -269,9 +270,11 @@ static PyObject* mmpy_cleanup_handler(PyObject* self, PyObject* args){
 	}
 
 	if(data->cleanup_handler == Py_None){
+		DBGPF("Cleanup handler removed on %s (previously %s)", inst->name, current_handler ? "active" : "inactive");
 		data->cleanup_handler = NULL;
 	}
 	else{
+		DBGPF("Cleanup handler installed on %s (previously %s)", inst->name, current_handler ? "active" : "inactive");
 		Py_INCREF(data->cleanup_handler);
 	}
 
@@ -280,7 +283,7 @@ static PyObject* mmpy_cleanup_handler(PyObject* self, PyObject* args){
 		return Py_None;
 	}
 
-	Py_DECREF(current_handler);
+	//do not decrease refcount on current_handler here as the reference may be used by python code again
 	return current_handler;
 }
 
@@ -595,6 +598,7 @@ static int python_handle(size_t num, managed_fd* fds){
 				//if timer expired, call handler
 				if(interval[u].delta >= interval[u].interval){
 					interval[u].delta %= interval[u].interval;
+					DBGPF("Calling interval handler %" PRIsize_t ", last delta %" PRIu64, u, delta);
 
 					//swap to interpreter
 					PyEval_RestoreThread(interval[u].interpreter);
@@ -603,7 +607,6 @@ static int python_handle(size_t num, managed_fd* fds){
 					Py_XDECREF(result);
 					//release interpreter
 					PyEval_ReleaseThread(interval[u].interpreter);
-					DBGPF("Calling interval handler %" PRIsize_t, u);
 				}
 			}
 		}

@@ -533,7 +533,8 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 }
 
 static int lua_handle(size_t num, managed_fd* fds){
-	uint64_t delta = timer_interval;
+	uint64_t delta = mm_timestamp() - last_timestamp;
+	last_timestamp = mm_timestamp();
 	size_t n;
 
 	#ifdef MMBACKEND_LUA_TIMERFD
@@ -547,9 +548,6 @@ static int lua_handle(size_t num, managed_fd* fds){
 		LOGPF("Failed to read timer: %s", strerror(errno));
 		return 1;
 	}
-	#else
-	delta = mm_timestamp() - last_timestamp;
-	last_timestamp = mm_timestamp();
 	#endif
 
 	//no timers active

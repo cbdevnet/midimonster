@@ -13,9 +13,12 @@ in spirit rather than by the letter.
 
 * Change in functionality or behaviour requires a change in documentation.
 * There is more honor in deleting code than there is in adding code.
+	* Corollary: Code is a liability, not an asset.
+	* But: Benchmark the naive implementation before optimizing prematurely.
 * The `master` branch must build successfully. Test breaking changes in a branch.
 * Commit messages should be in the imperative voice ("When applied, this commit will: ").
 * The working language for this repository is english.
+* External dependencies are only acceptable when necessary and available from package repositories.
 
 ### Code style
 
@@ -29,11 +32,14 @@ in spirit rather than by the letter.
 	* The name length should be (positively) correlated with usage
 	* Loop counters may be one-character letters
 		* Prefer to name unsigned loop counters `u` and signed ones `i`
+* Place comments above the section they are commenting on
+	* Use inline comments sparingly
 
 #### C specific
 
 * Prefer lazy designated initializers to `memset()`
-* Avoid `atoi`/`itoa`, use `strto[u]l[l]()` and `snprintf()`
+* Avoid `atoi()`/`itoa()`, use `strto[u]l[l]()` and `snprintf()`
+* Avoid unsafe functions without explicit bounds parameters (eg. `strcat()`). 
 
 ## Architecture
 

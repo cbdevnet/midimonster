@@ -41,6 +41,8 @@ in spirit rather than by the letter.
 * Avoid `atoi()`/`itoa()`, use `strto[u]l[l]()` and `snprintf()`
 * Avoid unsafe functions without explicit bounds parameters (eg. `strcat()`). 
 
-## Architecture
+# Build pipeline
 
-TBD
+# Architecture
+
+# Debugging

@@ -1,5 +1,4 @@
 #define BACKEND_NAME "python"
-#define DEBUG
 
 #define PY_SSIZE_T_CLEAN
 #include <string.h>

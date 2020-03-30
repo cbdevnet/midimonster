@@ -239,10 +239,15 @@ static int lua_callback_output(lua_State* interpreter){
 
 	//fetch function parameters
 	channel_name = lua_tostring(interpreter, 1);
+	if(!channel_name){
+		LOG("Output function called with invalid channel specification");
+		return 0;
+	}
+
 	val.normalised = clamp(luaL_checknumber(interpreter, 2), 1.0, 0.0);
 
 	//if not started yet, create any requested channels so scripts may set them at load time
-	if(!last_timestamp && channel_name){
+	if(!last_timestamp){
 		lua_channel(inst, (char*) channel_name, mmchannel_output);
 	}
 
@@ -373,6 +378,10 @@ static int lua_callback_value(lua_State* interpreter, uint8_t input){
 
 	//fetch argument
 	channel_name = lua_tostring(interpreter, 1);
+	if(!channel_name){
+		LOG("get_value function called with invalid channel specification");
+		return 0;
+	}
 
 	//find correct channel & return value
 	for(n = 0; n < data->channels; n++){

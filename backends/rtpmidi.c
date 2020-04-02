@@ -11,9 +11,9 @@
 #include "rtpmidi.h"
 
 //TODO learn peer ssrcs
-//TODO default session join?
 //TODO default mode?
 //TODO internal loop mode
+//FIXME what qualifies an instance to be announced via mdns?
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
@@ -41,6 +41,7 @@ MM_PLUGIN_API int init(){
 		.conf_instance = rtpmidi_configure_instance,
 		.channel = rtpmidi_channel,
 		.handle = rtpmidi_set,
+		.interval = rtpmidi_interval,
 		.process = rtpmidi_handle,
 		.start = rtpmidi_start,
 		.shutdown = rtpmidi_shutdown
@@ -59,9 +60,81 @@ MM_PLUGIN_API int init(){
 	return 0;
 }
 
-static int rtpmidi_configure(char* option, char* value){
-	char* host = NULL, *port = NULL;
+static int dns_decode_name(uint8_t* buffer, size_t len, size_t start, dns_name* out){
+	size_t offset = 0, output_offset = 0;
+	uint8_t current_label = 0;
+	uint16_t ptr_target = 0;
 
+	//reset output data length and terminate null name
+	out->length = 0;
+	if(out->name){
+		out->name[0] = 0;
+	}
+
+	while(start + offset < len){
+		current_label = buffer[start + offset];
+
+		//if we're at a pointer, move there and stop counting data length
+		if(DNS_POINTER(current_label)){
+			if(start + offset + 1 >= len){
+				LOG("mDNS internal pointer out of bounds");
+				return 1;
+			}
+
+			//do this before setting the target
+			if(!ptr_target){
+				out->length += 2;
+			}
+
+			//calculate pointer target
+			ptr_target = DNS_LABEL_LENGTH(current_label) << 8 | buffer[start + offset + 1];
+
+			if(ptr_target >= len){
+				LOG("mDNS internal pointer target out of bounds");
+				return 1;
+			}
+			start = ptr_target;
+			offset = 0;
+		}
+		else{
+			if(DNS_LABEL_LENGTH(current_label) == 0){
+				if(!ptr_target){
+					out->length++;
+				}
+				break;
+			}
+
+			//check whether we have the bytes we need
+			if(start + offset + DNS_LABEL_LENGTH(current_label) > len){
+				LOG("mDNS bytes missing");
+				return 1;
+			}
+
+			//check whether we have space in the output
+			if(output_offset + DNS_LABEL_LENGTH(current_label) > out->alloc){
+				out->name = realloc(out->name, (output_offset + DNS_LABEL_LENGTH(current_label) + 2) * sizeof(uint8_t));
+				out->alloc = output_offset + DNS_LABEL_LENGTH(current_label);
+			}
+
+			//copy data from this label to output buffer
+			memcpy(out->name + output_offset, buffer + start + offset + 1, DNS_LABEL_LENGTH(current_label));
+			output_offset += DNS_LABEL_LENGTH(current_label) + 1;
+			offset += DNS_LABEL_LENGTH(current_label) + 1;
+			out->name[output_offset - 1] = '.';
+			out->name[output_offset] = 0;
+			if(!ptr_target){
+				out->length = offset;
+			}
+		}
+	}
+	return 0;
+}
+
+static uint32_t rtpmidi_interval(){
+	return max(0, RTPMIDI_SERVICE_INTERVAL - (mm_timestamp() - cfg.last_service));
+}
+
+static int rtpmidi_configure(char* option, char* value){
 	if(!strcmp(option, "mdns-name")){
 		if(cfg.mdns_name){
 			LOG("Duplicate mdns-name assignment");
@@ -71,26 +144,6 @@ static int rtpmidi_configure(char* option, char* value){
 		cfg.mdns_name = strdup(value);
 		if(!cfg.mdns_name){
 			LOG("Failed to allocate memory");
-			return 1;
-		}
-		return 0;
-	}
-	else if(!strcmp(option, "mdns-bind")){
-		if(cfg.mdns_fd >= 0){
-			LOG( "Only one mDNS discovery bind is supported");
-			return 1;
-		}
-
-		mmbackend_parse_hostspec(value, &host, &port, NULL);
-
-		if(!host){
-			LOGPF("Not a valid mDNS bind address: %s", value);
-			return 1;
-		}
-
-		cfg.mdns_fd = mmbackend_socket(host, (port ? port : RTPMIDI_MDNS_PORT), SOCK_DGRAM, 1, 1);
-		if(cfg.mdns_fd < 0){
-			LOGPF("Failed to bind mDNS interface: %s", value);
 			return 1;
 		}
 		return 0;
@@ -925,6 +978,79 @@ static int rtpmidi_service(){
 	return 0;
 }
 
+static int rtpmidi_handle_mdns(){
+	uint8_t buffer[RTPMIDI_PACKET_BUFFER];
+	dns_header* hdr = (dns_header*) buffer;
+	dns_rr* rr = NULL;
+	dns_name name = {
+		.alloc = 0
+	};
+	ssize_t bytes = 0;
+	size_t u = 0, offset = sizeof(dns_header);
+
+	for(bytes = recv(cfg.mdns_fd, buffer, sizeof(buffer), 0); bytes > 0; bytes = recv(cfg.mdns_fd, buffer, sizeof(buffer), 0)){
+		if(bytes < sizeof(dns_header)){
+			continue;
+		}
+		LOGPF("%" PRIsize_t " bytes of mDNS data", bytes);
+
+		hdr->id = be16toh(hdr->id);
+		hdr->questions = be16toh(hdr->questions);
+		hdr->answers = be16toh(hdr->answers);
+		hdr->servers = be16toh(hdr->servers);
+		hdr->additional = be16toh(hdr->additional);
+
+		//TODO Check for ._apple-midi._udp.local.
+		LOGPF("ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional", hdr->id, DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query", hdr->questions, hdr->answers, hdr->servers, hdr->additional);
+		for(u = 0; u < hdr->questions; u++){
+			dns_decode_name(buffer, bytes, offset, &name);
+			offset += name.length;
+			offset += sizeof(dns_question);
+
+			LOGPF("Question: %s", name.name);
+		}
+
+		for(u = 0; u < hdr->answers; u++){
+			dns_decode_name(buffer, bytes, offset, &name);
+			offset += name.length;
+			rr = (dns_rr*) (buffer + offset);
+			offset += sizeof(dns_rr) + be16toh(rr->data);
+
+			LOGPF("Answer (%d): %s, %d bytes of data", be16toh(rr->rtype), name.name, be16toh(rr->data));
+		}
+
+		for(u = 0; u < hdr->servers; u++){
+			dns_decode_name(buffer, bytes, offset, &name);
+			offset += name.length;
+			rr = (dns_rr*) (buffer + offset);
+			offset += sizeof(dns_rr) + be16toh(rr->data);
+
+			LOGPF("Authority (%d): %s, %d bytes of data", be16toh(rr->rtype), name.name, be16toh(rr->data));
+		}
+
+		for(u = 0; u < hdr->additional; u++){
+			dns_decode_name(buffer, bytes, offset, &name);
+			offset += name.length;
+			rr = (dns_rr*) (buffer + offset);
+			offset += sizeof(dns_rr) + be16toh(rr->data);
+
+			LOGPF("Additional (%d): %s, %d bytes of data", be16toh(rr->rtype), name.name, be16toh(rr->data));
+		}
+	}
+
+	free(name.name);
+	if(bytes <= 0){
+		if(errno == EAGAIN){
+			return 0;
+		}
+
+		LOGPF("Error reading from mDNS descriptor: %s", strerror(errno));
+		return 1;
+	}
+
+	return 0;
+}
+
 static int rtpmidi_handle(size_t num, managed_fd* fds){
 	size_t u;
 	int rv = 0;
@@ -933,7 +1059,7 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 
 	//handle service tasks (mdns, clock sync, peer connections)
 	if(mm_timestamp() - cfg.last_service > RTPMIDI_SERVICE_INTERVAL){
-		DBGPF("Performing service tasks, delta %" PRIu64, mm_timestamp() - cfg.last_service);
+		//DBGPF("Performing service tasks, delta %" PRIu64, mm_timestamp() - cfg.last_service);
 		if(rtpmidi_service()){
 			return 1;
 		}
@@ -942,7 +1068,8 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 
 	for(u = 0; u < num; u++){
 		if(!fds[u].impl){
-			//TODO handle mDNS discovery input
+			//handle mDNS discovery input
+			rtpmidi_handle_mdns();
 		}
 		else{
 			//handle rtp/control input
@@ -963,29 +1090,52 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 	return rv;
 }
 
-static int rtpmidi_start(size_t n, instance** inst){
-	size_t u, p, fds = 0;
-	rtpmidi_instance_data* data = NULL;
+static int rtpmidi_start_mdns(){
+	struct ip_mreq mcast_req = {
+		.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xe00000fb)),
+		.imr_interface.s_addr = INADDR_ANY
+	};
 
-	//if mdns name defined and no socket, bind default values
-	if(cfg.mdns_name && cfg.mdns_fd < 0){
-		cfg.mdns_fd = mmbackend_socket(RTPMIDI_DEFAULT_HOST, RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1);
-		if(cfg.mdns_fd < 0){
-			return 1;
-		}
+	struct ipv6_mreq mcast6_req = {
+		.ipv6mr_multiaddr.s6_addr = {0xff, 0x02, 0x00, 0x00,
+						0x00, 0x00, 0x00, 0x00,
+						0x00, 0x00, 0x00, 0x00,
+						0x00, 0x00, 0x00, 0xfb},
+		.ipv6mr_interface = 0
+	};
+
+	if(!cfg.mdns_name){
+		LOG("No mDNS name set, disabling AppleMIDI discovery");
+		return 0;
+	}
+
+	//FIXME might try passing NULL as host here to work around possible windows ipv6 handicaps
+	cfg.mdns_fd = mmbackend_socket(RTPMIDI_DEFAULT_HOST, RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1);
+	if(cfg.mdns_fd < 0){
+		LOG("Failed to create requested mDNS descriptor");
+		return 1;
+	}
+
+	//join ipv4 multicast group
+	if(setsockopt(cfg.mdns_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
+		LOGPF("Failed to join IPv4 multicast group for mDNS: %s", strerror(errno));
+		return 1;
+	}
+
+	//join ipv6 multicast group
+	if(setsockopt(cfg.mdns_fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (uint8_t*) &mcast6_req, sizeof(mcast6_req))){
+		LOGPF("Failed to join IPv6 multicast group for mDNS: %s", strerror(errno));
+		return 1;
 	}
 
 	//register mdns fd to core
-	if(cfg.mdns_fd >= 0){
-		if(mm_manage_fd(cfg.mdns_fd, BACKEND_NAME, 1, NULL)){
-			LOG("Failed to register mDNS socket with core");
-			return 1;
-		}
-		fds++;
-	}
-	else{
-		LOG("No mDNS discovery interface bound, AppleMIDI session discovery disabled");
-	}
+	return mm_manage_fd(cfg.mdns_fd, BACKEND_NAME, 1, NULL);
+}
+
+static int rtpmidi_start(size_t n, instance** inst){
+	size_t u, p, fds = 0;
+	rtpmidi_instance_data* data = NULL;
+	uint8_t mdns_required = 0;
 
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
@@ -1013,6 +1163,9 @@ static int rtpmidi_start(size_t n, instance** inst){
 				data->peer[p].connected = 1;
 			}
 		}
+		else if(data->mode == apple){
+			mdns_required = 1;
+		}
 
 		//register fds to core
 		if(mm_manage_fd(data->fd, BACKEND_NAME, 1, inst[u]) || (data->control_fd >= 0 && mm_manage_fd(data->control_fd, BACKEND_NAME, 1, inst[u]))){
@@ -1020,6 +1173,13 @@ static int rtpmidi_start(size_t n, instance** inst){
 			return 1;
 		}
 		fds += (data->control_fd >= 0) ? 2 : 1;
+	}
+
+	if(mdns_required && rtpmidi_start_mdns()){
+		return 1;
+	}
+	else{
+		fds++;
 	}
 
 	LOGPF("Registered %" PRIsize_t " descriptors to core", fds);

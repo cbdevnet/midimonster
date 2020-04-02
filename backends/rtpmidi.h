@@ -8,6 +8,7 @@ static int rtpmidi_configure(char* option, char* value);
 static int rtpmidi_configure_instance(instance* instance, char* option, char* value);
 static int rtpmidi_instance(instance* inst);
 static channel* rtpmidi_channel(instance* instance, char* spec, uint8_t flags);
+static uint32_t rtpmidi_interval();
 static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int rtpmidi_handle(size_t num, managed_fd* fds);
 static int rtpmidi_start(size_t n, instance** inst);
@@ -21,6 +22,11 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 #define RTPMIDI_GET_TYPE(a) ((a) & 0x7F)
 #define RTPMIDI_DEFAULT_NAME "MIDIMonster"
 #define RTPMIDI_SERVICE_INTERVAL 1000
+
+#define DNS_POINTER(a) (((a) & 0xC0) == 0xC0)
+#define DNS_LABEL_LENGTH(a) ((a) & 0x3F)
+#define DNS_OPCODE(a) (((a) & 0x78) >> 3)
+#define DNS_RESPONSE(a) ((a) & 0x80)
 
 enum /*_rtpmidi_channel_type*/ {
 	none = 0,
@@ -90,6 +96,12 @@ enum applemidi_command {
 	apple_feedback = 0x5253 //RS
 };
 
+typedef struct /*_dns_name*/ {
+	size_t alloc;
+	char* name;
+	size_t length;
+} dns_name;
+
 #pragma pack(push, 1)
 typedef struct /*_apple_session_command*/ {
 	uint16_t res1;
@@ -128,4 +140,25 @@ typedef struct /*_rtp_midi_command*/ {
 	uint8_t flags;
 	uint8_t length;
 } rtpmidi_command_header;
+
+typedef struct /*_dns_header*/ {
+	uint16_t id;
+	uint8_t flags[2];
+	uint16_t questions;
+	uint16_t answers;
+	uint16_t servers;
+	uint16_t additional;
+} dns_header;
+
+typedef struct /*_dns_question*/ {
+	uint16_t qtype;
+	uint16_t qclass;
+} dns_question;
+
+typedef struct /*_dns_rr*/ {
+	uint16_t rtype;
+	uint16_t rclass;
+	uint32_t ttl;
+	uint16_t data;
+} dns_rr;
 #pragma pack(pop)

@@ -15,7 +15,6 @@
 //TODO learn peer ssrcs
 //TODO default mode?
 //TODO internal loop mode
-//FIXME what qualifies an instance to be announced via mdns?
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
@@ -171,6 +170,48 @@ static int dns_encode_name(char* name, dns_name* out){
 	out->length++;
 
 	return 0;
+}
+
+static ssize_t dns_push_rr(uint8_t* buffer, size_t length, dns_rr** out, char* name, uint16_t type, uint16_t class, uint32_t ttl, uint16_t len){
+	dns_rr* rr = NULL;
+	size_t offset = 0;
+	dns_name encode = {
+		.alloc = 0
+	};
+
+	//if requested, encode name
+	if(name && dns_encode_name(name, &encode)){
+		LOGPF("Failed to encode DNS name %s", name);
+		goto bail;
+	}
+
+	if(encode.length + sizeof(dns_rr) > length){
+		LOGPF("Failed to encode DNS name %s, insufficient space", name);
+		goto bail;
+	}
+
+	if(name){
+		//copy encoded name to buffer
+		memcpy(buffer, encode.name, encode.length);
+		offset += encode.length;
+	}
+
+	rr = (dns_rr*) (buffer + offset);
+	rr->rtype = htobe16(type);
+	rr->rclass = htobe16(class);
+	rr->ttl = htobe32(ttl);
+	rr->data = htobe16(len);
+	offset += sizeof(dns_rr);
+	if(out){
+		*out = rr;
+	}
+
+	free(encode.name);
+	return offset;
+
+bail:
+	free(encode.name);
+	return -1;
 }
 
 static uint32_t rtpmidi_interval(){
@@ -421,14 +462,18 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 
 		return rtpmidi_push_peer(data, sock_addr, sock_len, 0, 0);
 	}
-	else if(!strcmp(option, "session")){
+	else if(!strcmp(option, "title")){
 		if(data->mode != apple){
-			LOG("'session' option is only valid for apple mode instances");
+			LOG("'title' option is only valid for apple mode instances");
 			return 1;
 		}
-		free(data->session_name);
-		data->session_name = strdup(value);
-		if(!data->session_name){
+		if(strchr(value, '.')){
+			LOGPF("Invalid instance title %s on %s: titles may not contain periods", value, inst->name);
+			return 1;
+		}
+		free(data->title);
+		data->title = strdup(value);
+		if(!data->title){
 			LOG("Failed to allocate memory");
 			return 1;
 		}
@@ -684,10 +729,10 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 			invite->version = htobe32(2);
 			invite->token = command->token;
 			invite->ssrc = htobe32(data->ssrc);
-			memcpy(response + sizeof(apple_command), data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME, strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1);
+			memcpy(response + sizeof(apple_command), data->title ? data->title : RTPMIDI_DEFAULT_NAME, strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1);
 			//calculate data port
 			((struct sockaddr_in*) peer)->sin_port = be16toh(htobe16(((struct sockaddr_in*) peer)->sin_port) + 1);
-			sendto(data->fd, response, sizeof(apple_command) + strlen(data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
+			sendto(data->fd, response, sizeof(apple_command) + strlen(data->title ? data->title : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
 		}
 		return 0;
 	}
@@ -961,15 +1006,7 @@ static int rtpmidi_handle_control(instance* inst){
 	return 0;
 }
 
-int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
-	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
-	dns_header* hdr = (dns_header*) frame;
-	dns_rr* rr = NULL;
-	dns_rr_srv* srv = NULL;
-	dns_name name = {
-		.alloc = 0
-	};
-	size_t offset = 0;
+static int rtpmidi_mdns_broadcast(uint8_t* frame, size_t len){
 	struct sockaddr_in mcast = {
 		.sin_family = AF_INET,
 		.sin_port = htobe16(5353),
@@ -984,6 +1021,63 @@ int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 				0x00, 0x00, 0x00, 0xfb}
 	};
 
+	//send to ipv4 and ipv6 mcasts
+	sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast6, sizeof(mcast6));
+	sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast, sizeof(mcast));
+	return 0;
+}
+
+static int rtpmidi_mdns_detach(rtpmidi_instance_data* data){
+	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+	dns_header* hdr = (dns_header*) frame;
+	dns_rr* rr = NULL;
+	dns_name name = {
+		.alloc = 0
+	};
+	size_t offset = 0;
+	ssize_t bytes = 0;
+
+	hdr->id = 0;
+	hdr->flags[0] = 0x84;
+	hdr->flags[1] = 0;
+	hdr->questions = hdr->servers = hdr->additional = 0;
+	hdr->answers = htobe16(1);
+	offset = sizeof(dns_header);
+
+	//answer 1: _apple-midi PTR FQDN
+	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s", RTPMIDI_MDNS_DOMAIN);
+	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset, 12, 1, 0, 0);
+	if(bytes < 0){
+		goto bail;
+	}
+	offset += bytes;
+
+	//TODO length-checks here
+	frame[offset++] = strlen(data->title);
+	memcpy(frame + offset, data->title, strlen(data->title));
+	offset += strlen(data->title);
+	frame[offset++] = 0xC0;
+	frame[offset++] = sizeof(dns_header);
+	rr->data = htobe16(1 + strlen(data->title) + 2);
+
+	free(name.name);
+	return rtpmidi_mdns_broadcast(frame, offset);
+bail:
+	free(name.name);
+	return 1;
+}
+
+static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
+	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+	dns_header* hdr = (dns_header*) frame;
+	dns_rr* rr = NULL;
+	dns_rr_srv* srv = NULL;
+	dns_name name = {
+		.alloc = 0
+	};
+	size_t offset = 0;
+	ssize_t bytes = 0;
+
 	hdr->id = 0;
 	hdr->flags[0] = 0x84;
 	hdr->flags[1] = 0;
@@ -993,20 +1087,12 @@ int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	offset = sizeof(dns_header);
 
 	//answer 1: SRV FQDN
-	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.%s", data->session_name, RTPMIDI_MDNS_DOMAIN);
-	if(dns_encode_name((char*) frame + offset, &name)){
-		LOGPF("Failed to encode name for %s", frame);
-		return 1;
+	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.%s", data->title, RTPMIDI_MDNS_DOMAIN);
+	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset, 33, 1, 120, 0);
+	if(bytes < 0){
+		goto bail;
 	}
-
-	memcpy(frame + offset, name.name, name.length);
-	offset += name.length;
-
-	rr = (dns_rr*) (frame + offset);
-	rr->rtype = htobe16(33); //SRV RR
-	rr->rclass = htobe16(1); //INADDR
-	rr->ttl = htobe32(120);
-	offset += sizeof(dns_rr);
+	offset += bytes;
 
 	srv = (dns_rr_srv*) (frame + offset);
 	srv->priority = 0;
@@ -1017,7 +1103,7 @@ int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.local", cfg.mdns_name);
 	if(dns_encode_name((char*) frame + offset, &name)){
 		LOGPF("Failed to encode name for %s", frame + offset);
-		return 1;
+		goto bail;
 	}
 	memcpy(frame + offset, name.name, name.length);
 	offset += name.length;
@@ -1026,29 +1112,21 @@ int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	//answer 2: empty TXT (apple asks for it otherwise)
 	frame[offset++] = 0xC0;
 	frame[offset++] = sizeof(dns_header);
-	rr = (dns_rr*) (frame + offset);
-	rr->rtype = htobe16(16); //TXT RR
-	rr->rclass = htobe16(1); //INADDR
-	rr->ttl = htobe32(4500);
-	rr->data = htobe16(1);
-	offset += sizeof(dns_rr);
+
+	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, NULL, 16, 1, 4500, 1);
+	if(bytes < 0){
+		goto bail;
+	}
+	offset += bytes;
 	frame[offset++] = 0x00; //zero-length TXT
 
 	//answer 3: dns-sd PTR _applemidi
 	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s", RTPMIDI_DNSSD_DOMAIN);
-	if(dns_encode_name((char*) frame + offset, &name)){
-		LOGPF("Failed to encode name for %s", frame + offset);
-		return 1;
+	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset, 12, 1, 4500, 2);
+	if(bytes < 0){
+		goto bail;
 	}
-	memcpy(frame + offset, name.name, name.length);
-	offset += name.length;
-
-	rr = (dns_rr*) (frame + offset);
-	rr->rtype = htobe16(12); //PTR RR
-	rr->rclass = htobe16(1); //INADDR
-	rr->ttl = htobe32(4500);
-	rr->data = htobe16(2);
-	offset += sizeof(dns_rr);
+	offset += bytes;
 
 	//add backref for PTR
 	frame[offset++] = 0xC0;
@@ -1058,12 +1136,11 @@ int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	frame[offset++] = 0xC0;
 	frame[offset++] = sizeof(dns_header) + frame[sizeof(dns_header)] + 1;
 
-	rr = (dns_rr*) (frame + offset);
-	rr->rtype = htobe16(12); //PTR RR
-	rr->rclass = htobe16(1); //INADDR
-	rr->ttl = htobe32(4500);
-	rr->data = htobe16(2);
-	offset += sizeof(dns_rr);
+	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, NULL, 12, 1, 4500, 2);
+	if(bytes < 0){
+		goto bail;
+	}
+	offset += bytes;
 
 	//add backref for PTR
 	frame[offset++] = 0xC0;
@@ -1071,19 +1148,11 @@ int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 
 	//additional 1: A host
 	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.local", cfg.mdns_name);
-	if(dns_encode_name((char*) frame + offset, &name)){
-		LOGPF("Failed to encode name for %s", frame + offset);
+	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset, 1, 1, 120, 4);
+	if(bytes < 0){
 		return 1;
 	}
-	memcpy(frame + offset, name.name, name.length);
-	offset += name.length;
-
-	rr = (dns_rr*) (frame + offset);
-	rr->rtype = htobe16(1); //A RR
-	rr->rclass = htobe16(1); //INADDR
-	rr->ttl = htobe32(120);
-	rr->data = htobe16(4);
-	offset += sizeof(dns_rr);
+	offset += bytes;
 
 	//TODO get local addresses here
 	frame[offset++] = 0x0A;
@@ -1091,12 +1160,11 @@ int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	frame[offset++] = 0x01;
 	frame[offset++] = 0x07;
 
-	//send to ipv4 and ipv6 mcasts
-	sendto(cfg.mdns_fd, frame, offset, 0, (struct sockaddr*) &mcast6, sizeof(mcast6));
-	sendto(cfg.mdns_fd, frame, offset, 0, (struct sockaddr*) &mcast, sizeof(mcast));
-
 	free(name.name);
-	return 0;
+	return rtpmidi_mdns_broadcast(frame, offset);
+bail:
+	free(name.name);
+	return 1;
 }
 
 static int rtpmidi_service(){
@@ -1127,13 +1195,13 @@ static int rtpmidi_service(){
 		return 1;
 	}
 
-
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
 
 		if(data->mode == apple){
 			//mdns discovery
-			if(cfg.mdns_fd >= 0){
+			//TODO time-out this properly
+			if(cfg.mdns_fd >= 0 && data->title){
 				rtpmidi_mdns_announce(data);
 			}
 
@@ -1156,9 +1224,9 @@ static int rtpmidi_service(){
 					memcpy(&control_peer, &(data->peer[u].dest), sizeof(control_peer));
 					((struct sockaddr_in*) &control_peer)->sin_port = be16toh(htobe16(((struct sockaddr_in*) &control_peer)->sin_port) - 1);
 					//append session name to packet
-					memcpy(frame + sizeof(apple_command), data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME, strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1);
+					memcpy(frame + sizeof(apple_command), data->title ? data->title : RTPMIDI_DEFAULT_NAME, strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1);
 
-					sendto(data->control_fd, (char*) invite, sizeof(apple_command) + strlen((data->session_name ? data->session_name : RTPMIDI_DEFAULT_NAME)) + 1, 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
+					sendto(data->control_fd, (char*) invite, sizeof(apple_command) + strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1, 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
 				}
 			}
 		}
@@ -1182,7 +1250,6 @@ static int rtpmidi_handle_mdns(){
 		if(bytes < sizeof(dns_header)){
 			continue;
 		}
-		LOGPF("%" PRIsize_t " bytes of mDNS data", bytes);
 
 		hdr->id = be16toh(hdr->id);
 		hdr->questions = be16toh(hdr->questions);
@@ -1193,42 +1260,53 @@ static int rtpmidi_handle_mdns(){
 		//rfc6762 18.3: opcode != 0 -> ignore
 		//rfc6762 18.11: response code != 0 -> ignore
 
-		//TODO Check for ._apple-midi._udp.local.
 		offset = sizeof(dns_header);
-		LOGPF("ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional", hdr->id, DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query", hdr->questions, hdr->answers, hdr->servers, hdr->additional);
+		DBGPF("%" PRIsize_t " bytes, ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional", bytes, hdr->id, DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query", hdr->questions, hdr->answers, hdr->servers, hdr->additional);
 		for(u = 0; u < hdr->questions; u++){
-			dns_decode_name(buffer, bytes, offset, &name);
+			if(dns_decode_name(buffer, bytes, offset, &name)){
+				LOG("Failed to decode DNS label");
+				return 1;
+			}
 			offset += name.length;
 			offset += sizeof(dns_question);
-
-			LOGPF("Question (%d bytes): %s", name.length, name.name);
 		}
 
+		//look for a SRV answer for ._apple-midi._udp.local.
 		for(u = 0; u < hdr->answers; u++){
-			dns_decode_name(buffer, bytes, offset, &name);
+			if(dns_decode_name(buffer, bytes, offset, &name)){
+				LOG("Failed to decode DNS label");
+				return 1;
+			}
 			offset += name.length;
 			rr = (dns_rr*) (buffer + offset);
 			offset += sizeof(dns_rr) + be16toh(rr->data);
 
-			LOGPF("Answer (%d): %s, %d bytes of data", be16toh(rr->rtype), name.name, be16toh(rr->data));
+			if(be16toh(rr->rtype) == 33
+					&& strlen(name.name) > strlen(RTPMIDI_MDNS_DOMAIN)
+					&& !strcmp(name.name + (strlen(name.name) - strlen(RTPMIDI_MDNS_DOMAIN)), RTPMIDI_MDNS_DOMAIN)){
+				LOGPF("Found possible peer: %s", name.name);
+			}
 		}
 
 		for(u = 0; u < hdr->servers; u++){
-			dns_decode_name(buffer, bytes, offset, &name);
+			if(dns_decode_name(buffer, bytes, offset, &name)){
+				LOG("Failed to decode DNS label");
+				return 1;
+			}
 			offset += name.length;
 			rr = (dns_rr*) (buffer + offset);
 			offset += sizeof(dns_rr) + be16toh(rr->data);
-
-			LOGPF("Authority (%d): %s, %d bytes of data", be16toh(rr->rtype), name.name, be16toh(rr->data));
 		}
 
+		//find a matching A/AAAA record in the additional records
 		for(u = 0; u < hdr->additional; u++){
-			dns_decode_name(buffer, bytes, offset, &name);
+			if(dns_decode_name(buffer, bytes, offset, &name)){
+				LOG("Failed to decode DNS label");
+				return 1;
+			}
 			offset += name.length;
 			rr = (dns_rr*) (buffer + offset);
 			offset += sizeof(dns_rr) + be16toh(rr->data);
-
-			LOGPF("Additional (%d): %s, %d bytes of data", be16toh(rr->rtype), name.name, be16toh(rr->data));
 		}
 	}
 
@@ -1386,6 +1464,11 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
+
+		if(cfg.mdns_fd >= 0 && data->mode == apple && data->title){
+			rtpmidi_mdns_detach(data);
+		}
+
 		if(data->fd >= 0){
 			close(data->fd);
 		}
@@ -1394,8 +1477,8 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 			close(data->control_fd);
 		}
 
-		free(data->session_name);
-		data->session_name = NULL;
+		free(data->title);
+		data->title = NULL;
 
 		free(data->accept);
 		data->accept = NULL;

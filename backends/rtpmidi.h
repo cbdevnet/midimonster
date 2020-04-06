@@ -22,8 +22,8 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 #define RTPMIDI_GET_TYPE(a) ((a) & 0x7F)
 #define RTPMIDI_DEFAULT_NAME "MIDIMonster"
 #define RTPMIDI_SERVICE_INTERVAL 1000
-#define RTPMIDI_MDNS_DOMAIN "_apple-midi._udp.local"
-#define RTPMIDI_DNSSD_DOMAIN "_services._dns-sd._udp.local"
+#define RTPMIDI_MDNS_DOMAIN "_apple-midi._udp.local."
+#define RTPMIDI_DNSSD_DOMAIN "_services._dns-sd._udp.local."
 
 #define DNS_POINTER(a) (((a) & 0xC0) == 0xC0)
 #define DNS_LABEL_LENGTH(a) ((a) & 0x3F)
@@ -77,8 +77,8 @@ typedef struct /*_rtmidi_instance_data*/ {
 	uint16_t sequence;
 
 	//apple-midi config
-	char* session_name; /* initiator only */
-	char* accept; /* participant only */
+	char* title;
+	char* accept;
 
 	//direct mode config
 	uint8_t learn_peers;

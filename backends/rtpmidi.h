@@ -24,6 +24,7 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 #define RTPMIDI_SERVICE_INTERVAL 1000
 #define RTPMIDI_MDNS_DOMAIN "_apple-midi._udp.local."
 #define RTPMIDI_DNSSD_DOMAIN "_services._dns-sd._udp.local."
+#define RTPMIDI_ANNOUNCE_INTERVAL (60 * 1000)
 
 #define DNS_POINTER(a) (((a) & 0xC0) == 0xC0)
 #define DNS_LABEL_LENGTH(a) ((a) & 0x3F)
@@ -79,6 +80,7 @@ typedef struct /*_rtmidi_instance_data*/ {
 	//apple-midi config
 	char* title;
 	char* accept;
+	uint64_t last_announce;
 
 	//direct mode config
 	uint8_t learn_peers;

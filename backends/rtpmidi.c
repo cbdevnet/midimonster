@@ -1,5 +1,5 @@
 #define BACKEND_NAME "rtpmidi"
-#define DEBUG
+//#define DEBUG
 
 #include <string.h>
 #include <errno.h>
@@ -15,6 +15,9 @@
 //TODO learn peer ssrcs
 //TODO default mode?
 //TODO internal loop mode
+//TODO announce on mdns input
+//TODO connect to discovered peers
+//TODO push correct addresses to discovery
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
@@ -467,8 +470,8 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 			LOG("'title' option is only valid for apple mode instances");
 			return 1;
 		}
-		if(strchr(value, '.')){
-			LOGPF("Invalid instance title %s on %s: titles may not contain periods", value, inst->name);
+		if(strchr(value, '.') || strlen(value) > 254){
+			LOGPF("Invalid instance title %s on %s: Must be shorter than 254 characters, no periods", value, inst->name);
 			return 1;
 		}
 		free(data->title);
@@ -689,7 +692,7 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 			accept->token = command->token;
 			accept->ssrc = htobe32(data->ssrc);
 			//add local name to response
-			//FIXME might want to use the session name in case it is set
+			//FIXME use instance title instead of mdns_name
 			memcpy(response + sizeof(apple_command), cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME, strlen((cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME)) + 1);
 			sendto(fd, response, sizeof(apple_command) + strlen(cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
 
@@ -722,7 +725,6 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 		else{
 			//send invite on data fd
 			LOGPF("Instance %s peer accepted on control port, inviting data port", inst->name);
-			//FIXME limit max length of session name
 			apple_command* invite = (apple_command*) response;
 			invite->res1 = 0xFFFF;
 			invite->command = htobe16(apple_invite);
@@ -1100,6 +1102,8 @@ static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	srv->port = htobe16(data->control_port);
 	offset += sizeof(dns_rr_srv);
 
+	//rfc2782 (srv) says to not compress `target`, rfc6762 (mdns) 18.14 says to
+	//we dont do it because i dont want to
 	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.local", cfg.mdns_name);
 	if(dns_encode_name((char*) frame + offset, &name)){
 		LOGPF("Failed to encode name for %s", frame + offset);
@@ -1160,6 +1164,7 @@ static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	frame[offset++] = 0x01;
 	frame[offset++] = 0x07;
 
+	data->last_announce = mm_timestamp();
 	free(name.name);
 	return rtpmidi_mdns_broadcast(frame, offset);
 bail:
@@ -1200,8 +1205,8 @@ static int rtpmidi_service(){
 
 		if(data->mode == apple){
 			//mdns discovery
-			//TODO time-out this properly
-			if(cfg.mdns_fd >= 0 && data->title){
+			if(cfg.mdns_fd >= 0 && data->title
+					&& (!data->last_announce || mm_timestamp() - data->last_announce > RTPMIDI_ANNOUNCE_INTERVAL)){
 				rtpmidi_mdns_announce(data);
 			}
 
@@ -1236,21 +1241,80 @@ static int rtpmidi_service(){
 	return 0;
 }
 
+//TODO bounds check all accesses
+static int rtpmidi_parse_announce(uint8_t* buffer, size_t length, dns_header* hdr, dns_name* name, dns_name* host){
+	dns_rr* rr = NULL;
+	dns_rr_srv* srv = NULL;
+	size_t u = 0, offset = sizeof(dns_header);
+	uint8_t* session_name = NULL;
+
+	for(u = 0; u < hdr->questions; u++){
+		if(dns_decode_name(buffer, length, offset, name)){
+			LOG("Failed to decode DNS label");
+			return 1;
+		}
+		offset += name->length;
+		offset += sizeof(dns_question);
+	}
+
+	//look for a SRV answer for ._apple-midi._udp.local.
+	for(u = 0; u < hdr->answers; u++){
+		if(dns_decode_name(buffer, length, offset, name)){
+			LOG("Failed to decode DNS label");
+			return 1;
+		}
+
+		//store a pointer to the first label in the current path
+		//since we decoded the name successfully before and dns_decode_name performs bounds checking, this _should_ be ok
+		session_name = (DNS_POINTER(buffer[offset])) ? buffer + (DNS_LABEL_LENGTH(buffer[offset]) << 8 | buffer[offset + 1]) : buffer + offset;
+
+		offset += name->length;
+		rr = (dns_rr*) (buffer + offset);
+		offset += sizeof(dns_rr);
+
+		if(be16toh(rr->rtype) == 33
+				&& strlen(name->name) > strlen(RTPMIDI_MDNS_DOMAIN)
+				&& !strcmp(name->name + (strlen(name->name) - strlen(RTPMIDI_MDNS_DOMAIN)), RTPMIDI_MDNS_DOMAIN)){
+			//decode the srv data
+			srv = (dns_rr_srv*) (buffer + offset);
+			offset += sizeof(dns_rr_srv);
+
+			if(dns_decode_name(buffer, length, offset, host)){
+				LOG("Failed to decode SRV target");
+				return 1;
+			}
+
+			if(!strncmp(host->name, cfg.mdns_name, strlen(cfg.mdns_name)) && host->name[strlen(cfg.mdns_name)] == '.'){
+				//ignore loopback packets, we don't care about them
+				return 0;
+			}
+
+			//we just use the packet's source as peer, because who would announce mdns for another host (also implementing an additional registry for this would bloat this backend further)
+			LOGPF("Detected possible peer %.*s on %s Port %d", session_name[0], session_name + 1, host->name, be16toh(srv->port));
+			offset -= sizeof(dns_rr_srv);
+		}
+
+		offset += be16toh(rr->data);
+	}
+
+
+	return 0;
+}
+
 static int rtpmidi_handle_mdns(){
 	uint8_t buffer[RTPMIDI_PACKET_BUFFER];
 	dns_header* hdr = (dns_header*) buffer;
-	dns_rr* rr = NULL;
 	dns_name name = {
 		.alloc = 0
-	};
+	}, host = name;
 	ssize_t bytes = 0;
-	size_t u = 0, offset = 0;
 
 	for(bytes = recv(cfg.mdns_fd, buffer, sizeof(buffer), 0); bytes > 0; bytes = recv(cfg.mdns_fd, buffer, sizeof(buffer), 0)){
 		if(bytes < sizeof(dns_header)){
 			continue;
 		}
 
+		//decode basic header
 		hdr->id = be16toh(hdr->id);
 		hdr->questions = be16toh(hdr->questions);
 		hdr->answers = be16toh(hdr->answers);
@@ -1260,57 +1324,12 @@ static int rtpmidi_handle_mdns(){
 		//rfc6762 18.3: opcode != 0 -> ignore
 		//rfc6762 18.11: response code != 0 -> ignore
 
-		offset = sizeof(dns_header);
 		DBGPF("%" PRIsize_t " bytes, ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional", bytes, hdr->id, DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query", hdr->questions, hdr->answers, hdr->servers, hdr->additional);
-		for(u = 0; u < hdr->questions; u++){
-			if(dns_decode_name(buffer, bytes, offset, &name)){
-				LOG("Failed to decode DNS label");
-				return 1;
-			}
-			offset += name.length;
-			offset += sizeof(dns_question);
-		}
-
-		//look for a SRV answer for ._apple-midi._udp.local.
-		for(u = 0; u < hdr->answers; u++){
-			if(dns_decode_name(buffer, bytes, offset, &name)){
-				LOG("Failed to decode DNS label");
-				return 1;
-			}
-			offset += name.length;
-			rr = (dns_rr*) (buffer + offset);
-			offset += sizeof(dns_rr) + be16toh(rr->data);
-
-			if(be16toh(rr->rtype) == 33
-					&& strlen(name.name) > strlen(RTPMIDI_MDNS_DOMAIN)
-					&& !strcmp(name.name + (strlen(name.name) - strlen(RTPMIDI_MDNS_DOMAIN)), RTPMIDI_MDNS_DOMAIN)){
-				LOGPF("Found possible peer: %s", name.name);
-			}
-		}
-
-		for(u = 0; u < hdr->servers; u++){
-			if(dns_decode_name(buffer, bytes, offset, &name)){
-				LOG("Failed to decode DNS label");
-				return 1;
-			}
-			offset += name.length;
-			rr = (dns_rr*) (buffer + offset);
-			offset += sizeof(dns_rr) + be16toh(rr->data);
-		}
-
-		//find a matching A/AAAA record in the additional records
-		for(u = 0; u < hdr->additional; u++){
-			if(dns_decode_name(buffer, bytes, offset, &name)){
-				LOG("Failed to decode DNS label");
-				return 1;
-			}
-			offset += name.length;
-			rr = (dns_rr*) (buffer + offset);
-			offset += sizeof(dns_rr) + be16toh(rr->data);
-		}
+		rtpmidi_parse_announce(buffer, bytes, hdr, &name, &host);
 	}
 
 	free(name.name);
+	free(host.name);
 	if(bytes <= 0){
 		if(errno == EAGAIN){
 			return 0;
@@ -1406,7 +1425,7 @@ static int rtpmidi_start_mdns(){
 
 static int rtpmidi_start(size_t n, instance** inst){
 	size_t u, p, fds = 0;
-	rtpmidi_instance_data* data = NULL;
+	rtpmidi_instance_data* data = NULL, *other = NULL;
 	uint8_t mdns_required = 0;
 
 	for(u = 0; u < n; u++){
@@ -1435,7 +1454,16 @@ static int rtpmidi_start(size_t n, instance** inst){
 				data->peer[p].connected = 1;
 			}
 		}
-		else if(data->mode == apple){
+		else if(data->mode == apple && data->title){
+			//check for unique title
+			for(p = 0; p < u; p++){
+				other = (rtpmidi_instance_data*) inst[p]->impl;
+				if(other->mode == apple && other->title
+						&& !strcmp(data->title, other->title)){
+					LOGPF("Instance titles are required to be unique to allow for mDNS discovery, conflict between %s and %s", inst[p]->name, inst[u]->name);
+					return 1;
+				}
+			}
 			mdns_required = 1;
 		}
 

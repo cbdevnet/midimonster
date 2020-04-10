@@ -10,6 +10,7 @@
 /*
  * TODO
  * ping method
+ * bundle output
  */
 
 #define osc_align(a) ((((a) / 4) + (((a) % 4) ? 1 : 0)) * 4)
@@ -720,7 +721,7 @@ static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 		//sanity check
 		if(ident.fields.channel >= data->channels
 				|| ident.fields.parameter >= data->channel[ident.fields.channel].params){
-			LOG("Channel identifier out of range");
+			LOG("Channel identifier out of range, possibly an output channel was not pre-configured");
 			return 1;
 		}
 
@@ -757,7 +758,7 @@ static int osc_set(instance* inst, size_t num, channel** c, channel_value* v){
 	return rv;
 }
 
-static int osc_process_packet(instance* inst, char* local_path, char* format, uint8_t* payload, size_t payload_len){
+static int osc_process_message(instance* inst, char* local_path, char* format, uint8_t* payload, size_t payload_len){
 	osc_instance_data* data = (osc_instance_data*) inst->impl;
 	size_t c, p, offset = 0;
 	osc_parameter_value min, max, cur;
@@ -809,15 +810,82 @@ static int osc_process_packet(instance* inst, char* local_path, char* format, ui
 	return 0;
 }
 
+static int osc_process_packet(instance* inst, uint8_t* buffer, size_t len){
+	osc_instance_data* data = (osc_instance_data*) inst->impl;
+	size_t offset = 0, message_length = len;
+	char* osc_local = NULL, *osc_fmt = NULL;
+	uint8_t* osc_data = NULL;
+	uint32_t* bundle_size = NULL;
+	uint8_t decode_bundle = 0;
+
+	//bundles need at least a header and timestamp
+	if(len >= 16 && !memcmp(buffer, "#bundle\0", 8)){
+		decode_bundle = 1;
+		offset = 16;
+	}
+
+	do{
+		if(decode_bundle){
+			if(len - offset < 4){
+				LOGPF("Failed to decode bundle size: %" PRIsize_t " bytes left at %" PRIsize_t " of %" PRIsize_t, len - offset, offset, len);
+				break;
+			}
+			bundle_size = (uint32_t*) (buffer + offset);
+			message_length = be32toh(*bundle_size);
+			DBGPF("Next bundle entry has %" PRIsize_t " bytes", message_length);
+			offset += 4;
+
+			if(len - offset < message_length){
+				LOGPF("Bundle member size out of bounds: %" PRIsize_t " bytes left", len - offset);
+				break;
+			}
+		}
+
+		//check for recursive bundles
+		if(message_length >= 16 && !memcmp(buffer + offset, "#bundle\0", 8)){
+			DBGPF("Recursing into sub-bundle of size %" PRIsize_t " on %s", message_length, inst->name);
+			osc_process_packet(inst, buffer + offset, message_length);
+		}
+		//ignore messages if root filter active
+		else if(data->root && strncmp((char*) (buffer + offset), data->root, min(message_length, strlen(data->root)))){
+			DBGPF("Ignoring message due to active root filter %s: data is for %s", data->root, buffer + offset);
+		}
+		else{
+			//FIXME all these accesses should be checked against message_length
+			osc_local = (char*) (buffer + offset + (data->root ? strlen(data->root) : 0));
+			osc_fmt = (char*) (buffer + offset + osc_align(strlen((char*) (buffer + offset)) + 1));
+
+			if(*osc_fmt != ','){
+				//invalid format string
+				LOGPF("Invalid format string in packet for instance %s: %s", inst->name, osc_fmt);
+			}
+			else{
+				osc_fmt++;
+
+				if(osc_global_config.detect){
+					LOGPF("Incoming data: Path %s.%s Format %s", inst->name, osc_local, osc_fmt);
+				}
+
+				osc_data = (uint8_t*) osc_fmt + (osc_align(strlen(osc_fmt) + 2) - 1);
+				if(osc_process_message(inst, osc_local, osc_fmt, osc_data, message_length - (osc_data - (uint8_t*) buffer))){
+					LOGPF("Failed to process OSC message on %s", inst->name);
+				}
+			}
+		}
+
+		offset += message_length;
+	}
+	while(offset < len);
+
+	return 0;
+}
+
 static int osc_handle(size_t num, managed_fd* fds){
 	size_t fd;
-	char recv_buf[OSC_RECV_BUF];
+	uint8_t recv_buf[OSC_RECV_BUF];
 	instance* inst = NULL;
 	osc_instance_data* data = NULL;
 	ssize_t bytes_read = 0;
-	char* osc_fmt = NULL;
-	char* osc_local = NULL;
-	uint8_t* osc_data = NULL;
 
 	for(fd = 0; fd < num; fd++){
 		inst = (instance*) fds[fd].impl;
@@ -841,30 +909,7 @@ static int osc_handle(size_t num, managed_fd* fds){
 				break;
 			}
 
-			if(data->root && strncmp(recv_buf, data->root, min(bytes_read, strlen(data->root)))){
-				//ignore packet for different root
-				continue;
-			}
-			osc_local = recv_buf + (data->root ? strlen(data->root) : 0);
-
-			osc_fmt = recv_buf + osc_align(strlen(recv_buf) + 1);
-			if(*osc_fmt != ','){
-				//invalid format string
-				LOGPF("Invalid format string in packet for instance %s", inst->name);
-				continue;
-			}
-			osc_fmt++;
-
-			if(osc_global_config.detect){
-				LOGPF("Incoming data: Path %s.%s Format %s", inst->name, osc_local, osc_fmt);
-			}
-
-			//FIXME check supplied data length
-			osc_data = (uint8_t*) osc_fmt + (osc_align(strlen(osc_fmt) + 2) - 1);
-
-			if(osc_process_packet(inst, osc_local, osc_fmt, osc_data, bytes_read - (osc_data - (uint8_t*) recv_buf))){
-				return 1;
-			}
+			osc_process_packet(inst, recv_buf, bytes_read);
 		} while(bytes_read > 0);
 
 		#ifdef _WIN32

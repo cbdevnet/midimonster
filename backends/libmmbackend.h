@@ -21,6 +21,7 @@
 /** Convenience functions **/
 
 int mmbackend_strdup(char** dest, char* src);
+char* mmbackend_sockstrerror(int errno);
 
 /** Networking functions **/
 

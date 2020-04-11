@@ -28,7 +28,6 @@
 //TODO announce on mdns input
 //TODO connect to discovered peers
 //TODO refactor cfg.announces
-//TODO windows address discovery
 //TODO for some reason, the announce packet generates an exception in the wireshark dissector
 
 static struct /*_rtpmidi_global*/ {
@@ -325,7 +324,7 @@ static int rtpmidi_announce_addrs(){
 	struct ifaddrs* ifa = NULL, *iter = NULL;
 
 	if(getifaddrs(&ifa)){
-		LOGPF("Failed to get adapter address information: %s", strerror(errno));
+		LOGPF("Failed to get adapter address information: %s", mmbackend_sockstrerror(errno));
 		return 1;
 	}
 
@@ -411,7 +410,7 @@ static int rtpmidi_bind_instance(instance* inst, rtpmidi_instance_data* data, ch
 	}
 
 	if(getsockname(data->fd, (struct sockaddr*) &sock_addr, &sock_len)){
-		LOGPF("Failed to fetch data port information: %s", strerror(errno));
+		LOGPF("Failed to fetch data port information: %s", mmbackend_sockstrerror(errno));
 		return 1;
 	}
 
@@ -1242,7 +1241,7 @@ static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	offset += sizeof(dns_rr_srv);
 
 	//rfc2782 (srv) says to not compress `target`, rfc6762 (mdns) 18.14 says to
-	//we dont do it because i dont want to
+	//we don't do it because i don't want to
 	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.local", cfg.mdns_name);
 	if(dns_encode_name((char*) frame + offset, &name)){
 		LOGPF("Failed to encode name for %s", frame + offset);
@@ -1486,11 +1485,15 @@ static int rtpmidi_handle_mdns(){
 	free(name.name);
 	free(host.name);
 	if(bytes <= 0){
+		#ifdef _WIN32
+		if(WSAGetLastError() == WSAEWOULDBLOCK){
+		#else
 		if(errno == EAGAIN){
+		#endif
 			return 0;
 		}
 
-		LOGPF("Error reading from mDNS descriptor: %s", strerror(errno));
+		LOGPF("Error reading from mDNS descriptor: %s", mmbackend_sockstrerror(errno));
 		return 1;
 	}
 
@@ -1564,14 +1567,12 @@ static int rtpmidi_start_mdns(){
 
 	//join ipv4 multicast group
 	if(setsockopt(cfg.mdns_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
-		LOGPF("Failed to join IPv4 multicast group for mDNS: %s", strerror(errno));
-		return 1;
+		LOGPF("Failed to join IPv4 multicast group for mDNS, discovery may be impaired: %s", mmbackend_sockstrerror(errno));
 	}
 
 	//join ipv6 multicast group
 	if(setsockopt(cfg.mdns_fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (uint8_t*) &mcast6_req, sizeof(mcast6_req))){
-		LOGPF("Failed to join IPv6 multicast group for mDNS: %s", strerror(errno));
-		return 1;
+		LOGPF("Failed to join IPv6 multicast group for mDNS, discovery may be impaired: %s", mmbackend_sockstrerror(errno));
 	}
 
 	//register mdns fd to core

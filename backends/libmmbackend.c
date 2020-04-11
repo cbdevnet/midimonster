@@ -17,6 +17,17 @@ int mmbackend_strdup(char** dest, char* src){
 	return 0;
 }
 
+char* mmbackend_sockstrerror(int err_no){
+	#ifdef _WIN32
+	static char error[2048] = "";
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, WSAGetLastError(),
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), error, sizeof(error), NULL);
+	return error;
+	#else
+	return strerror(err_no);
+	#endif
+}
+
 void mmbackend_parse_hostspec(char* spec, char** host, char** port, char** options){
 	size_t u = 0;
 
@@ -107,18 +118,18 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 		//set required socket options
 		yes = 1;
 		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
-			LOGPF("Failed to enable SO_REUSEADDR on socket: %s", strerror(errno));
+			LOGPF("Failed to enable SO_REUSEADDR on socket: %s", mmbackend_sockstrerror(errno));
 		}
 
 		if(mcast){
 			yes = 1;
 			if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-				LOGPF("Failed to enable SO_BROADCAST on socket: %s", strerror(errno));
+				LOGPF("Failed to enable SO_BROADCAST on socket: %s", mmbackend_sockstrerror(errno));
 			}
 
 			yes = 0;
 			if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-				LOGPF("Failed to disable IP_MULTICAST_LOOP on socket: %s", strerror(errno));
+				LOGPF("Failed to disable IP_MULTICAST_LOOP on socket: %s", mmbackend_sockstrerror(errno));
 			}
 		}
 
@@ -156,7 +167,7 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 	#else
 	int flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		LOGPF("Failed to set socket nonblocking: %s", strerror(errno));
+		LOGPF("Failed to set socket nonblocking: %s", mmbackend_sockstrerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -174,7 +185,7 @@ int mmbackend_send(int fd, uint8_t* data, size_t length){
 		sent = send(fd, data + total, 1, 0);
 		#endif
 		if(sent < 0){
-			LOGPF("Failed to send: %s", strerror(errno));
+			LOGPF("Failed to send: %s", mmbackend_sockstrerror(errno));
 			return 1;
 		}
 		total += sent;

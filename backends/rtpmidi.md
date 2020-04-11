@@ -22,10 +22,11 @@ stream, which may lead to inconsistencies during playback.
 
 #### Global configuration
 
-| Option	| Example value		| Default value 	| Description		|
-|---------------|-----------------------|-----------------------|-----------------------|
-| `detect`      | `on`                  | `off`                 | Output channel specifications for any events coming in on configured instances to help with configuration. |
-| `mdns-name`	| `computer1`		| none			| mDNS hostname to announce (`<mdns-name>.local`). Apple-mode instances with `title` configuration will be announced via mDNS if set. |
+| Option		| Example value		| Default value 	| Description		|
+|-----------------------|-----------------------|-----------------------|-----------------------|
+| `detect`      	| `on`                  | `off`                 | Output channel specifications for any events coming in on configured instances to help with configuration. |
+| `mdns-name`		| `computer1`		| none			| mDNS hostname to announce (`<mdns-name>.local`). Apple-mode instances with `title` configuration will be announced via mDNS if set. |
+| `mdns-interface` 	| `wlan0`		| none			| Limit addresses announced via mDNS to this interface. On Windows, this is prefix-matched against the user-editable "friendly" interface name. |
 
 #### Instance configuration
 

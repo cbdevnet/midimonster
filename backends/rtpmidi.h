@@ -92,6 +92,12 @@ typedef struct /*rtpmidi_announced_instance*/ {
 	char** invite;
 } rtpmidi_announce;
 
+typedef struct /*_rtpmidi_addr*/ {
+	int family;
+	//this is actually a fair bit too big, but whatever
+	uint8_t addr[sizeof(struct sockaddr_storage)];
+} rtpmidi_addr;
+
 enum applemidi_command {
 	apple_invite = 0x494E, //IN
 	apple_accept = 0x4F4B, //OK

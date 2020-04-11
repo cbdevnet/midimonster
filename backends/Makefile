@@ -48,7 +48,7 @@ maweb.dll: CFLAGS += -DMAWEB_NO_LIBSSL
 
 rtpmidi.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
 rtpmidi.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
-rtpmidi.dll: LDLIBS += -lws2_32
+rtpmidi.dll: LDLIBS += -lws2_32 -liphlpapi
 
 winmidi.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 winmidi.dll: LDLIBS += -lwinmm -lws2_32

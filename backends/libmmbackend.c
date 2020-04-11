@@ -1,6 +1,21 @@
 #include "libmmbackend.h"
 
 #define LOGPF(format, ...) fprintf(stderr, "libmmbe\t" format "\n", __VA_ARGS__)
+#define LOG(message) fprintf(stderr, "libmmbe\t%s\n", (message))
+
+int mmbackend_strdup(char** dest, char* src){
+	if(*dest){
+		free(*dest);
+	}
+
+	*dest = strdup(src);
+
+	if(!*dest){
+		LOG("Failed to allocate memory");
+		return 1;
+	}
+	return 0;
+}
 
 void mmbackend_parse_hostspec(char* spec, char** host, char** port, char** options){
 	size_t u = 0;

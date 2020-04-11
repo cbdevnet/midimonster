@@ -18,6 +18,10 @@
 
 /*** BACKEND IMPLEMENTATION LIBRARY ***/
 
+/** Convenience functions **/
+
+int mmbackend_strdup(char** dest, char* src);
+
 /** Networking functions **/
 
 /* 

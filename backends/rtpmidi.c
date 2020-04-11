@@ -7,8 +7,18 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+//mmbackend pulls in windows.h, required before more specific includes
 #include "libmmbackend.h"
 #include "rtpmidi.h"
+
+#ifdef _WIN32
+#include <iphlpapi.h>
+#else
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
+#endif
+
 
 //#include "../tests/hexdump.c"
 
@@ -17,13 +27,19 @@
 //TODO internal loop mode
 //TODO announce on mdns input
 //TODO connect to discovered peers
-//TODO push correct addresses to discovery
+//TODO refactor cfg.announces
+//TODO windows address discovery
+//TODO for some reason, the announce packet generates an exception in the wireshark dissector
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
 	char* mdns_name;
 	uint8_t detect;
 	uint64_t last_service;
+
+	char* mdns_interface;
+	size_t addresses;
+	rtpmidi_addr* address;
 
 	size_t announces;
 	rtpmidi_announce* announce;
@@ -217,6 +233,137 @@ bail:
 	return -1;
 }
 
+#ifdef _WIN32
+static int rtpmidi_wide_pfxcmp(wchar_t* haystack, char* needle){
+	size_t u;
+
+	for(u = 0; haystack[u] && needle[u]; u++){
+		if(haystack[u] != needle[u]){
+			return 1;
+		}
+	}
+
+	if(!haystack[u] && needle[u]){
+		return 1;
+	}
+	return 0;
+}
+
+//this has become available with vista for some reason...
+static char* inet_ntop(int family, uint8_t* data, char* buffer, size_t length){
+	switch(family){
+		case AF_INET:
+			snprintf(buffer, length, "%d.%d.%d.%d", data[0], data[1], data[2], data[3]);
+			break;
+		case AF_INET6:
+			snprintf(buffer, length, "%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X",
+					data[0], data[1], data[2], data[3],
+					data[4], data[5], data[6], data[7],
+					data[8], data[9], data[10], data[11],
+					data[12], data[13], data[14], data[15]);
+			break;
+	}
+	return buffer;
+}
+#endif
+
+static int rtpmidi_announce_addrs(){
+	char repr[INET6_ADDRSTRLEN + 1];
+	union {
+		struct sockaddr_in* in4;
+		struct sockaddr_in6* in6;
+		struct sockaddr* in;
+	} addr;
+
+	#ifdef _WIN32
+	size_t bytes_alloc = 50 * sizeof(IP_ADAPTER_ADDRESSES);
+	IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = NULL;
+	IP_ADAPTER_ADDRESSES* addrs = calloc(1, bytes_alloc), *iter = NULL;
+	if(!addrs){
+		LOG("Failed to allocate memory");
+		return 1;
+	}
+
+	if(GetAdaptersAddresses(0, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+				NULL, addrs, (unsigned long*) &bytes_alloc) != ERROR_SUCCESS){
+		//FIXME might try to resize the result list and retry at some point...
+		LOG("Failed to query local interface addresses");
+		free(addrs);
+		return 1;
+	}
+
+	for(iter = addrs; iter; iter = iter->Next){
+		//filter interfaces if requested
+		if(cfg.mdns_interface && rtpmidi_wide_pfxcmp(iter->FriendlyName, cfg.mdns_interface)){
+			continue;
+		}
+
+		for(unicast_addr = (IP_ADAPTER_UNICAST_ADDRESS_LH*) iter->FirstUnicastAddress; unicast_addr; unicast_addr = unicast_addr->Next){
+			addr.in = unicast_addr->Address.lpSockaddr;
+			if(addr.in->sa_family != AF_INET && addr.in->sa_family != AF_INET6){
+				continue;
+			}
+
+			cfg.address = realloc(cfg.address, (cfg.addresses + 1) * sizeof(rtpmidi_addr));
+			if(!cfg.address){
+				cfg.addresses = 0;
+				LOG("Failed to allocate memory");
+				return 1;
+			}
+
+			cfg.address[cfg.addresses].family = addr.in->sa_family;
+			memcpy(&cfg.address[cfg.addresses].addr,
+					(addr.in->sa_family == AF_INET) ? (void*) &addr.in4->sin_addr.s_addr : (void*) &addr.in6->sin6_addr.s6_addr,
+					(addr.in->sa_family == AF_INET) ? 4 : 16);
+			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %S)", cfg.addresses, inet_ntop(addr.in->sa_family, cfg.address[cfg.addresses].addr, repr, sizeof(repr)), iter->FriendlyName);
+			cfg.addresses++;
+		}
+	}
+
+	free(addrs);
+	#else
+	struct ifaddrs* ifa = NULL, *iter = NULL;
+
+	if(getifaddrs(&ifa)){
+		LOGPF("Failed to get adapter address information: %s", strerror(errno));
+		return 1;
+	}
+
+	for(iter = ifa; iter; iter = iter->ifa_next){
+		if((!cfg.mdns_interface || !strcmp(cfg.mdns_interface, iter->ifa_name))
+					&& strcmp(iter->ifa_name, "lo")
+					&& iter->ifa_addr){
+			addr.in = iter->ifa_addr;
+			if(addr.in->sa_family != AF_INET && addr.in->sa_family != AF_INET6){
+				continue;
+			}
+
+			cfg.address = realloc(cfg.address, (cfg.addresses + 1) * sizeof(rtpmidi_addr));
+			if(!cfg.address){
+				cfg.addresses = 0;
+				LOG("Failed to allocate memory");
+				return 1;
+			}
+
+			cfg.address[cfg.addresses].family = addr.in->sa_family;
+			memcpy(&cfg.address[cfg.addresses].addr,
+					(addr.in->sa_family == AF_INET) ? (void*) &addr.in4->sin_addr.s_addr : (void*) &addr.in6->sin6_addr.s6_addr,
+					(addr.in->sa_family == AF_INET) ? 4 : 16);
+			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %s)", cfg.addresses, inet_ntop(addr.in->sa_family, cfg.address[cfg.addresses].addr, repr, sizeof(repr)), iter->ifa_name);
+			cfg.addresses++;
+		}
+	}
+
+	freeifaddrs(ifa);
+	#endif
+
+	if(!cfg.addresses){
+		LOG("Failed to gather local IP addresses for mDNS announce");
+		return 1;
+	}
+	return 0;
+}
+
 static uint32_t rtpmidi_interval(){
 	return max(0, RTPMIDI_SERVICE_INTERVAL - (mm_timestamp() - cfg.last_service));
 }
@@ -228,12 +375,15 @@ static int rtpmidi_configure(char* option, char* value){
 			return 1;
 		}
 
-		cfg.mdns_name = strdup(value);
-		if(!cfg.mdns_name){
-			LOG("Failed to allocate memory");
+		return mmbackend_strdup(&cfg.mdns_name, value);
+	}
+	else if(!strcmp(option, "mdns-interface")){
+		if(cfg.mdns_interface){
+			LOG("Duplicate mdns-interface assignment");
 			return 1;
 		}
-		return 0;
+
+		return mmbackend_strdup(&cfg.mdns_interface, value);
 	}
 	else if(!strcmp(option, "detect")){
 		cfg.detect = 0;
@@ -474,13 +624,7 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 			LOGPF("Invalid instance title %s on %s: Must be shorter than 254 characters, no periods", value, inst->name);
 			return 1;
 		}
-		free(data->title);
-		data->title = strdup(value);
-		if(!data->title){
-			LOG("Failed to allocate memory");
-			return 1;
-		}
-		return 0;
+		return mmbackend_strdup(&data->title, value);
 	}
 	else if(!strcmp(option, "invite")){
 		if(data->mode != apple){
@@ -495,13 +639,7 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 			LOG("'join' option is only valid for apple mode instances");
 			return 1;
 		}
-		free(data->accept);
-		data->accept = strdup(value);
-		if(!data->accept){
-			LOG("Failed to allocate memory");
-			return 1;
-		}
-		return 0;
+		return mmbackend_strdup(&data->accept, value);
 	}
 
 	LOGPF("Unknown instance configuration option %s on instance %s", option, inst->name);
@@ -1069,6 +1207,7 @@ bail:
 	return 1;
 }
 
+//FIXME this should not exceed 1500 bytes
 static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
 	dns_header* hdr = (dns_header*) frame;
@@ -1077,7 +1216,7 @@ static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	dns_name name = {
 		.alloc = 0
 	};
-	size_t offset = 0;
+	size_t offset = 0, host_offset = 0, u = 0;
 	ssize_t bytes = 0;
 
 	hdr->id = 0;
@@ -1085,7 +1224,7 @@ static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	hdr->flags[1] = 0;
 	hdr->questions = hdr->servers = 0;
 	hdr->answers = htobe16(4);
-	hdr->additional = htobe16(1);
+	hdr->additional = htobe16(cfg.addresses);
 	offset = sizeof(dns_header);
 
 	//answer 1: SRV FQDN
@@ -1150,19 +1289,35 @@ static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	frame[offset++] = 0xC0;
 	frame[offset++] = sizeof(dns_header);
 
-	//additional 1: A host
+	//additional 1: first announce addr
+	host_offset = offset;
 	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.local", cfg.mdns_name);
-	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset, 1, 1, 120, 4);
+	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset,
+			(cfg.address[0].family == AF_INET) ? 1 : 28, 1, 120,
+			(cfg.address[0].family == AF_INET) ? 4 : 16);
 	if(bytes < 0){
 		return 1;
 	}
 	offset += bytes;
 
-	//TODO get local addresses here
-	frame[offset++] = 0x0A;
-	frame[offset++] = 0x17;
-	frame[offset++] = 0x01;
-	frame[offset++] = 0x07;
+	memcpy(frame + offset, cfg.address[0].addr, (cfg.address[0].family == AF_INET) ? 4 : 16);
+	offset += (cfg.address[0].family == AF_INET) ? 4 : 16;
+
+	//push all other announce addresses with a pointer
+	for(u = 1; u < cfg.addresses; u++){
+		frame[offset++] = 0xC0 | (host_offset >> 8);
+		frame[offset++] = host_offset & 0xFF;
+		bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset,
+				(cfg.address[u].family == AF_INET) ? 1 : 28, 1, 120,
+				(cfg.address[u].family == AF_INET) ? 4 : 16);
+		if(bytes < 0){
+			return 1;
+		}
+		offset += bytes;
+
+		memcpy(frame + offset, cfg.address[u].addr, (cfg.address[u].family == AF_INET) ? 4 : 16);
+		offset += (cfg.address[u].family == AF_INET) ? 4 : 16;
+	}
 
 	data->last_announce = mm_timestamp();
 	free(name.name);
@@ -1475,7 +1630,7 @@ static int rtpmidi_start(size_t n, instance** inst){
 		fds += (data->control_fd >= 0) ? 2 : 1;
 	}
 
-	if(mdns_required && rtpmidi_start_mdns()){
+	if(mdns_required && (rtpmidi_announce_addrs() || rtpmidi_start_mdns())){
 		return 1;
 	}
 	else if(mdns_required){
@@ -1529,8 +1684,13 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 	cfg.announce = NULL;
 	cfg.announces = 0;
 
+	free(cfg.address);
+	cfg.addresses = 0;
+
 	free(cfg.mdns_name);
 	cfg.mdns_name = NULL;
+	free(cfg.mdns_interface);
+	cfg.mdns_interface = NULL;
 	if(cfg.mdns_fd >= 0){
 		close(cfg.mdns_fd);
 	}

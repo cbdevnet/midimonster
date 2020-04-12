@@ -5,6 +5,7 @@
 #include <ws2tcpip.h>
 //#define close closesocket
 #else
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #endif
@@ -21,7 +22,8 @@
 /** Convenience functions **/
 
 int mmbackend_strdup(char** dest, char* src);
-char* mmbackend_sockstrerror(int err_no);
+char* mmbackend_socket_strerror(int err_no);
+const char* mmbackend_sockaddr_ntop(struct sockaddr* peer, char* buffer, size_t length);
 
 /** Networking functions **/
 

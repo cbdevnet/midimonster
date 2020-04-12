@@ -89,3 +89,6 @@ specifications in multiple cases. Due to the complexity involved in supporting t
 arising from this will be considered a bug only in cases where they hinder normal operation of the backend.
 
 mDNS discovery may announce flawed records when run on a host with multiple active interfaces.
+
+While this backend should be reasonably stable, there may be problematic edge cases simply due to the
+enormous size and scope of the protocols and implementations required to make this work.

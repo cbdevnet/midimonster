@@ -247,25 +247,9 @@ static int rtpmidi_wide_pfxcmp(wchar_t* haystack, char* needle){
 	}
 	return 0;
 }
-
-//this has become available with vista for some reason...
-static char* inet_ntop(int family, uint8_t* data, char* buffer, size_t length){
-	switch(family){
-		case AF_INET:
-			snprintf(buffer, length, "%d.%d.%d.%d", data[0], data[1], data[2], data[3]);
-			break;
-		case AF_INET6:
-			snprintf(buffer, length, "%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X",
-					data[0], data[1], data[2], data[3],
-					data[4], data[5], data[6], data[7],
-					data[8], data[9], data[10], data[11],
-					data[12], data[13], data[14], data[15]);
-			break;
-	}
-	return buffer;
-}
 #endif
 
+//TODO this should be trimmed down a bit
 static int rtpmidi_announce_addrs(){
 	char repr[INET6_ADDRSTRLEN + 1];
 	union {
@@ -314,7 +298,7 @@ static int rtpmidi_announce_addrs(){
 			memcpy(&cfg.address[cfg.addresses].addr,
 					(addr.in->sa_family == AF_INET) ? (void*) &addr.in4->sin_addr.s_addr : (void*) &addr.in6->sin6_addr.s6_addr,
 					(addr.in->sa_family == AF_INET) ? 4 : 16);
-			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %S)", cfg.addresses, inet_ntop(addr.in->sa_family, cfg.address[cfg.addresses].addr, repr, sizeof(repr)), iter->FriendlyName);
+			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %S)", cfg.addresses, mmbackend_sockaddr_ntop(addr.in, repr, sizeof(repr)), iter->FriendlyName);
 			cfg.addresses++;
 		}
 	}
@@ -324,7 +308,7 @@ static int rtpmidi_announce_addrs(){
 	struct ifaddrs* ifa = NULL, *iter = NULL;
 
 	if(getifaddrs(&ifa)){
-		LOGPF("Failed to get adapter address information: %s", mmbackend_sockstrerror(errno));
+		LOGPF("Failed to get adapter address information: %s", mmbackend_socket_strerror(errno));
 		return 1;
 	}
 
@@ -348,7 +332,7 @@ static int rtpmidi_announce_addrs(){
 			memcpy(&cfg.address[cfg.addresses].addr,
 					(addr.in->sa_family == AF_INET) ? (void*) &addr.in4->sin_addr.s_addr : (void*) &addr.in6->sin6_addr.s6_addr,
 					(addr.in->sa_family == AF_INET) ? 4 : 16);
-			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %s)", cfg.addresses, inet_ntop(addr.in->sa_family, cfg.address[cfg.addresses].addr, repr, sizeof(repr)), iter->ifa_name);
+			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %s)", cfg.addresses, mmbackend_sockaddr_ntop(addr.in, repr, sizeof(repr)), iter->ifa_name);
 			cfg.addresses++;
 		}
 	}
@@ -410,7 +394,7 @@ static int rtpmidi_bind_instance(instance* inst, rtpmidi_instance_data* data, ch
 	}
 
 	if(getsockname(data->fd, (struct sockaddr*) &sock_addr, &sock_len)){
-		LOGPF("Failed to fetch data port information: %s", mmbackend_sockstrerror(errno));
+		LOGPF("Failed to fetch data port information: %s", mmbackend_socket_strerror(errno));
 		return 1;
 	}
 
@@ -1396,11 +1380,12 @@ static int rtpmidi_service(){
 }
 
 //TODO bounds check all accesses
-static int rtpmidi_parse_announce(uint8_t* buffer, size_t length, dns_header* hdr, dns_name* name, dns_name* host){
+static int rtpmidi_parse_announce(uint8_t* buffer, size_t length, dns_header* hdr, dns_name* name, dns_name* host, struct sockaddr* source){
 	dns_rr* rr = NULL;
 	dns_rr_srv* srv = NULL;
 	size_t u = 0, offset = sizeof(dns_header);
 	uint8_t* session_name = NULL;
+	char peer_name[1024];
 
 	for(u = 0; u < hdr->questions; u++){
 		if(dns_decode_name(buffer, length, offset, name)){
@@ -1444,7 +1429,7 @@ static int rtpmidi_parse_announce(uint8_t* buffer, size_t length, dns_header* hd
 			}
 
 			//we just use the packet's source as peer, because who would announce mdns for another host (also implementing an additional registry for this would bloat this backend further)
-			LOGPF("Detected possible peer %.*s on %s Port %d", session_name[0], session_name + 1, host->name, be16toh(srv->port));
+			LOGPF("Detected possible peer %.*s on %s (%s) Port %d", session_name[0], session_name + 1, host->name, mmbackend_sockaddr_ntop(source, peer_name, sizeof(peer_name)), be16toh(srv->port));
 			offset -= sizeof(dns_rr_srv);
 		}
 
@@ -1462,8 +1447,12 @@ static int rtpmidi_handle_mdns(){
 		.alloc = 0
 	}, host = name;
 	ssize_t bytes = 0;
+	struct sockaddr_storage peer_addr;
+	socklen_t peer_len = sizeof(peer_addr);
 
-	for(bytes = recv(cfg.mdns_fd, buffer, sizeof(buffer), 0); bytes > 0; bytes = recv(cfg.mdns_fd, buffer, sizeof(buffer), 0)){
+	for(bytes = recvfrom(cfg.mdns_fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &peer_addr, &peer_len);
+			bytes > 0;
+			bytes = recvfrom(cfg.mdns_fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &peer_addr, &peer_len)){
 		if(bytes < sizeof(dns_header)){
 			continue;
 		}
@@ -1479,7 +1468,9 @@ static int rtpmidi_handle_mdns(){
 		//rfc6762 18.11: response code != 0 -> ignore
 
 		DBGPF("%" PRIsize_t " bytes, ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional", bytes, hdr->id, DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query", hdr->questions, hdr->answers, hdr->servers, hdr->additional);
-		rtpmidi_parse_announce(buffer, bytes, hdr, &name, &host);
+		rtpmidi_parse_announce(buffer, bytes, hdr, &name, &host, (struct sockaddr*) &peer_addr);
+
+		peer_len = sizeof(peer_addr);
 	}
 
 	free(name.name);
@@ -1493,7 +1484,7 @@ static int rtpmidi_handle_mdns(){
 			return 0;
 		}
 
-		LOGPF("Error reading from mDNS descriptor: %s", mmbackend_sockstrerror(errno));
+		LOGPF("Error reading from mDNS descriptor: %s", mmbackend_socket_strerror(errno));
 		return 1;
 	}
 
@@ -1567,12 +1558,12 @@ static int rtpmidi_start_mdns(){
 
 	//join ipv4 multicast group
 	if(setsockopt(cfg.mdns_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
-		LOGPF("Failed to join IPv4 multicast group for mDNS, discovery may be impaired: %s", mmbackend_sockstrerror(errno));
+		LOGPF("Failed to join IPv4 multicast group for mDNS, discovery may be impaired: %s", mmbackend_socket_strerror(errno));
 	}
 
 	//join ipv6 multicast group
 	if(setsockopt(cfg.mdns_fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (uint8_t*) &mcast6_req, sizeof(mcast6_req))){
-		LOGPF("Failed to join IPv6 multicast group for mDNS, discovery may be impaired: %s", mmbackend_sockstrerror(errno));
+		LOGPF("Failed to join IPv6 multicast group for mDNS, discovery may be impaired: %s", mmbackend_socket_strerror(errno));
 	}
 
 	//register mdns fd to core

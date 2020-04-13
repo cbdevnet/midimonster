@@ -19,7 +19,6 @@
 #include <ifaddrs.h>
 #endif
 
-
 //#include "../tests/hexdump.c"
 
 //TODO learn peer ssrcs
@@ -27,29 +26,34 @@
 //TODO internal loop mode
 //TODO announce on mdns input
 //TODO connect to discovered peers
-//TODO refactor cfg.announces
 //TODO for some reason, the announce packet generates an exception in the wireshark dissector
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
 	char* mdns_name;
+	char* mdns_interface;
+
 	uint8_t detect;
 	uint64_t last_service;
 
-	char* mdns_interface;
 	size_t addresses;
 	rtpmidi_addr* address;
 
-	size_t announces;
-	rtpmidi_announce* announce;
+	size_t invites;
+	rtpmidi_invite* invite;
 } cfg = {
 	.mdns_fd = -1,
 	.mdns_name = NULL,
+	.mdns_interface = NULL,
+
 	.detect = 0,
 	.last_service = 0,
 
-	.announces = 0,
-	.announce = NULL
+	.addresses = 0,
+	.address = NULL,
+
+	.invites = 0,
+	.invite = NULL
 };
 
 MM_PLUGIN_API int init(){
@@ -232,26 +236,9 @@ bail:
 	return -1;
 }
 
-#ifdef _WIN32
-static int rtpmidi_wide_pfxcmp(wchar_t* haystack, char* needle){
-	size_t u;
-
-	for(u = 0; haystack[u] && needle[u]; u++){
-		if(haystack[u] != needle[u]){
-			return 1;
-		}
-	}
-
-	if(!haystack[u] && needle[u]){
-		return 1;
-	}
-	return 0;
-}
-#endif
-
 //TODO this should be trimmed down a bit
 static int rtpmidi_announce_addrs(){
-	char repr[INET6_ADDRSTRLEN + 1];
+	char repr[INET6_ADDRSTRLEN + 1] = "", iface[1024] = "";
 	union {
 		struct sockaddr_in* in4;
 		struct sockaddr_in6* in6;
@@ -259,51 +246,27 @@ static int rtpmidi_announce_addrs(){
 	} addr;
 
 	#ifdef _WIN32
-	size_t bytes_alloc = 50 * sizeof(IP_ADAPTER_ADDRESSES);
 	IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = NULL;
-	IP_ADAPTER_ADDRESSES* addrs = calloc(1, bytes_alloc), *iter = NULL;
-	if(!addrs){
-		LOG("Failed to allocate memory");
-		return 1;
-	}
+	IP_ADAPTER_ADDRESSES addrs[50] , *iter = NULL;
+	size_t bytes_alloc = sizeof(addrs);
 
 	if(GetAdaptersAddresses(0, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
 				NULL, addrs, (unsigned long*) &bytes_alloc) != ERROR_SUCCESS){
 		//FIXME might try to resize the result list and retry at some point...
 		LOG("Failed to query local interface addresses");
-		free(addrs);
 		return 1;
 	}
 
 	for(iter = addrs; iter; iter = iter->Next){
+		//friendlyname is a wide string, print it into interface for basic conversion and to avoid implementing wide string handling
+		snprintf(iface, sizeof(iface), "%S", iter->FriendlyName);
 		//filter interfaces if requested
-		if(cfg.mdns_interface && rtpmidi_wide_pfxcmp(iter->FriendlyName, cfg.mdns_interface)){
+		if(cfg.mdns_interface && strncmp(iface, cfg.mdns_interface, min(strlen(iface), strlen(cfg.mdns_interface)))){
 			continue;
 		}
 
 		for(unicast_addr = (IP_ADAPTER_UNICAST_ADDRESS_LH*) iter->FirstUnicastAddress; unicast_addr; unicast_addr = unicast_addr->Next){
 			addr.in = unicast_addr->Address.lpSockaddr;
-			if(addr.in->sa_family != AF_INET && addr.in->sa_family != AF_INET6){
-				continue;
-			}
-
-			cfg.address = realloc(cfg.address, (cfg.addresses + 1) * sizeof(rtpmidi_addr));
-			if(!cfg.address){
-				cfg.addresses = 0;
-				LOG("Failed to allocate memory");
-				return 1;
-			}
-
-			cfg.address[cfg.addresses].family = addr.in->sa_family;
-			memcpy(&cfg.address[cfg.addresses].addr,
-					(addr.in->sa_family == AF_INET) ? (void*) &addr.in4->sin_addr.s_addr : (void*) &addr.in6->sin6_addr.s6_addr,
-					(addr.in->sa_family == AF_INET) ? 4 : 16);
-			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %S)", cfg.addresses, mmbackend_sockaddr_ntop(addr.in, repr, sizeof(repr)), iter->FriendlyName);
-			cfg.addresses++;
-		}
-	}
-
-	free(addrs);
 	#else
 	struct ifaddrs* ifa = NULL, *iter = NULL;
 
@@ -316,7 +279,9 @@ static int rtpmidi_announce_addrs(){
 		if((!cfg.mdns_interface || !strcmp(cfg.mdns_interface, iter->ifa_name))
 					&& strcmp(iter->ifa_name, "lo")
 					&& iter->ifa_addr){
+			snprintf(iface, sizeof(iface), "%s", iter->ifa_name);
 			addr.in = iter->ifa_addr;
+	#endif
 			if(addr.in->sa_family != AF_INET && addr.in->sa_family != AF_INET6){
 				continue;
 			}
@@ -332,11 +297,13 @@ static int rtpmidi_announce_addrs(){
 			memcpy(&cfg.address[cfg.addresses].addr,
 					(addr.in->sa_family == AF_INET) ? (void*) &addr.in4->sin_addr.s_addr : (void*) &addr.in6->sin6_addr.s6_addr,
 					(addr.in->sa_family == AF_INET) ? 4 : 16);
-			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %s)", cfg.addresses, mmbackend_sockaddr_ntop(addr.in, repr, sizeof(repr)), iter->ifa_name);
+
+			LOGPF("mDNS announce address %" PRIsize_t ": %s (from %s)", cfg.addresses, mmbackend_sockaddr_ntop(addr.in, repr, sizeof(repr)), iface);
 			cfg.addresses++;
 		}
 	}
 
+	#ifndef _WIN32
 	freeifaddrs(ifa);
 	#endif
 
@@ -474,52 +441,52 @@ static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storag
 static int rtpmidi_push_invite(instance* inst, char* peer){
 	size_t u, p;
 
-	//check whether the instance is already in the announce list
-	for(u = 0; u < cfg.announces; u++){
-		if(cfg.announce[u].inst == inst){
+	//check whether the instance is already in the inviter list
+	for(u = 0; u < cfg.invites; u++){
+		if(cfg.invite[u].inst == inst){
 			break;
 		}
 	}
 
-	//add to the announce list
-	if(u == cfg.announces){
-		cfg.announce = realloc(cfg.announce, (cfg.announces + 1) * sizeof(rtpmidi_announce));
-		if(!cfg.announce){
+	//add to the inviter list
+	if(u == cfg.invites){
+		cfg.invite = realloc(cfg.invite, (cfg.invites + 1) * sizeof(rtpmidi_invite));
+		if(!cfg.invite){
 			LOG("Failed to allocate memory");
-			cfg.announces = 0;
+			cfg.invites = 0;
 			return 1;
 		}
 
-		cfg.announce[u].inst = inst;
-		cfg.announce[u].invites = 0;
-		cfg.announce[u].invite = NULL;
+		cfg.invite[u].inst = inst;
+		cfg.invite[u].invites = 0;
+		cfg.invite[u].name = NULL;
 
-		cfg.announces++;
+		cfg.invites++;
 	}
 
-	//check whether the peer is already in the invite list
-	for(p = 0; p < cfg.announce[u].invites; p++){
-		if(!strcmp(cfg.announce[u].invite[p], peer)){
+	//check whether the requested name is already in the invite list for this instance
+	for(p = 0; p < cfg.invite[u].invites; p++){
+		if(!strcmp(cfg.invite[u].name[p], peer)){
 			return 0;
 		}
 	}
 
 	//extend the invite list
-	cfg.announce[u].invite = realloc(cfg.announce[u].invite, (cfg.announce[u].invites + 1) * sizeof(char*));
-	if(!cfg.announce[u].invite){
+	cfg.invite[u].name = realloc(cfg.invite[u].name, (cfg.invite[u].invites + 1) * sizeof(char*));
+	if(!cfg.invite[u].name){
 		LOG("Failed to allocate memory");
-		cfg.announce[u].invites = 0;
+		cfg.invite[u].invites = 0;
 		return 1;
 	}
 
 	//append the new invitee
-	cfg.announce[u].invite[p] = strdup(peer);
-	if(!cfg.announce[u].invite[p]){
+	cfg.invite[u].name[p] = strdup(peer);
+	if(!cfg.invite[u].name[p]){
 		LOG("Failed to allocate memory");
 		return 1;
 	}
 
-	cfg.announce[u].invites++;
+	cfg.invite[u].invites++;
 	return 0;
 }
 
@@ -1666,15 +1633,15 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 		inst[u]->impl = NULL;
 	}
 
-	for(u = 0; u < cfg.announces; u++){
-		for(p = 0; p < cfg.announce[u].invites; p++){
-			free(cfg.announce[u].invite[p]);
+	for(u = 0; u < cfg.invites; u++){
+		for(p = 0; p < cfg.invite[u].invites; p++){
+			free(cfg.invite[u].name[p]);
 		}
-		free(cfg.announce[u].invite);
+		free(cfg.invite[u].name);
 	}
-	free(cfg.announce);
-	cfg.announce = NULL;
-	cfg.announces = 0;
+	free(cfg.invite);
+	cfg.invite = NULL;
+	cfg.invites = 0;
 
 	free(cfg.address);
 	cfg.addresses = 0;

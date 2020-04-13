@@ -86,11 +86,11 @@ typedef struct /*_rtmidi_instance_data*/ {
 	uint8_t learn_peers;
 } rtpmidi_instance_data;
 
-typedef struct /*rtpmidi_announced_instance*/ {
+typedef struct /*rtpmidi_invited_peer*/ {
 	instance* inst;
 	size_t invites;
-	char** invite;
-} rtpmidi_announce;
+	char** name;
+} rtpmidi_invite;
 
 typedef struct /*_rtpmidi_addr*/ {
 	int family;

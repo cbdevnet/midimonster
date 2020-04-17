@@ -61,8 +61,9 @@ typedef struct /*_rtpmidi_peer*/ {
 	socklen_t dest_len;
 	//uint32_t ssrc;
 	uint8_t active; //marked for reuse
-	uint8_t learned; //learned / configured peer
+	uint8_t learned; //learned / configured peer (learned peers are marked inactive on session shutdown)
 	uint8_t connected; //currently in active session
+	ssize_t invite; //invite-list index for apple-mode learned peers
 } rtpmidi_peer;
 
 typedef struct /*_rtmidi_instance_data*/ {
@@ -98,14 +99,14 @@ typedef struct /*_rtpmidi_addr*/ {
 	uint8_t addr[sizeof(struct sockaddr_storage)];
 } rtpmidi_addr;
 
-enum applemidi_command {
+typedef enum {
 	apple_invite = 0x494E, //IN
 	apple_accept = 0x4F4B, //OK
 	apple_reject = 0x4E4F, //NO
 	apple_leave = 0x4259, //BY
 	apple_sync = 0x434B, //CK
 	apple_feedback = 0x5253 //RS
-};
+} applemidi_command;
 
 typedef struct /*_dns_name*/ {
 	size_t alloc;

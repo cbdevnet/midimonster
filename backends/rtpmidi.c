@@ -238,7 +238,7 @@ bail:
 
 //TODO this should be trimmed down a bit
 static int rtpmidi_announce_addrs(){
-	char repr[INET6_ADDRSTRLEN + 1] = "", iface[1024] = "";
+	char repr[INET6_ADDRSTRLEN + 1] = "", iface[2048] = "";
 	union {
 		struct sockaddr_in* in4;
 		struct sockaddr_in6* in6;
@@ -247,13 +247,16 @@ static int rtpmidi_announce_addrs(){
 
 	#ifdef _WIN32
 	IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = NULL;
-	IP_ADAPTER_ADDRESSES addrs[50] , *iter = NULL;
+	IP_ADAPTER_ADDRESSES addrs[250] , *iter = NULL;
 	size_t bytes_alloc = sizeof(addrs);
 
-	if(GetAdaptersAddresses(0, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
-				NULL, addrs, (unsigned long*) &bytes_alloc) != ERROR_SUCCESS){
+	unsigned long status = GetAdaptersAddresses(0, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+			NULL, addrs, (unsigned long*) &bytes_alloc);
+	if(status != ERROR_SUCCESS){
 		//FIXME might try to resize the result list and retry at some point...
-		LOG("Failed to query local interface addresses");
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, status,
+				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), iface, sizeof(iface), NULL);
+		LOGPF("Failed to query local interface addresses (%lu): %s", status, iface);
 		return 1;
 	}
 
@@ -401,11 +404,12 @@ static char* rtpmidi_type_name(uint8_t type){
 	return "unknown";
 }
 
-static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storage sock_addr, socklen_t sock_len, uint8_t learned, uint8_t connected){
+static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storage sock_addr, socklen_t sock_len, uint8_t learned, uint8_t connected, ssize_t invite_reference){
 	size_t u, p = data->peers;
 
 	for(u = 0; u < data->peers; u++){
 		//check whether the peer is already in the list
+		//TODO this probably should take into account the invite_reference (-1 for initiator peers or if unknown but may be present)
 		if(data->peer[u].active
 				&& sock_len == data->peer[u].dest_len
 				&& !memcmp(&data->peer[u].dest, &sock_addr, sock_len)){
@@ -433,6 +437,7 @@ static int rtpmidi_push_peer(rtpmidi_instance_data* data, struct sockaddr_storag
 	data->peer[p].active = 1;
 	data->peer[p].learned = learned;
 	data->peer[p].connected = connected;
+	data->peer[p].invite = invite_reference;
 	data->peer[p].dest = sock_addr;
 	data->peer[p].dest_len = sock_len;
 	return 0;
@@ -488,6 +493,37 @@ static int rtpmidi_push_invite(instance* inst, char* peer){
 
 	cfg.invite[u].invites++;
 	return 0;
+}
+
+static ssize_t rtpmidi_applecommand(instance* inst, struct sockaddr* dest, socklen_t dest_len, uint8_t control, applemidi_command command){
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+
+	apple_command* cmd = (apple_command*) &frame;
+	cmd->res1 = 0xFFFF;
+	cmd->command = htobe16(command);
+	cmd->version = htobe32(2);
+	cmd->token = ((uint32_t) rand()) << 16 | rand();
+	cmd->ssrc = htobe32(data->ssrc);
+
+	//append session name to packet
+	memcpy(frame + sizeof(apple_command), data->title ? data->title : RTPMIDI_DEFAULT_NAME, strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1);
+
+	//FIXME should we match sending/receiving ports? if the reference does this, it should be documented
+	return sendto(control ? data->control_fd : data->fd, frame, sizeof(apple_command) + strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1, 0, dest, dest_len);
+}
+
+static ssize_t rtpmidi_peer_applecommand(instance* inst, size_t peer, uint8_t control, applemidi_command command){
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	struct sockaddr_storage dest_addr;
+
+	memcpy(&dest_addr, &(data->peer[peer].dest), min(sizeof(dest_addr), data->peer[peer].dest_len));
+	if(control){
+	//calculate remote control port from data port
+		((struct sockaddr_in*) &dest_addr)->sin_port = be16toh(htobe16(((struct sockaddr_in*) &dest_addr)->sin_port) - 1);
+	}
+
+	return rtpmidi_applecommand(inst, (struct sockaddr*) &dest_addr, data->peer[peer].dest_len, control, command);
 }
 
 static int rtpmidi_configure_instance(instance* inst, char* option, char* value){
@@ -563,7 +599,7 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 			((struct sockaddr_in*) &sock_addr)->sin_port = be16toh(htobe16(((struct sockaddr_in*) &sock_addr)->sin_port) + 1);
 		}
 
-		return rtpmidi_push_peer(data, sock_addr, sock_len, 0, 0);
+		return rtpmidi_push_peer(data, sock_addr, sock_len, 0, 0, -1);
 	}
 	else if(!strcmp(option, "title")){
 		if(data->mode != apple){
@@ -773,56 +809,36 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 			//accept the invitation
 			LOGPF("Instance %s accepting invitation to session %s%s", inst->name, session_name ? session_name : "UNNAMED", (fd == data->control_fd) ? " (control)":"");
 			//send accept message
-			apple_command* accept = (apple_command*) response;
-			accept->res1 = 0xFFFF;
-			accept->command = htobe16(apple_accept);
-			accept->version = htobe32(2);
-			accept->token = command->token;
-			accept->ssrc = htobe32(data->ssrc);
-			//add local name to response
-			//FIXME use instance title instead of mdns_name
-			memcpy(response + sizeof(apple_command), cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME, strlen((cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME)) + 1);
-			sendto(fd, response, sizeof(apple_command) + strlen(cfg.mdns_name ? cfg.mdns_name : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
+			//TODO accept->token = command->token;
+			rtpmidi_applecommand(inst, (struct sockaddr*) peer, peer_len, (fd == data->control_fd) ? 1 : 0, apple_accept);
 
 			//push peer
 			if(fd != data->control_fd){
-				return rtpmidi_push_peer(data, *peer, peer_len, 1, 1);
+				return rtpmidi_push_peer(data, *peer, peer_len, 1, 1, -1);
 			}
 			return 0;
 		}
 		else{
 			//send reject message
 			LOGPF("Instance %s rejecting invitation to session %s", inst->name, session_name ? session_name : "UNNAMED");
-			apple_command reject = {
-				.res1 = 0xFFFF,
-				.command = htobe16(apple_reject),
-				.version = htobe32(2),
-				.token = command->token,
-				.ssrc = htobe32(data->ssrc)
-			};
-			sendto(fd, (uint8_t*) &reject, sizeof(apple_command), 0, (struct sockaddr*) peer, peer_len);
+			//TODO .token = command->token,
+			rtpmidi_applecommand(inst, (struct sockaddr*) peer, peer_len, (fd == data->control_fd) ? 1 : 0, apple_reject);
 		}
 		return 0;
 	}
 	else if(command->command == apple_accept){
 		if(fd != data->control_fd){
 			LOGPF("Instance %s negotiated new peer", inst->name);
-			return rtpmidi_push_peer(data, *peer, peer_len, 1, 1);
+			return rtpmidi_push_peer(data, *peer, peer_len, 1, 1, -1);
 			//FIXME store ssrc, start timesync
 		}
 		else{
-			//send invite on data fd
+			//invite peer data port
 			LOGPF("Instance %s peer accepted on control port, inviting data port", inst->name);
-			apple_command* invite = (apple_command*) response;
-			invite->res1 = 0xFFFF;
-			invite->command = htobe16(apple_invite);
-			invite->version = htobe32(2);
-			invite->token = command->token;
-			invite->ssrc = htobe32(data->ssrc);
-			memcpy(response + sizeof(apple_command), data->title ? data->title : RTPMIDI_DEFAULT_NAME, strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1);
 			//calculate data port
 			((struct sockaddr_in*) peer)->sin_port = be16toh(htobe16(((struct sockaddr_in*) peer)->sin_port) + 1);
-			sendto(data->fd, response, sizeof(apple_command) + strlen(data->title ? data->title : RTPMIDI_DEFAULT_NAME) + 1, 0, (struct sockaddr*) peer, peer_len);
+			//send invite
+			rtpmidi_applecommand(inst, (struct sockaddr*) peer, peer_len, 0, apple_invite);
 		}
 		return 0;
 	}
@@ -1064,7 +1080,7 @@ static int rtpmidi_handle_data(instance* inst){
 
 		if(u == data->peers){
 			LOGPF("Learned new peer on %s", inst->name);
-			return rtpmidi_push_peer(data, sock_addr, sock_len, 1, 1);
+			return rtpmidi_push_peer(data, sock_addr, sock_len, 1, 1, -1);
 		}
 	}
 	return 0;
@@ -1281,7 +1297,6 @@ static int rtpmidi_service(){
 	size_t n, u, p;
 	instance** inst = NULL;
 	rtpmidi_instance_data* data = NULL;
-	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
 	struct sockaddr_storage control_peer;
 
 	//prepare commands
@@ -1294,11 +1309,6 @@ static int rtpmidi_service(){
 			mm_timestamp() * 10
 		}
 	};
-	apple_command* invite = (apple_command*) &frame;
-	invite->res1 = 0xFFFF;
-	invite->command = htobe16(apple_invite);
-	invite->version = htobe32(2);
-	invite->token = ((uint32_t) rand()) << 16 | rand();
 
 	if(mm_backend_instances(BACKEND_NAME, &n, &inst)){
 		LOG("Failed to fetch instances");
@@ -1329,14 +1339,7 @@ static int rtpmidi_service(){
 				else if(data->peer[p].active && !data->peer[p].learned && (mm_timestamp() / 1000) % 10 == 0){
 					//try to invite pre-defined unconnected applemidi peers
 					DBGPF("Instance %s inviting configured peer %" PRIsize_t, inst[u]->name, p);
-					invite->ssrc = htobe32(data->ssrc);
-					//calculate remote control port from data port
-					memcpy(&control_peer, &(data->peer[u].dest), sizeof(control_peer));
-					((struct sockaddr_in*) &control_peer)->sin_port = be16toh(htobe16(((struct sockaddr_in*) &control_peer)->sin_port) - 1);
-					//append session name to packet
-					memcpy(frame + sizeof(apple_command), data->title ? data->title : RTPMIDI_DEFAULT_NAME, strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1);
-
-					sendto(data->control_fd, (char*) invite, sizeof(apple_command) + strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1, 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
+					rtpmidi_peer_applecommand(inst[u], p, 1, apple_invite);
 				}
 			}
 		}

@@ -79,7 +79,6 @@ typedef struct /*_rtmidi_instance_data*/ {
 	uint16_t sequence;
 
 	//apple-midi config
-	char* title;
 	char* accept;
 	uint64_t last_announce;
 

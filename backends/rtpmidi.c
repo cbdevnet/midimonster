@@ -507,10 +507,10 @@ static ssize_t rtpmidi_applecommand(instance* inst, struct sockaddr* dest, sockl
 	cmd->ssrc = htobe32(data->ssrc);
 
 	//append session name to packet
-	memcpy(frame + sizeof(apple_command), data->title ? data->title : RTPMIDI_DEFAULT_NAME, strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1);
+	memcpy(frame + sizeof(apple_command), inst->name, strlen(inst->name) + 1);
 
 	//FIXME should we match sending/receiving ports? if the reference does this, it should be documented
-	return sendto(control ? data->control_fd : data->fd, frame, sizeof(apple_command) + strlen((data->title ? data->title : RTPMIDI_DEFAULT_NAME)) + 1, 0, dest, dest_len);
+	return sendto(control ? data->control_fd : data->fd, frame, sizeof(apple_command) + strlen(inst->name) + 1, 0, dest, dest_len);
 }
 
 static ssize_t rtpmidi_peer_applecommand(instance* inst, size_t peer, uint8_t control, applemidi_command command){
@@ -600,17 +600,6 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 		}
 
 		return rtpmidi_push_peer(data, sock_addr, sock_len, 0, 0, -1);
-	}
-	else if(!strcmp(option, "title")){
-		if(data->mode != apple){
-			LOG("'title' option is only valid for apple mode instances");
-			return 1;
-		}
-		if(strchr(value, '.') || strlen(value) > 254){
-			LOGPF("Invalid instance title %s on %s: Must be shorter than 254 characters, no periods", value, inst->name);
-			return 1;
-		}
-		return mmbackend_strdup(&data->title, value);
 	}
 	else if(!strcmp(option, "invite")){
 		if(data->mode != apple){
@@ -1133,7 +1122,7 @@ static int rtpmidi_mdns_broadcast(uint8_t* frame, size_t len){
 	return 0;
 }
 
-static int rtpmidi_mdns_detach(rtpmidi_instance_data* data){
+static int rtpmidi_mdns_detach(instance* inst){
 	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
 	dns_header* hdr = (dns_header*) frame;
 	dns_rr* rr = NULL;
@@ -1159,12 +1148,12 @@ static int rtpmidi_mdns_detach(rtpmidi_instance_data* data){
 	offset += bytes;
 
 	//TODO length-checks here
-	frame[offset++] = strlen(data->title);
-	memcpy(frame + offset, data->title, strlen(data->title));
-	offset += strlen(data->title);
+	frame[offset++] = strlen(inst->name);
+	memcpy(frame + offset, inst->name, strlen(inst->name));
+	offset += strlen(inst->name);
 	frame[offset++] = 0xC0;
 	frame[offset++] = sizeof(dns_header);
-	rr->data = htobe16(1 + strlen(data->title) + 2);
+	rr->data = htobe16(1 + strlen(inst->name) + 2);
 
 	free(name.name);
 	return rtpmidi_mdns_broadcast(frame, offset);
@@ -1174,7 +1163,8 @@ bail:
 }
 
 //FIXME this should not exceed 1500 bytes
-static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
+static int rtpmidi_mdns_announce(instance* inst){
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
 	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
 	dns_header* hdr = (dns_header*) frame;
 	dns_rr* rr = NULL;
@@ -1194,7 +1184,7 @@ static int rtpmidi_mdns_announce(rtpmidi_instance_data* data){
 	offset = sizeof(dns_header);
 
 	//answer 1: SRV FQDN
-	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.%s", data->title, RTPMIDI_MDNS_DOMAIN);
+	snprintf((char*) frame + offset, sizeof(frame) - offset, "%s.%s", inst->name, RTPMIDI_MDNS_DOMAIN);
 	bytes = dns_push_rr(frame + offset, sizeof(frame) - offset, &rr, (char*) frame + offset, 33, 1, 120, 0);
 	if(bytes < 0){
 		goto bail;
@@ -1320,9 +1310,9 @@ static int rtpmidi_service(){
 
 		if(data->mode == apple){
 			//mdns discovery
-			if(cfg.mdns_fd >= 0 && data->title
+			if(cfg.mdns_fd >= 0
 					&& (!data->last_announce || mm_timestamp() - data->last_announce > RTPMIDI_ANNOUNCE_INTERVAL)){
-				rtpmidi_mdns_announce(data);
+				rtpmidi_mdns_announce(inst[u]);
 			}
 
 			for(p = 0; p < data->peers; p++){
@@ -1542,8 +1532,8 @@ static int rtpmidi_start_mdns(){
 
 static int rtpmidi_start(size_t n, instance** inst){
 	size_t u, p, fds = 0;
-	rtpmidi_instance_data* data = NULL, *other = NULL;
-	uint8_t mdns_required = 0;
+	rtpmidi_instance_data* data = NULL;
+	uint8_t mdns_requested = 0;
 
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
@@ -1571,17 +1561,8 @@ static int rtpmidi_start(size_t n, instance** inst){
 				data->peer[p].connected = 1;
 			}
 		}
-		else if(data->mode == apple && data->title){
-			//check for unique title
-			for(p = 0; p < u; p++){
-				other = (rtpmidi_instance_data*) inst[p]->impl;
-				if(other->mode == apple && other->title
-						&& !strcmp(data->title, other->title)){
-					LOGPF("Instance titles are required to be unique to allow for mDNS discovery, conflict between %s and %s", inst[p]->name, inst[u]->name);
-					return 1;
-				}
-			}
-			mdns_required = 1;
+		else if(data->mode == apple){
+			mdns_requested = 1;
 		}
 
 		//register fds to core
@@ -1592,10 +1573,10 @@ static int rtpmidi_start(size_t n, instance** inst){
 		fds += (data->control_fd >= 0) ? 2 : 1;
 	}
 
-	if(mdns_required && (rtpmidi_announce_addrs() || rtpmidi_start_mdns())){
-		return 1;
+	if(mdns_requested && (rtpmidi_announce_addrs() || rtpmidi_start_mdns())){
+		LOG("Failed to set up mDNS discovery, instances may not show up on remote hosts and may not find remote peers");
 	}
-	else if(mdns_required){
+	else if(mdns_requested){
 		fds++;
 	}
 
@@ -1610,8 +1591,8 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
 
-		if(cfg.mdns_fd >= 0 && data->mode == apple && data->title){
-			rtpmidi_mdns_detach(data);
+		if(cfg.mdns_fd >= 0 && data->mode == apple){
+			rtpmidi_mdns_detach(inst[u]);
 		}
 
 		if(data->fd >= 0){
@@ -1621,9 +1602,6 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 		if(data->control_fd >= 0){
 			close(data->control_fd);
 		}
-
-		free(data->title);
-		data->title = NULL;
 
 		free(data->accept);
 		data->accept = NULL;

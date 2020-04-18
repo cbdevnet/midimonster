@@ -25,7 +25,7 @@ stream, which may lead to inconsistencies during playback.
 | Option		| Example value		| Default value 	| Description		|
 |-----------------------|-----------------------|-----------------------|-----------------------|
 | `detect`      	| `on`                  | `off`                 | Output channel specifications for any events coming in on configured instances to help with configuration. |
-| `mdns-name`		| `computer1`		| none			| mDNS hostname to announce (`<mdns-name>.local`). Apple-mode instances with `title` configuration will be announced via mDNS if set. |
+| `mdns-name`		| `computer1`		| none			| mDNS hostname to announce (`<mdns-name>.local`). Apple-mode instances will be announced via mDNS if set. |
 | `mdns-interface` 	| `wlan0`		| none			| Limit addresses announced via mDNS to this interface. On Windows, this is prefix-matched against the user-editable "friendly" interface name. |
 
 #### Instance configuration
@@ -50,7 +50,6 @@ Common instance configuration parameters
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
 | `bind`	| `10.1.2.1 9001`	| `:: <random>`		| Local network address to bind to (note that AppleMIDI requires two consecutive port numbers to be allocated). |
-| `title`	| `Just Jamming`	| none			| Session/device name to announce via mDNS. If unset, the instance will not be announced. |
 | `invite`	| `pad`			| none			| Devices to send invitations to when discovered (the special value `*` invites all discovered peers). May be specified multiple times. |
 | `join`	| `Just Jamming`	| none			| Session for which to accept invitations (the special value `*` accepts the first invitation seen). |
 

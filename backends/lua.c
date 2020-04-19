@@ -155,8 +155,19 @@ static void lua_thread_resume(size_t current_thread){
 	lua_settable(thread[current_thread].thread, LUA_REGISTRYINDEX);
 }
 
-static int lua_callback_thread(lua_State* interpreter){
+static instance* lua_fetch_instance(lua_State* interpreter){
 	instance* inst = NULL;
+
+	//get instance pointer from registry
+	lua_pushstring(interpreter, LUA_REGISTRY_KEY);
+	lua_gettable(interpreter, LUA_REGISTRYINDEX);
+	inst = (instance*) lua_touserdata(interpreter, -1);
+	lua_pop(interpreter, 1);
+	return inst;
+}
+
+static int lua_callback_thread(lua_State* interpreter){
+	instance* inst = lua_fetch_instance(interpreter);
 	size_t u = threads;
 	if(lua_gettop(interpreter) != 1){
 		LOGPF("Thread function called with %d arguments, expected function", lua_gettop(interpreter));
@@ -164,11 +175,6 @@ static int lua_callback_thread(lua_State* interpreter){
 	}
 
 	luaL_checktype(interpreter, 1, LUA_TFUNCTION);
-
-	//get instance pointer from registry
-	lua_pushstring(interpreter, LUA_REGISTRY_KEY);
-	lua_gettable(interpreter, LUA_REGISTRYINDEX);
-	inst = (instance*) lua_touserdata(interpreter, -1);
 
 	//make space for a new thread
 	thread = realloc(thread, (threads + 1) * sizeof(lua_thread));
@@ -223,26 +229,25 @@ static int lua_callback_output(lua_State* interpreter){
 	size_t n = 0;
 	channel_value val;
 	const char* channel_name = NULL;
-	instance* inst = NULL;
-	lua_instance_data* data = NULL;
+	instance* inst = lua_fetch_instance(interpreter);
+	lua_instance_data* data = (lua_instance_data*) inst->impl;
 
 	if(lua_gettop(interpreter) != 2){
 		LOGPF("Output function called with %d arguments, expected 2 (string, number)", lua_gettop(interpreter));
 		return 0;
 	}
 
-	//get instance pointer from registry
-	lua_pushstring(interpreter, LUA_REGISTRY_KEY);
-	lua_gettable(interpreter, LUA_REGISTRYINDEX);
-	inst = (instance*) lua_touserdata(interpreter, -1);
-	data = (lua_instance_data*) inst->impl;
-
 	//fetch function parameters
 	channel_name = lua_tostring(interpreter, 1);
+	if(!channel_name){
+		LOG("Output function called with invalid channel specification");
+		return 0;
+	}
+
 	val.normalised = clamp(luaL_checknumber(interpreter, 2), 1.0, 0.0);
 
 	//if not started yet, create any requested channels so scripts may set them at load time
-	if(!last_timestamp && channel_name){
+	if(!last_timestamp){
 		lua_channel(inst, (char*) channel_name, mmchannel_output);
 	}
 
@@ -264,6 +269,31 @@ static int lua_callback_output(lua_State* interpreter){
 	return 0;
 }
 
+static int lua_callback_cleanup_handler(lua_State* interpreter){
+	instance* inst = lua_fetch_instance(interpreter);
+	lua_instance_data* data = (lua_instance_data*) inst->impl;
+	int current_handler = data->cleanup_handler;
+
+	if(lua_gettop(interpreter) != 1){
+		LOGPF("Cleanup handler function called with %d arguments, expected 1 (function)", lua_gettop(interpreter));
+		return 0;
+	}
+
+	if(lua_type(interpreter, 1) != LUA_TFUNCTION && lua_type(interpreter, 1) != LUA_TNIL){
+		LOG("Cleanup handler function parameter was neither nil nor a function");
+		return 0;
+	}
+
+	data->cleanup_handler = luaL_ref(interpreter, LUA_REGISTRYINDEX);
+	if(current_handler == LUA_NOREF || current_handler == LUA_REFNIL){
+		lua_pushnil(interpreter);
+		return 1;
+	}
+	lua_rawgeti(interpreter, LUA_REGISTRYINDEX, current_handler);
+	luaL_unref(interpreter, LUA_REGISTRYINDEX, current_handler);
+	return 1;
+}
+
 static int lua_callback_interval(lua_State* interpreter){
 	size_t n = 0;
 	uint64_t interval = 0;
@@ -273,10 +303,6 @@ static int lua_callback_interval(lua_State* interpreter){
 		LOGPF("Interval function called with %d arguments, expected 2 (function, number)", lua_gettop(interpreter));
 		return 0;
 	}
-
-	//get instance pointer from registry
-	lua_pushstring(interpreter, LUA_REGISTRY_KEY);
-	lua_gettable(interpreter, LUA_REGISTRYINDEX);
 
 	//fetch and round the interval
 	interval = luaL_checkinteger(interpreter, 2);
@@ -341,23 +367,21 @@ static int lua_callback_interval(lua_State* interpreter){
 
 static int lua_callback_value(lua_State* interpreter, uint8_t input){
 	size_t n = 0;
-	instance* inst = NULL;
-	lua_instance_data* data = NULL;
 	const char* channel_name = NULL;
+	instance* inst = lua_fetch_instance(interpreter);
+	lua_instance_data* data = (lua_instance_data*) inst->impl;
 
 	if(lua_gettop(interpreter) != 1){
 		LOGPF("get_value function called with %d arguments, expected 1 (string)", lua_gettop(interpreter));
 		return 0;
 	}
 
-	//get instance pointer from registry
-	lua_pushstring(interpreter, LUA_REGISTRY_KEY);
-	lua_gettable(interpreter, LUA_REGISTRYINDEX);
-	inst = (instance*) lua_touserdata(interpreter, -1);
-	data = (lua_instance_data*) inst->impl;
-
 	//fetch argument
 	channel_name = lua_tostring(interpreter, 1);
+	if(!channel_name){
+		LOG("get_value function called with invalid channel specification");
+		return 0;
+	}
 
 	//find correct channel & return value
 	for(n = 0; n < data->channels; n++){
@@ -425,6 +449,7 @@ static int lua_instance(instance* inst){
 
 	//load the interpreter
 	data->interpreter = luaL_newstate();
+	data->cleanup_handler = LUA_NOREF;
 	if(!data->interpreter){
 		LOG("Failed to initialize interpreter");
 		free(data);
@@ -441,6 +466,7 @@ static int lua_instance(instance* inst){
 	lua_register(data->interpreter, "timestamp", lua_callback_timestamp);
 	lua_register(data->interpreter, "thread", lua_callback_thread);
 	lua_register(data->interpreter, "sleep", lua_callback_sleep);
+	lua_register(data->interpreter, "cleanup_handler", lua_callback_cleanup_handler);
 
 	//store instance pointer to the lua state
 	lua_pushstring(data->interpreter, LUA_REGISTRY_KEY);
@@ -471,7 +497,8 @@ static channel* lua_channel(instance* inst, char* spec, uint8_t flags){
 			return NULL;
 		}
 
-		data->channel[u].in = data->channel[u].out = 0.0;
+		//initialize new channel
+		memset(data->channel + u, 0, sizeof(lua_channel_data));
 		data->channel[u].name = strdup(spec);
 		if(!data->channel[u].name){
 			LOG("Failed to allocate memory");
@@ -515,7 +542,8 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 }
 
 static int lua_handle(size_t num, managed_fd* fds){
-	uint64_t delta = timer_interval;
+	uint64_t delta = mm_timestamp() - last_timestamp;
+	last_timestamp = mm_timestamp();
 	size_t n;
 
 	#ifdef MMBACKEND_LUA_TIMERFD
@@ -529,9 +557,6 @@ static int lua_handle(size_t num, managed_fd* fds){
 		LOGPF("Failed to read timer: %s", strerror(errno));
 		return 1;
 	}
-	#else
-	delta = mm_timestamp() - last_timestamp;
-	last_timestamp = mm_timestamp();
 	#endif
 
 	//no timers active
@@ -577,6 +602,7 @@ static int lua_resolve_symbol(lua_State* interpreter, char* symbol){
 			|| !strcmp(symbol, "output_value")
 			|| !strcmp(symbol, "input_channel")
 			|| !strcmp(symbol, "timestamp")
+			|| !strcmp(symbol, "cleanup_handler")
 			|| !strcmp(symbol, "interval")){
 		return LUA_NOREF;
 	}
@@ -638,6 +664,13 @@ static int lua_shutdown(size_t n, instance** inst){
 
 	for(u = 0; u < n; u++){
 		data = (lua_instance_data*) inst[u]->impl;
+
+		//call cleanup function if one is registered
+		if(data->cleanup_handler != LUA_NOREF && data->cleanup_handler != LUA_REFNIL){
+			lua_rawgeti(data->interpreter, LUA_REGISTRYINDEX, data->cleanup_handler);
+			lua_pcall(data->interpreter, 0, 0, 0);
+		}
+
 		//stop the interpreter
 		lua_close(data->interpreter);
 		//cleanup channel data

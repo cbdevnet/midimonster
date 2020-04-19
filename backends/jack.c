@@ -549,38 +549,36 @@ static int mmjack_handle(size_t num, managed_fd* fds){
 	ssize_t bytes;
 	uint8_t recv_buf[1024];
 
-	if(num){
-		for(u = 0; u < num; u++){
-			inst = (instance*) fds[u].impl;
-			data = (mmjack_instance_data*) inst->impl;
-			bytes = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
-			if(bytes < 0){
-				LOGPF("Failed to receive on feedback socket for instance %s", inst->name);
-				return 1;
-			}
+	for(u = 0; u < num; u++){
+		inst = (instance*) fds[u].impl;
+		data = (mmjack_instance_data*) inst->impl;
+		bytes = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
+		if(bytes < 0){
+			LOGPF("Failed to receive on feedback socket for instance %s", inst->name);
+			return 1;
+		}
 
-			for(p = 0; p < data->ports; p++){
-				if(data->port[p].input && data->port[p].mark){
-					pthread_mutex_lock(&data->port[p].lock);
-					switch(data->port[p].type){
-						case port_cv:
-							mmjack_handle_cv(inst, p, data->port + p);
-							break;
-						case port_midi:
-							mmjack_handle_midi(inst, p, data->port + p);
-							break;
-						default:
-							LOGPF("Output handler not implemented for unknown channel type on %s.%s", inst->name, data->port[p].name);
-							break;
-					}
-
-					data->port[p].mark = 0;
-					pthread_mutex_unlock(&data->port[p].lock);
+		for(p = 0; p < data->ports; p++){
+			if(data->port[p].input && data->port[p].mark){
+				pthread_mutex_lock(&data->port[p].lock);
+				switch(data->port[p].type){
+					case port_cv:
+						mmjack_handle_cv(inst, p, data->port + p);
+						break;
+					case port_midi:
+						mmjack_handle_midi(inst, p, data->port + p);
+						break;
+					default:
+						LOGPF("Output handler not implemented for unknown channel type on %s.%s", inst->name, data->port[p].name);
+						break;
 				}
+
+				data->port[p].mark = 0;
+				pthread_mutex_unlock(&data->port[p].lock);
 			}
 		}
 	}
-	
+
 	if(config.jack_shutdown){
 		LOG("Server disconnected");
 		return 1;

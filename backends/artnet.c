@@ -206,10 +206,10 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	return data->data.channel + chan_a;
 }
 
-static int artnet_transmit(instance* inst){
-	size_t u;
+static int artnet_transmit(instance* inst, artnet_output_universe* output){
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
-	//output frame
+
+	//build output frame
 	artnet_pkt frame = {
 		.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
 		.opcode = htobe16(OpDmx),
@@ -224,16 +224,30 @@ static int artnet_transmit(instance* inst){
 	memcpy(frame.data, data->data.out, 512);
 
 	if(sendto(artnet_fd[data->fd_index].fd, (uint8_t*) &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
+		#ifndef _WIN32
+		if(errno != EAGAIN){
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
+		#else
+		if(WSAGetLastError() != WSAEWOULDBLOCK){
+			char* error = NULL;
+			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, error);
+			LocalFree(error);
+		#endif
+			return 1;
+		}
+		//reschedule frame output
+		output->mark = 1;
+		if(!next_frame || next_frame > ARTNET_SYNTHESIZE_MARGIN){
+			next_frame = ARTNET_SYNTHESIZE_MARGIN;
+		}
+		return 0;
 	}
 
 	//update last frame timestamp
-	for(u = 0; u < artnet_fd[data->fd_index].output_instances; u++){
-		if(artnet_fd[data->fd_index].output_instance[u].label == inst->ident){
-			artnet_fd[data->fd_index].output_instance[u].last_frame = mm_timestamp();
-			artnet_fd[data->fd_index].output_instance[u].mark = 0;
-		}
-	}
+	output->last_frame = mm_timestamp();
+	output->mark = 0;
 	return 0;
 }
 
@@ -285,7 +299,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 			}
 			return 0;
 		}
-		return artnet_transmit(inst);
+		return artnet_transmit(inst, artnet_fd[data->fd_index].output_instance + u);
 	}
 
 	return 0;
@@ -366,7 +380,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 					|| synthesize_delta >= ARTNET_KEEPALIVE_INTERVAL){ //keepalive timeout
 				inst = mm_instance_find(BACKEND_NAME, artnet_fd[u].output_instance[c].label);
 				if(inst){
-					artnet_transmit(inst);
+					artnet_transmit(inst, artnet_fd[u].output_instance + c);
 				}
 			}
 
@@ -376,11 +390,6 @@ static int artnet_handle(size_t num, managed_fd* fds){
 				next_frame = ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta;
 			}
 		}
-	}
-
-	if(!num){
-		//early exit
-		return 0;
 	}
 
 	for(u = 0; u < num; u++){

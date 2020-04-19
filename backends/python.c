@@ -257,6 +257,35 @@ static PyObject* mmpy_interval(PyObject* self, PyObject* args){
 	return Py_None;
 }
 
+static PyObject* mmpy_cleanup_handler(PyObject* self, PyObject* args){
+	instance* inst = *((instance**) PyModule_GetState(self));
+	python_instance_data* data = (python_instance_data*) inst->impl;
+	PyObject* current_handler = data->cleanup_handler;
+
+	if(!PyArg_ParseTuple(args, "O", &(data->cleanup_handler))
+			|| (data->cleanup_handler != Py_None && !PyCallable_Check(data->cleanup_handler))){
+		data->cleanup_handler = current_handler;
+		return NULL;
+	}
+
+	if(data->cleanup_handler == Py_None){
+		DBGPF("Cleanup handler removed on %s (previously %s)", inst->name, current_handler ? "active" : "inactive");
+		data->cleanup_handler = NULL;
+	}
+	else{
+		DBGPF("Cleanup handler installed on %s (previously %s)", inst->name, current_handler ? "active" : "inactive");
+		Py_INCREF(data->cleanup_handler);
+	}
+
+	if(!current_handler){
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+
+	//do not decrease refcount on current_handler here as the reference may be used by python code again
+	return current_handler;
+}
+
 static PyObject* mmpy_manage_fd(PyObject* self, PyObject* args){
 	instance* inst = *((instance**) PyModule_GetState(self));
 	python_instance_data* data = (python_instance_data*) inst->impl;
@@ -264,12 +293,10 @@ static PyObject* mmpy_manage_fd(PyObject* self, PyObject* args){
 	size_t u = 0, last_free = 0;
 	int fd = -1;
 
-	if(!PyArg_ParseTuple(args, "OO", &handler, &sock)){
-		return NULL;
-	}
-
-	if(handler != Py_None && !PyCallable_Check(handler)){
-		PyErr_SetString(PyExc_TypeError, "manage() requires either None or a callable");
+	if(!PyArg_ParseTuple(args, "OO", &handler, &sock)
+			|| sock == Py_None
+			|| (handler != Py_None && !PyCallable_Check(handler))){
+		PyErr_SetString(PyExc_TypeError, "manage() requires either None or a callable and a socket-like object");
 		return NULL;
 	}
 
@@ -398,13 +425,14 @@ static PyObject* mmpy_init(){
 	};
 
 	static PyMethodDef mmpy_methods[] = {
-		{"output", mmpy_output, METH_VARARGS, "Output a channel event"},
-		{"inputvalue", mmpy_input_value, METH_VARARGS, "Get last input value for a channel"},
-		{"outputvalue", mmpy_output_value, METH_VARARGS, "Get the last output value for a channel"},
+		{"output", mmpy_output, METH_VARARGS, "Output a channel event on the instance"},
+		{"inputvalue", mmpy_input_value, METH_VARARGS, "Get last input value for a channel on the instance"},
+		{"outputvalue", mmpy_output_value, METH_VARARGS, "Get the last output value for a channel on the instance"},
 		{"current", mmpy_current_handler, METH_VARARGS, "Get the name of the currently executing channel handler"},
 		{"timestamp", mmpy_timestamp, METH_VARARGS, "Get the core timestamp (in milliseconds)"},
 		{"manage", mmpy_manage_fd, METH_VARARGS, "(Un-)register a socket or file descriptor for notifications"},
 		{"interval", mmpy_interval, METH_VARARGS, "Register or update an interval handler"},
+		{"cleanup_handler", mmpy_cleanup_handler, METH_VARARGS, "Register or update the instances cleanup handler"},
 		{0}
 	};
 
@@ -569,6 +597,7 @@ static int python_handle(size_t num, managed_fd* fds){
 				//if timer expired, call handler
 				if(interval[u].delta >= interval[u].interval){
 					interval[u].delta %= interval[u].interval;
+					DBGPF("Calling interval handler %" PRIsize_t ", last delta %" PRIu64, u, delta);
 
 					//swap to interpreter
 					PyEval_RestoreThread(interval[u].interpreter);
@@ -577,7 +606,6 @@ static int python_handle(size_t num, managed_fd* fds){
 					Py_XDECREF(result);
 					//release interpreter
 					PyEval_ReleaseThread(interval[u].interpreter);
-					DBGPF("Calling interval handler %" PRIsize_t, u);
 				}
 			}
 		}
@@ -674,28 +702,43 @@ static int python_start(size_t n, instance** inst){
 
 static int python_shutdown(size_t n, instance** inst){
 	size_t u, p;
+	PyObject* result = NULL;
 	python_instance_data* data = NULL;
 
-	//clean up channels
-	//this needs to be done before stopping the interpreters,
-	//because the handler references are refcounted
-	for(u = 0; u < n; u++){
-		data = (python_instance_data*) inst[u]->impl;
-		for(p = 0; p < data->channels; p++){
-			free(data->channel[p].name);
-			Py_XDECREF(data->channel[p].handler);
-		}
-		free(data->channel);
-		free(data->default_handler);
-		//do not free data here, needed for shutting down interpreters
-	}
-
+	//if there are no instances, the python interpreter is not started, so cleanup can be skipped
 	if(python_main){
-		//just used to lock the GIL
+		//release interval references
+		for(p = 0; p < intervals; p++){
+			//swap to interpreter
+			PyEval_RestoreThread(interval[p].interpreter);
+			Py_XDECREF(interval[p].reference);
+			PyEval_ReleaseThread(interval[p].interpreter);
+		}
+
+		//lock the GIL for later interpreter release
 		PyEval_RestoreThread(python_main);
 
 		for(u = 0; u < n; u++){
 			data = (python_instance_data*) inst[u]->impl;
+
+			//swap to interpreter to be safe for releasing the references
+			PyThreadState_Swap(data->interpreter);
+
+			//run cleanup handler before cleaning up channel data to allow reading channel data
+			if(data->cleanup_handler){
+				result = PyObject_CallFunction(data->cleanup_handler, NULL);
+				Py_XDECREF(result);
+				Py_XDECREF(data->cleanup_handler);
+			}
+
+			//clean up channels
+			for(p = 0; p < data->channels; p++){
+				free(data->channel[p].name);
+				Py_XDECREF(data->channel[p].handler);
+			}
+			free(data->channel);
+			free(data->default_handler);
+			Py_XDECREF(data->handler);
 
 			//close sockets
 			for(p = 0; p < data->sockets; p++){
@@ -704,26 +747,18 @@ static int python_shutdown(size_t n, instance** inst){
 				Py_XDECREF(data->socket[p].handler);
 			}
 
-			//release interval references
-			for(p = 0; p <intervals; p++){
-				Py_XDECREF(interval[p].reference);
-			}
-			Py_XDECREF(data->handler);
-
+			//shut down interpreter, GIL is held after this but state is NULL
 			DBGPF("Shutting down interpreter for instance %s", inst[u]->name);
-			//swap to interpreter and end it, GIL is held after this but state is NULL
-			PyThreadState_Swap(data->interpreter);
 			PyErr_Clear();
 			//PyThreadState_Clear(data->interpreter);
 			Py_EndInterpreter(data->interpreter);
-
 			free(data);
 		}
 
 		//shut down main interpreter
 		PyThreadState_Swap(python_main);
 		if(Py_FinalizeEx()){
-			LOG("Failed to destroy python interpreters");
+			LOG("Failed to shut down python library");
 		}
 		PyMem_RawFree(program_name);
 	}

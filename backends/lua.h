@@ -35,6 +35,7 @@ typedef struct /*_lua_instance_data*/ {
 	lua_channel_data* channel;
 
 	lua_State* interpreter;
+	int cleanup_handler;
 	char* default_handler;
 } lua_instance_data;
 

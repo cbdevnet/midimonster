@@ -71,7 +71,7 @@ ARGS(){
 			-fu|--forceupdate)
 				UPDATER_FORCE="1"
 			;;
-			--install-updater)
+			--install-updater|--selfupdate)
 				NIGHTLY=1 prepare_repo
 				install_script
 				exit 0
@@ -83,19 +83,20 @@ ARGS(){
 			-h|--help|*)
 				assign_defaults
 				printf "${bold}Usage:${normal} ${0} ${c_green}[OPTIONS]${normal}"
-				printf "\n\t${c_green}--prefix${normal} ${c_red}<path>${normal}\t\tSet the installation prefix\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PREFIX"
-				printf "\n\t${c_green}--plugins${normal} ${c_red}<path>${normal}\tSet the plugin install path\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PLUGINS"
-				printf "\n\t${c_green}--defcfg${normal} ${c_red}<path>${normal}\t\tSet the default configuration path\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_DEFAULT_CFG"
-				printf "\n\t${c_green}--examples${normal} ${c_red}<path>${normal}\tSet the path for example configurations\t${c_mag}Default:${normal} ${dim}%s${normal}\n" "$VAR_EXAMPLE_CFGS"
-				printf "\n\t${c_green}--dev${normal}\t\t\t\tInstall nightly version"
-				printf "\n\t${c_green}-d, --default${normal}\t\t\tUse default values to install"
-				printf "\n\t${c_green}-fu, --forceupdate${normal}\t\tForce the updater to update without a version check"
-				printf "\n\t${c_green}--install-updater${normal}\t\tInstall the updater (Run with midimonster-updater)"
-				printf "\n\t${c_green}--install-dependencies${normal}\t\tInstall dependencies and exit"
-				printf "\n\t${c_green}-h, --help${normal}\t\t\tShow this message and exit"
-				printf "\n\t${uline}${bold}${c_mag}Each argument can be overwritten by another, the last one is used!${normal}\n"
+				printf "\n\t${c_green}--prefix=${normal}${c_red}<path>${normal}\t\tSet the installation prefix.\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PREFIX"
+				printf "\n\t${c_green}--plugins=${normal}${c_red}<path>${normal}\tSet the plugin install path.\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PLUGINS"
+				printf "\n\t${c_green}--defcfg=${normal}${c_red}<path>${normal}\t\tSet the default configuration path.\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_DEFAULT_CFG"
+				printf "\n\t${c_green}--examples=${normal}${c_red}<path>${normal}\tSet the path for example configurations.\t${c_mag}Default:${normal} ${dim}%s${normal}\n" "$VAR_EXAMPLE_CFGS"
+				printf "\n\t${c_green}--dev${normal}\t\t\tInstall nightly version."
+				printf "\n\t${c_green}-d,\t--default${normal}\tUse default values to install."
+				printf "\n\t${c_green}-fu,\t--forceupdate${normal}\tForce the updater to update without a version check."
+				printf "\n\t${c_green}--selfupdate${normal}\t\tUpdates this script to the newest version and exit."
+				printf "\n\t${c_green}--install-updater${normal}\tInstall the updater (Run with midimonster-updater) and exit."
+				printf "\n\t${c_green}--install-dependencies${normal}\tInstall dependencies and exit"
+				printf "\n\t${c_green}-h,\t--help${normal}\t\tShow this message and exit."
+				printf "\n\t${uline}${bold}${c_mag}Each argument can be overwritten by another, the last one is used!.${normal}\n"
 				rmdir "$tmp_path"
-				exit 1
+				exit 0
 			;;
 		esac
 		shift

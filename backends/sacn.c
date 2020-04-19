@@ -275,9 +275,10 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	return data->data.channel + chan_a;
 }
 
-static int sacn_transmit(instance* inst){
-	size_t u;
+static int sacn_transmit(instance* inst, sacn_output_universe* output){
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
+
+	//build sacn frame
 	sacn_data_pdu pdu = {
 		.root = {
 			.preamble_size = htobe16(0x10),
@@ -312,16 +313,31 @@ static int sacn_transmit(instance* inst){
 	memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
 
 	if(sendto(global_cfg.fd[data->fd_index].fd, (uint8_t*) &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
+		#ifndef _WIN32
+		if(errno != EAGAIN){
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
+		#else
+		if(WSAGetLastError() != WSAEWOULDBLOCK){
+			char* error = NULL;
+			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, error);
+			LocalFree(error);
+		#endif
+			return 1;
+		}
+
+		//reschedule output
+		output->mark = 1;
+		if(!global_cfg.next_frame || global_cfg.next_frame > SACN_SYNTHESIZE_MARGIN){
+			global_cfg.next_frame = SACN_SYNTHESIZE_MARGIN;
+		}
+		return 0;
 	}
 
 	//update last transmit timestamp, unmark instance
-	for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
-		if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
-			global_cfg.fd[data->fd_index].universe[u].last_frame = mm_timestamp();
-			global_cfg.fd[data->fd_index].universe[u].mark = 0;
-		}
-	}
+	output->last_frame = mm_timestamp();
+	output->mark = 0;
 	return 0;
 }
 
@@ -329,10 +345,6 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u, mark = 0;
 	uint32_t frame_delta = 0;
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
-
-	if(!num){
-		return 0;
-	}
 
 	if(!data->xmit_prio){
 		LOGPF("Instance %s not enabled for output (%" PRIsize_t " channel events)", inst->name, num);
@@ -361,14 +373,14 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	//send packet if required
 	if(mark){
-		if(!data->realtime){
-			//find output instance data
-			for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
-				if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
-					break;
-				}
+		//find output instance data
+		for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
+			if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
+				break;
 			}
+		}
 
+		if(!data->realtime){
 			frame_delta = mm_timestamp() - global_cfg.fd[data->fd_index].universe[u].last_frame;
 
 			//check if ratelimiting engaged
@@ -380,7 +392,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 				return 0;
 			}
 		}
-		sacn_transmit(inst);
+		sacn_transmit(inst, global_cfg.fd[data->fd_index].universe + u);
 	}
 
 	return 0;
@@ -500,7 +512,19 @@ static void sacn_discovery(size_t fd){
 		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
 		if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
-			LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, strerror(errno));
+			#ifndef _WIN32
+			if(errno != EAGAIN){
+				LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, strerror(errno));
+			}
+			#else
+			if(WSAGetLastError() != WSAEWOULDBLOCK){
+				char* error = NULL;
+				 FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+						  NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
+				 LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, error);
+				 LocalFree(error);
+			}
+			#endif
 		}
 	}
 }
@@ -541,7 +565,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 				instance_id.fields.uni = global_cfg.fd[u].universe[c].universe;
 				inst = mm_instance_find(BACKEND_NAME, instance_id.label);
 				if(inst){
-					sacn_transmit(inst);
+					sacn_transmit(inst, global_cfg.fd[u].universe + c);
 				}
 			}
 
@@ -552,11 +576,6 @@ static int sacn_handle(size_t num, managed_fd* fds){
 			}
 
 		}
-	}
-
-	//early exit
-	if(!num){
-		return 0;
 	}
 
 	for(u = 0; u < num; u++){

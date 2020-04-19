@@ -10,6 +10,7 @@
 #define MM_API __attribute__((dllexport))
 #endif
 #define BACKEND_NAME "core"
+#define MM_SWAP_LIMIT 20
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
@@ -339,7 +340,7 @@ static int args_parse(int argc, char** argv, char** cfg_file){
 
 static int core_process(size_t nfds, managed_fd* signaled_fds){
 	event_collection* secondary = NULL;
-	size_t u;
+	size_t u, swaps = 0;
 
 	//run backend processing, collect events
 	DBGPF("%lu backend FDs signaled\n", nfds);
@@ -347,7 +348,8 @@ static int core_process(size_t nfds, managed_fd* signaled_fds){
 		return 1;
 	}
 
-	while(routing.events->n){
+	//limit number of collector swaps per iteration to prevent complete deadlock
+	while(routing.events->n && swaps < MM_SWAP_LIMIT){
 		//swap primary and secondary event collectors
 		DBGPF("Swapping event collectors, %lu events in primary\n", routing.events->n);
 		for(u = 0; u < sizeof(routing.pool) / sizeof(routing.pool[0]); u++){
@@ -366,6 +368,10 @@ static int core_process(size_t nfds, managed_fd* signaled_fds){
 
 		//reset the event count
 		secondary->n = 0;
+	}
+
+	if(swaps == MM_SWAP_LIMIT){
+		LOG("Iteration swap limit hit, a backend may be configured to route events in an infinite loop");
 	}
 
 	return 0;

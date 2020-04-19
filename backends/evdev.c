@@ -357,10 +357,6 @@ static int evdev_handle(size_t num, managed_fd* fds){
 	int read_status;
 	struct input_event ev;
 
-	if(!num){
-		return 0;
-	}
-
 	for(fd = 0; fd < num; fd++){
 		inst = (instance*) fds[fd].impl;
 		if(!inst){
@@ -436,10 +432,6 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 	};
 	int32_t value = 0;
 	uint64_t range = 0;
-
-	if(!num){
-		return 0;
-	}
 
 	if(!data->output_enabled){
 		LOGPF("Instance %s not enabled for output (%" PRIsize_t " channel events)", inst->name, num);

@@ -63,7 +63,7 @@ typedef struct /*_rtpmidi_peer*/ {
 	uint8_t active; //marked for reuse
 	uint8_t learned; //learned / configured peer (learned peers are marked inactive on session shutdown)
 	uint8_t connected; //currently in active session
-	ssize_t invite; //invite-list index for apple-mode learned peers
+	ssize_t invite; //invite-list index for apple-mode learned peers (used to track ipv6/ipv4 overlapping invitations)
 } rtpmidi_peer;
 
 typedef struct /*_rtmidi_instance_data*/ {

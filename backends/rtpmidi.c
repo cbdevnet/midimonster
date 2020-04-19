@@ -164,7 +164,7 @@ static int dns_encode_name(char* name, dns_name* out){
 
 	for(token = strtok_r(name, ".", &save); token; token = strtok_r(NULL, ".", &save)){
 		//make space for this label, its length and a trailing root label
-		if(out->alloc < out->length + strlen(token) + 1 + 1){
+		if(out->alloc < out->length + strlen(token) + 1 + 1 || !out->name){
 			out->name = realloc(out->name, (out->length + strlen(token) + 2) * sizeof(char));
 			if(!out->name){
 				LOG("Failed to allocate memory");
@@ -319,7 +319,7 @@ static int rtpmidi_announce_addrs(){
 }
 
 static uint32_t rtpmidi_interval(){
-	return max(0, RTPMIDI_SERVICE_INTERVAL - (mm_timestamp() - cfg.last_service));
+	return max(0, (int64_t) RTPMIDI_SERVICE_INTERVAL - (int64_t) (mm_timestamp() - cfg.last_service));
 }
 
 static int rtpmidi_configure(char* option, char* value){
@@ -1526,20 +1526,16 @@ static int rtpmidi_handle_mdns(){
 
 	free(name.name);
 	free(host.name);
-	if(bytes <= 0){
-		#ifdef _WIN32
-		if(WSAGetLastError() == WSAEWOULDBLOCK){
-		#else
-		if(errno == EAGAIN){
-		#endif
-			return 0;
-		}
-
-		LOGPF("Error reading from mDNS descriptor: %s", mmbackend_socket_strerror(errno));
-		return 1;
+	#ifdef _WIN32
+	if(WSAGetLastError() == WSAEWOULDBLOCK){
+	#else
+	if(errno == EAGAIN){
+	#endif
+		return 0;
 	}
 
-	return 0;
+	LOGPF("Error reading from mDNS descriptor: %s", mmbackend_socket_strerror(errno));
+	return 1;
 }
 
 static int rtpmidi_handle(size_t num, managed_fd* fds){

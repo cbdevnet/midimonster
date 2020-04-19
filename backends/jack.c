@@ -205,7 +205,9 @@ static int mmjack_process(jack_nframes_t nframes, void* instp){
 	//notify the main thread
 	if(mark){
 		DBGPF("Notifying handler thread for instance %s", inst->name);
-		send(data->fd, "c", 1, 0);
+		if(send(data->fd, "c", 1, 0) != 1){
+			DBGPF("Failed to notify main thread on %s", inst->name);
+		}
 	}
 	return rv;
 }

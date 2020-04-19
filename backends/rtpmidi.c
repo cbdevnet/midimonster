@@ -19,15 +19,13 @@
 #include <ifaddrs.h>
 #endif
 
-//#include "../tests/hexdump.c"
-
 //TODO learn peer ssrcs
 //TODO default mode?
 //TODO internal loop mode
 //TODO for some reason, the announce packet generates an exception in the wireshark dns dissector
 //TODO rename and document most functions
 //TODO timeout non-responsive peers (connected = 0) to allow discovery to reconnect them
-//TODO ipv6-mapped-ipv4 creates problens when connecting on a ipv4-bound instance
+//TODO ipv6-mapped-ipv4 creates problems when connecting on a ipv4-bound instance
 
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
@@ -496,9 +494,10 @@ static int rtpmidi_push_invite(instance* inst, char* peer){
 	return 0;
 }
 
-static ssize_t rtpmidi_applecommand(instance* inst, struct sockaddr* dest, socklen_t dest_len, uint8_t control, applemidi_command command, uint32_t token){
+static int rtpmidi_applecommand(instance* inst, struct sockaddr* dest, socklen_t dest_len, uint8_t control, applemidi_command command, uint32_t token){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
 	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
+	ssize_t bytes = 0;
 
 	apple_command* cmd = (apple_command*) &frame;
 	cmd->res1 = 0xFFFF;
@@ -511,10 +510,15 @@ static ssize_t rtpmidi_applecommand(instance* inst, struct sockaddr* dest, sockl
 	memcpy(frame + sizeof(apple_command), inst->name, strlen(inst->name) + 1);
 
 	//FIXME should we match sending/receiving ports? if the reference does this, it should be documented
-	return sendto(control ? data->control_fd : data->fd, frame, sizeof(apple_command) + strlen(inst->name) + 1, 0, dest, dest_len);
+	bytes = sendto(control ? data->control_fd : data->fd, frame, sizeof(apple_command) + strlen(inst->name) + 1, 0, dest, dest_len);
+	if(bytes != sizeof(apple_command) + strlen(inst->name) + 1){
+		LOGPF("Failed to transmit session command on %s", inst->name);
+		return 1;
+	}
+	return 0;
 }
 
-static ssize_t rtpmidi_peer_applecommand(instance* inst, size_t peer, uint8_t control, applemidi_command command, uint32_t token){
+static int rtpmidi_peer_applecommand(instance* inst, size_t peer, uint8_t control, applemidi_command command, uint32_t token){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
 	struct sockaddr_storage dest_addr;
 
@@ -875,7 +879,9 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 				return 0;
 		}
 
-		sendto(fd, response, sizeof(apple_sync_frame), 0, (struct sockaddr*) peer, peer_len);
+		if(sendto(fd, response, sizeof(apple_sync_frame), 0, (struct sockaddr*) peer, peer_len) != sizeof(apple_sync_frame)){
+			LOG("Failed to output sync frame");
+		}
 		return 0;
 	}
 	else if(command->command == apple_feedback){
@@ -1116,6 +1122,7 @@ static int rtpmidi_mdns_broadcast(uint8_t* frame, size_t len){
 	};
 
 	//send to ipv4 and ipv6 mcasts
+	//FIXME much as it pains me, this should probably be split into two descriptors, one for ipv4 and one for ipv6
 	sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast6, sizeof(mcast6));
 	sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast, sizeof(mcast));
 	return 0;
@@ -1323,7 +1330,9 @@ static int rtpmidi_service(){
 					memcpy(&control_peer, &(data->peer[u].dest), sizeof(control_peer));
 					((struct sockaddr_in*) &control_peer)->sin_port = htobe16(be16toh(((struct sockaddr_in*) &control_peer)->sin_port) - 1);
 
-					sendto(data->control_fd, (char*) &sync, sizeof(apple_sync_frame), 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len);
+					if(sendto(data->control_fd, (char*) &sync, sizeof(apple_sync_frame), 0, (struct sockaddr*) &control_peer, data->peer[u].dest_len) != sizeof(apple_sync_frame)){
+						LOG("Failed to output sync frame");
+					}
 				}
 				else if(data->peer[p].active && !data->peer[p].learned && (mm_timestamp() / 1000) % 10 == 0){
 					//try to invite pre-defined unconnected applemidi peers

@@ -1,7 +1,8 @@
 ### The `rtpmidi` backend
 
 This backend provides read-write access to RTP MIDI streams, which transfer MIDI data
-over the network. Notably, it has native support in Apple devices.
+over the network. Notably, RTP MIDI has native support in Apple devices including their
+tablets.
 
 As the specification for RTP MIDI does not normatively indicate any method
 for session management, most vendors define their own standards for this.
@@ -82,6 +83,9 @@ rmidi1.ch0.pitch > rmidi2.ch1.pitch
 ```
 
 #### Known bugs / problems
+
+This backend is currently still a work in progress, and is not mentioned on the main README yet for that reason.
+Critical feedback and tests across multiple devices are very welcome.
 
 The mDNS and DNS-SD implementations in this backend are extremely terse, to the point of violating the
 specifications in multiple cases. Due to the complexity involved in supporting these protocols, problems

@@ -71,7 +71,9 @@ elif [ "$TASK" = "windows" ]; then
 	if make windows; then
 		exit "$?"
 	fi
+	# Build the lua backend but disable it by default to avoid scary error messages
 	make -C backends lua.dll
+	mv backends/lua.dll backends/lua.dll.disabled
 	travis_fold end "make_windows"
 	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
 		travis_fold start "deploy_windows"
@@ -80,6 +82,7 @@ elif [ "$TASK" = "windows" ]; then
 		mkdir ./deployment/docs
 		cp ./midimonster.exe ./deployment/
 		cp ./backends/*.dll ./deployment/backends/
+		cp ./backends/*.dll.disabled ./deployment/backends/
 		cp ./monster.cfg ./deployment/monster.cfg
 		cp ./backends/*.md ./deployment/docs/
 		cp -r ./configs ./deployment/

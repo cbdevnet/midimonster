@@ -152,7 +152,7 @@ before_install:
 #OS X uses something other than $CXX variable
  - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) ]; then $CXX --version; fi
 # Download libraries to link with on Windows
- - if [ "$TASK" == "windows" ]; then mkdir libs; wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip; unzip lua53.zip lua53.dll; mv lua53.dll libs; fi
+ - if [ "$TASK" == "windows" ]; then wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip; unzip lua53.zip lua53.dll; fi
 
 notifications:
  irc:

@@ -20,8 +20,15 @@ int mmbackend_strdup(char** dest, char* src){
 char* mmbackend_socket_strerror(int err_no){
 	#ifdef _WIN32
 	static char error[2048] = "";
+	ssize_t u; 
 	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, WSAGetLastError(),
 			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), error, sizeof(error), NULL);
+	//remove trailing newline that for some reason is included in most of these...
+	for(u = strlen(error) - 1; u > 0; u--){
+		if(!isprint(error[u])){
+			error[u] = 0;
+		}
+	}
 	return error;
 	#else
 	return strerror(err_no);

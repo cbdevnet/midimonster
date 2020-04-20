@@ -101,7 +101,6 @@ the MIDIMonster project can not provide this file within this repository.
 You will need to acquire a copy of `lua53.dll`, for example by downloading it from the [luabinaries
 project](http://luabinaries.sourceforge.net/download.html).
 
-To build the `lua` backend for Windows, place `lua53.dll` in a subdirectory `libs/` in the project root
-and run `make lua.dll` inside the `backends/` directory.
-
+Place this file in the project root directory and run `make lua.dll` inside the `backends/` directory
+to build the backend. 
 At runtime, Windows searches for the file in the same directory as `midimonster.exe`.

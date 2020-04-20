@@ -525,7 +525,7 @@ static int rtpmidi_applecommand(instance* inst, struct sockaddr* dest, socklen_t
 	//FIXME should we match sending/receiving ports? if the reference does this, it should be documented
 	bytes = sendto(control ? data->control_fd : data->fd, frame, sizeof(apple_command) + strlen(inst->name) + 1, 0, dest, dest_len);
 	if(bytes != sizeof(apple_command) + strlen(inst->name) + 1){
-		LOGPF("Failed to transmit session command on %s", inst->name);
+		LOGPF("Failed to transmit session command on %s: %s", inst->name, mmbackend_socket_strerror(errno));
 		return 1;
 	}
 	return 0;

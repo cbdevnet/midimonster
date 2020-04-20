@@ -696,7 +696,7 @@ static int osc_output_channel(instance* inst, size_t channel){
 
 	//output packet
 	if(sendto(data->fd, xmit_buf, offset, 0, (struct sockaddr*) &(data->dest), data->dest_len) < 0){
-		LOGPF("Failed to transmit packet: %s", strerror(errno));
+		LOGPF("Failed to transmit packet: %s", mmbackend_socket_strerror(errno));
 	}
 	return 0;
 }
@@ -917,7 +917,7 @@ static int osc_handle(size_t num, managed_fd* fds){
 		#else
 		if(bytes_read < 0 && errno != EAGAIN){
 		#endif
-			LOGPF("Failed to receive data for instance %s: %s", inst->name, strerror(errno));
+			LOGPF("Failed to receive data for instance %s: %s", inst->name, mmbackend_socket_strerror(errno));
 		}
 
 		if(bytes_read == 0){

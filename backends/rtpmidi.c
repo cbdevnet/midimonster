@@ -27,6 +27,20 @@
 //TODO timeout non-responsive peers (connected = 0) to allow discovery to reconnect them
 //TODO ipv6-mapped-ipv4 creates problems when connecting on a ipv4-bound instance
 
+/*
+ * CAVEAT EMPTOR: This is one of the largest backends yet, due to the
+ * sheer number of protocols involved and their respective complexity.
+ * The following RFCs may be useful for understanding this backend:
+ * 	* RFC 6295 (MIDI Payload for RTP)
+ * 	* RFC 1035 (DNS)
+ * 	* RFC 6762 (mDNS)
+ * 	* RFC 6763 (DNS Service Discovery)
+ * 	* RFC 2782 (SRV RR for DNS)
+ * 	* To a lesser extent, RFC3550 (RTP)
+ * Additionally, a strong understanding of the MIDI data stream as well as the details of multicast
+ * networking for IPv4 and IPv6 are very helpful.
+ */
+
 static struct /*_rtpmidi_global*/ {
 	int mdns_fd;
 	char* mdns_name;
@@ -235,7 +249,6 @@ bail:
 	return -1;
 }
 
-//TODO this should be trimmed down a bit
 static int rtpmidi_announce_addrs(){
 	char repr[INET6_ADDRSTRLEN + 1] = "", iface[2048] = "";
 	union {

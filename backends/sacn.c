@@ -101,7 +101,7 @@ static int sacn_listener(char* host, char* port, uint8_t flags){
 	if(flags & mcast_loop){
 		//set IP_MCAST_LOOP to allow local applications to receive output
 		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			LOGPF("Failed to re-enable IP_MULTICAST_LOOP on socket: %s", strerror(errno));
+			LOGPF("Failed to re-enable IP_MULTICAST_LOOP on socket: %s", mmbackend_socket_strerror(errno));
 		}
 	}
 
@@ -313,17 +313,12 @@ static int sacn_transmit(instance* inst, sacn_output_universe* output){
 	memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
 
 	if(sendto(global_cfg.fd[data->fd_index].fd, (uint8_t*) &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		#ifndef _WIN32
-		if(errno != EAGAIN){
-			LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
-		#else
+		#ifdef _WIN32
 		if(WSAGetLastError() != WSAEWOULDBLOCK){
-			char* error = NULL;
-			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-			LOGPF("Failed to output frame for instance %s: %s", inst->name, error);
-			LocalFree(error);
+		#else
+		if(errno != EAGAIN){
 		#endif
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, mmbackend_socket_strerror(errno));
 			return 1;
 		}
 
@@ -512,19 +507,13 @@ static void sacn_discovery(size_t fd){
 		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
 		if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
-			#ifndef _WIN32
-			if(errno != EAGAIN){
-				LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, strerror(errno));
-			}
-			#else
+			#ifdef _WIN32
 			if(WSAGetLastError() != WSAEWOULDBLOCK){
-				char* error = NULL;
-				 FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-						  NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-				 LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, error);
-				 LocalFree(error);
-			}
+			#else
+			if(errno != EAGAIN){
 			#endif
+				LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, mmbackend_socket_strerror(errno));
+			}
 		}
 	}
 }
@@ -603,7 +592,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 		#else
 		if(bytes_read < 0 && errno != EAGAIN){
 		#endif
-			LOGPF("Failed to receive data: %s", strerror(errno));
+			LOGPF("Failed to receive data: %s", mmbackend_socket_strerror(errno));
 		}
 
 		if(bytes_read == 0){
@@ -655,7 +644,7 @@ static int sacn_start(size_t n, instance** inst){
 		if(!data->unicast_input){
 			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
 			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
-				LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst[u]->name, strerror(errno));
+				LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst[u]->name, mmbackend_socket_strerror(errno));
 			}
 		}
 

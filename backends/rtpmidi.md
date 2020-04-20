@@ -15,8 +15,8 @@ selectable per-instance, with some methods requiring additional global configura
 	configured in the instance configuration as well as previously unknown peers that
 	voluntarily send data to the instance.
 * AppleMIDI session management: The instance will be able to communicate (either as participant
-	or initiator) in an AppleMIDI session, which can optionally be announced via mDNS (better
-	known as "Bonjour" to Apple users).
+	or initiator) in an AppleMIDI session, which will be announced via mDNS (better
+	known as "Bonjour" to Apple users) if possible.
 
 Note that instances that receive data from multiple peers will combine all inputs into one
 stream, which may lead to inconsistencies during playback.

@@ -534,7 +534,7 @@ static int openpixel_client_handle(instance* inst, int fd){
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer), 0);
 	if(bytes <= 0){
 		if(bytes < 0){
-			LOGPF("Failed to receive from client: %s", strerror(errno));
+			LOGPF("Failed to receive from client: %s", mmbackend_socket_strerror(errno));
 		}
 
 		//close the connection

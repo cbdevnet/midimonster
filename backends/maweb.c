@@ -774,7 +774,7 @@ static int maweb_handle_fd(instance* inst){
 
 	bytes_read = recv(data->fd, data->buffer + data->offset, bytes_left - 1, 0);
 	if(bytes_read < 0){
-		LOGPF("Failed to receive: %s", strerror(errno));
+		LOGPF("Failed to receive on %s: %s", inst->name, mmbackend_socket_strerror(errno));
 		//TODO close, reopen
 		return 1;
 	}

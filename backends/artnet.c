@@ -224,17 +224,12 @@ static int artnet_transmit(instance* inst, artnet_output_universe* output){
 	memcpy(frame.data, data->data.out, 512);
 
 	if(sendto(artnet_fd[data->fd_index].fd, (uint8_t*) &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		#ifndef _WIN32
-		if(errno != EAGAIN){
-			LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
-		#else
+		#ifdef _WIN32
 		if(WSAGetLastError() != WSAEWOULDBLOCK){
-			char* error = NULL;
-			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-			LOGPF("Failed to output frame for instance %s: %s", inst->name, error);
-			LocalFree(error);
+		#else
+		if(errno != EAGAIN){
 		#endif
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, mmbackend_socket_strerror(errno));
 			return 1;
 		}
 		//reschedule frame output
@@ -414,7 +409,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 		#else
 		if(bytes_read < 0 && errno != EAGAIN){
 		#endif
-			LOGPF("Failed to receive data: %s", strerror(errno));
+			LOGPF("Failed to receive data: %s", mmbackend_socket_strerror(errno));
 		}
 
 		if(bytes_read == 0){

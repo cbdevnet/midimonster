@@ -482,7 +482,7 @@ int main(int argc, char** argv){
 
 	//read config
 	if(config_read(cfg_file)){
-		fprintf(stderr, "Failed to read configuration file %s\n", cfg_file);
+		fprintf(stderr, "Failed to parse master configuration file %s\n", cfg_file);
 		backends_stop();
 		routing_cleanup();
 		fds_free();

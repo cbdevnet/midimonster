@@ -2,6 +2,11 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <errno.h>
+#ifndef _WIN32
+#include <linux/limits.h>
+#endif
+
+#define BACKEND_NAME "core/cfg"
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"
@@ -349,6 +354,10 @@ static int config_line(char* line){
 				}
 			}
 		}
+		else if(!strncmp(line, "[include ", 9)){
+			line[strlen(line) - 1] = 0;
+			return config_read(line + 9);
+		}
 		else if(!strcmp(line, "[map]")){
 			//mapping configuration
 			parser_state = map;
@@ -493,7 +502,7 @@ int config_read(char* cfg_filepath){
 	char* line_raw = NULL;
 
 	//create heap copy of file name because original might be in readonly memory
-	char* source_dir = strdup(cfg_filepath), *source_file = NULL;
+	char* source_dir = strdup(cfg_filepath), *source_file = NULL, original_dir[PATH_MAX * 2] = "";
 	#ifdef _WIN32
 	char path_separator = '\\';
 	#else
@@ -510,6 +519,12 @@ int config_read(char* cfg_filepath){
 	if(source_file){
 		*source_file = 0;
 		source_file++;
+
+		if(!getcwd(original_dir, sizeof(original_dir))){
+			fprintf(stderr, "Failed to read current working directory: %s\n", strerror(errno));
+			goto bail;
+		}
+
 		if(chdir(source_dir)){
 			fprintf(stderr, "Failed to change to configuration file directory %s: %s\n", source_dir, strerror(errno));
 			goto bail;
@@ -519,10 +534,11 @@ int config_read(char* cfg_filepath){
 		source_file = source_dir;
 	}
 
+	fprintf(stderr, "Reading configuration file %s\n", cfg_filepath);
 	source = fopen(source_file, "r");
 
 	if(!source){
-		fprintf(stderr, "Failed to open configuration file for reading\n");
+		fprintf(stderr, "Failed to open %s for reading\n", cfg_filepath);
 		goto bail;
 	}
 
@@ -536,6 +552,11 @@ int config_read(char* cfg_filepath){
 
 	rv = 0;
 bail:
+	//change back to previous directory to allow recursive configuration file parsing
+	if(source_file && source_dir != source_file){
+		chdir(original_dir);
+	}
+
 	free(source_dir);
 	if(source){
 		fclose(source);

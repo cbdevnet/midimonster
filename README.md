@@ -76,6 +76,10 @@ lines of the form `option = value`.
 Lines starting with a semicolon are treated as comments and ignored. Inline comments
 are not currently supported.
 
+Configuration files may be included recursively in other configuration files using
+the syntax `[include <file>]`. This will read the referenced configuration file as
+if it were inserted at that point.
+
 Example configuration files may be found in [configs/](configs/).
 
 ### Backend and instance configuration

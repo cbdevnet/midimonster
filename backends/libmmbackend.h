@@ -72,7 +72,7 @@ int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* ad
  * Create a socket of given type and mode for a bind / connect host.
  * Returns -1 on failure, a valid file descriptor for the socket on success.
  */
-int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast);
+int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast, uint8_t dualstack);
 
 /*
  * Send arbitrary data over multiple writes if necessary

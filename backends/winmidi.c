@@ -438,7 +438,7 @@ static int winmidi_socket_pair(int* fds){
 	};
 
 	//for some reason the feedback connection fails to work on 'real' windows with ipv6
-	fds[0] = mmbackend_socket("127.0.0.1", "0", SOCK_DGRAM, 1, 0);
+	fds[0] = mmbackend_socket("127.0.0.1", "0", SOCK_DGRAM, 1, 0, 0);
 	if(fds[0] < 0){
 		LOG("Failed to open feedback socket");
 		return 1;

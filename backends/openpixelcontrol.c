@@ -48,7 +48,7 @@ static int openpixel_configure_instance(instance* inst, char* option, char* valu
 			return 1;
 		}
 
-		data->dest_fd = mmbackend_socket(host, port, SOCK_STREAM, 0, 0);
+		data->dest_fd = mmbackend_socket(host, port, SOCK_STREAM, 0, 0, 1);
 		if(data->dest_fd >= 0){
 			return 0;
 		}
@@ -62,7 +62,7 @@ static int openpixel_configure_instance(instance* inst, char* option, char* valu
 			return 1;
 		}
 
-		data->listen_fd = mmbackend_socket(host, port, SOCK_STREAM, 1, 0);
+		data->listen_fd = mmbackend_socket(host, port, SOCK_STREAM, 1, 0, 1);
 		if(data->listen_fd >= 0 && !listen(data->listen_fd, SOMAXCONN)){
 			return 0;
 		}

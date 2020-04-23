@@ -1,5 +1,5 @@
 #define BACKEND_NAME "rtpmidi"
-//#define DEBUG
+#define DEBUG
 
 #include <string.h>
 #include <errno.h>
@@ -25,7 +25,6 @@
 //TODO for some reason, the announce packet generates an exception in the wireshark dns dissector
 //TODO rename and document most functions
 //TODO timeout non-responsive peers (connected = 0) to allow discovery to reconnect them
-//TODO ipv6-mapped-ipv4 creates problems when connecting on a ipv4-bound instance
 
 /*
  * CAVEAT EMPTOR: This is one of the largest backends yet, due to the
@@ -42,7 +41,10 @@
  */
 
 static struct /*_rtpmidi_global*/ {
+	//mdns is split into v6 and v4 to avoid having to translate ipv6-mapped-ipv4 source addresses
 	int mdns_fd;
+	int mdns4_fd;
+
 	char* mdns_name;
 	char* mdns_interface;
 
@@ -56,6 +58,7 @@ static struct /*_rtpmidi_global*/ {
 	rtpmidi_invite* invite;
 } cfg = {
 	.mdns_fd = -1,
+	.mdns4_fd = -1,
 	.mdns_name = NULL,
 	.mdns_interface = NULL,
 
@@ -370,7 +373,7 @@ static int rtpmidi_bind_instance(instance* inst, rtpmidi_instance_data* data, ch
 	char control_port[32];
 
 	//bind to random port if none supplied
-	data->fd = mmbackend_socket(host, port ? port : "0", SOCK_DGRAM, 1, 0);
+	data->fd = mmbackend_socket(host, port ? port : "0", SOCK_DGRAM, 1, 0, 1);
 	if(data->fd < 0){
 		return 1;
 	}
@@ -384,7 +387,7 @@ static int rtpmidi_bind_instance(instance* inst, rtpmidi_instance_data* data, ch
 	if(data->mode == apple){
 		data->control_port = be16toh(((struct sockaddr_in*) &sock_addr)->sin_port) - 1;
 		snprintf(control_port, sizeof(control_port), "%d", data->control_port);
-		data->control_fd = mmbackend_socket(host, control_port, SOCK_DGRAM, 1, 0);
+		data->control_fd = mmbackend_socket(host, control_port, SOCK_DGRAM, 1, 0, 1);
 		if(data->control_fd < 0){
 			LOGPF("Failed to bind control port %s for instance %s", control_port, inst->name);
 			return 1;
@@ -1135,9 +1138,8 @@ static int rtpmidi_mdns_broadcast(uint8_t* frame, size_t len){
 	};
 
 	//send to ipv4 and ipv6 mcasts
-	//FIXME much as it pains me, this should probably be split into two descriptors, one for ipv4 and one for ipv6
 	sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast6, sizeof(mcast6));
-	sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast, sizeof(mcast));
+	sendto(cfg.mdns4_fd, frame, len, 0, (struct sockaddr*) &mcast, sizeof(mcast));
 	return 0;
 }
 
@@ -1329,7 +1331,7 @@ static int rtpmidi_service(){
 
 		if(data->mode == apple){
 			//mdns discovery
-			if(cfg.mdns_fd >= 0
+			if((cfg.mdns_fd >= 0 || cfg.mdns4_fd >= 0)
 					&& (!data->last_announce || mm_timestamp() - data->last_announce > RTPMIDI_ANNOUNCE_INTERVAL)){
 				rtpmidi_mdns_announce(inst[u]);
 			}
@@ -1513,7 +1515,7 @@ static int rtpmidi_parse_announce(uint8_t* buffer, size_t length, dns_header* hd
 	return 0;
 }
 
-static int rtpmidi_handle_mdns(){
+static int rtpmidi_handle_mdns(int fd){
 	uint8_t buffer[RTPMIDI_PACKET_BUFFER];
 	dns_header* hdr = (dns_header*) buffer;
 	dns_name name = {
@@ -1523,9 +1525,9 @@ static int rtpmidi_handle_mdns(){
 	struct sockaddr_storage peer_addr;
 	socklen_t peer_len = sizeof(peer_addr);
 
-	for(bytes = recvfrom(cfg.mdns_fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &peer_addr, &peer_len);
+	for(bytes = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &peer_addr, &peer_len);
 			bytes > 0;
-			bytes = recvfrom(cfg.mdns_fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &peer_addr, &peer_len)){
+			bytes = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &peer_addr, &peer_len)){
 		if(bytes < sizeof(dns_header)){
 			continue;
 		}
@@ -1540,7 +1542,10 @@ static int rtpmidi_handle_mdns(){
 		//rfc6762 18.3: opcode != 0 -> ignore
 		//rfc6762 18.11: response code != 0 -> ignore
 
-		DBGPF("%" PRIsize_t " bytes, ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional", bytes, hdr->id, DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query", hdr->questions, hdr->answers, hdr->servers, hdr->additional);
+		DBGPF("%" PRIsize_t " bytes on v%c, ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional",
+				bytes, (fd == cfg.mdns_fd ? '6' : '4'), hdr->id,
+				DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query",
+				hdr->questions, hdr->answers, hdr->servers, hdr->additional);
 		rtpmidi_parse_announce(buffer, bytes, hdr, &name, &host, (struct sockaddr*) &peer_addr, peer_len);
 
 		peer_len = sizeof(peer_addr);
@@ -1578,7 +1583,7 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 	for(u = 0; u < num; u++){
 		if(!fds[u].impl){
 			//handle mDNS discovery input
-			rtpmidi_handle_mdns();
+			rtpmidi_handle_mdns(fds[u].fd);
 		}
 		else{
 			//handle rtp/control input
@@ -1619,24 +1624,25 @@ static int rtpmidi_start_mdns(){
 	}
 
 	//FIXME might try passing NULL as host here to work around possible windows ipv6 handicaps
-	cfg.mdns_fd = mmbackend_socket(RTPMIDI_DEFAULT_HOST, RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1);
-	if(cfg.mdns_fd < 0){
-		LOG("Failed to create requested mDNS descriptor");
+	cfg.mdns_fd = mmbackend_socket(RTPMIDI_DEFAULT_HOST, RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1, 0);
+	cfg.mdns4_fd = mmbackend_socket(RTPMIDI_DEFAULT4_HOST, RTPMIDI_MDNS_PORT, SOCK_DGRAM, 1, 1, 0);
+	if(cfg.mdns_fd < 0 && cfg.mdns4_fd < 0){
+		LOG("Failed to create requested mDNS descriptors");
 		return 1;
 	}
 
 	//join ipv4 multicast group
-	if(setsockopt(cfg.mdns_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
+	if(cfg.mdns4_fd >= 0 && setsockopt(cfg.mdns4_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
 		LOGPF("Failed to join IPv4 multicast group for mDNS, discovery may be impaired: %s", mmbackend_socket_strerror(errno));
 	}
 
 	//join ipv6 multicast group
-	if(setsockopt(cfg.mdns_fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (uint8_t*) &mcast6_req, sizeof(mcast6_req))){
+	if(cfg.mdns_fd >= 0 && setsockopt(cfg.mdns_fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (uint8_t*) &mcast6_req, sizeof(mcast6_req))){
 		LOGPF("Failed to join IPv6 multicast group for mDNS, discovery may be impaired: %s", mmbackend_socket_strerror(errno));
 	}
 
 	//register mdns fd to core
-	return mm_manage_fd(cfg.mdns_fd, BACKEND_NAME, 1, NULL);
+	return mm_manage_fd(cfg.mdns_fd, BACKEND_NAME, 1, NULL) | mm_manage_fd(cfg.mdns4_fd, BACKEND_NAME, 1, NULL);
 }
 
 static int rtpmidi_start(size_t n, instance** inst){
@@ -1686,7 +1692,7 @@ static int rtpmidi_start(size_t n, instance** inst){
 		LOG("Failed to set up mDNS discovery, instances may not show up on remote hosts and may not find remote peers");
 	}
 	else if(mdns_requested){
-		fds++;
+		fds += 2;
 	}
 
 	LOGPF("Registered %" PRIsize_t " descriptors to core", fds);
@@ -1700,7 +1706,7 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 	for(u = 0; u < n; u++){
 		data = (rtpmidi_instance_data*) inst[u]->impl;
 
-		if(cfg.mdns_fd >= 0 && data->mode == apple){
+		if((cfg.mdns_fd >= 0 || cfg.mdns4_fd >= 0) && data->mode == apple){
 			rtpmidi_mdns_detach(inst[u]);
 		}
 
@@ -1742,6 +1748,9 @@ static int rtpmidi_shutdown(size_t n, instance** inst){
 	cfg.mdns_interface = NULL;
 	if(cfg.mdns_fd >= 0){
 		close(cfg.mdns_fd);
+	}
+	if(cfg.mdns4_fd >= 0){
+		close(cfg.mdns4_fd);
 	}
 
 	LOG("Backend shut down");

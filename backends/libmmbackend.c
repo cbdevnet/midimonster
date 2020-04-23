@@ -138,7 +138,7 @@ int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* ad
 	return 0;
 }
 
-int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast){
+int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast, uint8_t dualstack){
 	int fd = -1, status, yes = 1;
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
@@ -162,18 +162,23 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 
 		//set required socket options
 		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
+		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*) &yes, sizeof(yes)) < 0){
 			LOGPF("Failed to enable SO_REUSEADDR on socket: %s", mmbackend_socket_strerror(errno));
+		}
+
+		yes = dualstack ? 0 : 1;
+		if(setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (void*) &yes, sizeof(yes)) < 0){
+			LOGPF("Failed to %s dualstack operations on socket: %s", dualstack ? "enable" : "disable", mmbackend_socket_strerror(errno));
 		}
 
 		if(mcast){
 			yes = 1;
-			if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
+			if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*) &yes, sizeof(yes)) < 0){
 				LOGPF("Failed to enable SO_BROADCAST on socket: %s", mmbackend_socket_strerror(errno));
 			}
 
 			yes = 0;
-			if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
+			if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*) &yes, sizeof(yes)) < 0){
 				LOGPF("Failed to disable IP_MULTICAST_LOOP on socket: %s", mmbackend_socket_strerror(errno));
 			}
 		}

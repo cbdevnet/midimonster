@@ -639,7 +639,7 @@ static int maweb_connect(instance* inst){
 		mm_manage_fd(data->fd, BACKEND_NAME, 0, NULL);
 	}
 
-	data->fd = mmbackend_socket(data->host, data->port ? data->port : MAWEB_DEFAULT_PORT, SOCK_STREAM, 0, 0);
+	data->fd = mmbackend_socket(data->host, data->port ? data->port : MAWEB_DEFAULT_PORT, SOCK_STREAM, 0, 0, 1);
 	if(data->fd < 0){
 		return 1;
 	}

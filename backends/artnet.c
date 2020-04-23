@@ -21,7 +21,7 @@ static int artnet_listener(char* host, char* port){
 		return -1;
 	}
 
-	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
+	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1, 1);
 	if(fd < 0){
 		return -1;
 	}

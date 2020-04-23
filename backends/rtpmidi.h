@@ -16,6 +16,7 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 
 #define RTPMIDI_PACKET_BUFFER 8192
 #define RTPMIDI_DEFAULT_HOST "::"
+#define RTPMIDI_DEFAULT4_HOST "0.0.0.0"
 #define RTPMIDI_MDNS_PORT "5353"
 #define RTPMIDI_HEADER_MAGIC 0x80
 #define RTPMIDI_HEADER_TYPE 0x61

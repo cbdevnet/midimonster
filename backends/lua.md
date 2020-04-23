@@ -3,18 +3,21 @@
 The `lua` backend provides a flexible programming environment, allowing users to route, generate
 and  manipulate events using the Lua scripting language.
 
-Every instance has its own interpreter state which can be loaded with custom handler scripts.
+Every instance has its own interpreter state which can be loaded with custom scripts.
 
 To process incoming channel events, the MIDIMonster calls corresponding Lua functions (if they exist)
 with the value (as a Lua `number` type) as parameter. Alternatively, a designated default channel handler
-may be supplied in the configuration.
+which will receive events for all incoming channels may be supplied in the configuration.
+
+The backend can also call Lua functions repeatedly using a timer, allowing users to implement time-based
+functionality (such as evaluating a fixed mathematical function or outputting periodic updates).
 
 The following functions are provided within the Lua interpreter for interaction with the MIDIMonster
 
 | Function			| Usage example			| Description				|
 |-------------------------------|-------------------------------|---------------------------------------|
 | `output(string, number)`	| `output("foo", 0.75)`		| Output a value event to a channel on this instance	|
-| `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms). Calling `interval` on a Lua function multiple times updates the interval. Specifying `0` as interval stops periodic calls to the function |
+| `interval(function, number)`	| `interval(update, 100)`	| Register a function to be called periodically. Intervals are milliseconds (rounded to the nearest 10 ms). Calling `interval` on a Lua function multiple times updates the interval. Specifying `0` as interval stops periodic calls to the function. Do not call this function from within a Lua thread. |
 | `cleanup_handler(function)`	| `cleanup_handler(shutdown)`	| Register a function to be called when the instance is destroyed (on MIDIMonster shutdown). One cleanup handler can be registered per instance. Calling this function when the instance already has a cleanup handler registered replaces the handler, returning the old one. |
 | `input_value(string)`		| `input_value("foo")`		| Get the last input value on a channel on this instance	|
 | `output_value(string)`	| `output_value("bar")`		| Get the last output value on a channel on this instance |
@@ -23,18 +26,27 @@ The following functions are provided within the Lua interpreter for interaction 
 | `thread(function)`		| `thread(run_show)`		| Run a function as a Lua thread (see below) |
 | `sleep(number)`		| `sleep(100)`			| Suspend current thread for time specified in milliseconds |
 
+While a channel handler executes, calling `input_value` for that channel returns the previous value. Once
+the handler returns, the internal buffer is updated.
+
 Example script:
 ```lua
+-- This function is called when there are incoming events on input channel `bar`
+-- It outputs half the input value on the channel `foo`
 function bar(value)
 	output("foo", value / 2);
 end
 
+-- This function is registered below to execute every second
+-- It toggles output channel `bar` every time it is called by storing the next state in the variable `step`
 step = 0
 function toggle()
 	output("bar", step * 1.0);
 	step = (step + 1) % 2;
 end
 
+-- This function is registered below to run as a Lua thread
+-- It loops infinitely and toggles the output channel `narf` every second
 function run_show()
 	while(true) do
 		sleep(1000);
@@ -44,10 +56,12 @@ function run_show()
 	end
 end
 
+-- This function is registered below to be called when the MIDIMonster shuts down
 function save_values()
 	-- Store state to a file, for example
 end
 
+-- Register the functions
 interval(toggle, 1000)
 thread(run_show)
 cleanup_handler(save_values)

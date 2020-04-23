@@ -517,7 +517,6 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 	//handle all incoming events
 	for(n = 0; n < num; n++){
 		ident = c[n]->ident;
-		data->channel[ident].in = v[n].normalised;
 		//call lua channel handlers if present
 		if(data->channel[ident].reference != LUA_NOREF){
 			//push the channel name
@@ -532,6 +531,8 @@ static int lua_set(instance* inst, size_t num, channel** c, channel_value* v){
 				lua_pop(data->interpreter, 1);
 			}
 		}
+		//update the channel input value after the handler call, so we can use both values there
+		data->channel[ident].in = v[n].normalised;
 	}
 
 	//clear the channel name

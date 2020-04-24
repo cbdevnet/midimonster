@@ -16,6 +16,7 @@ Currently, the MIDIMonster supports the following protocols:
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)	|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)		|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)		|
+| RTP-MIDI			| Linux, Windows, OSX	| AppleMIDI sessions supported	| [`rtpmidi`](backends/rtpmidi.md)	|
 | OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
 | evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)		|
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)		|
@@ -36,6 +37,7 @@ one protocol into channel(s) on any other (or the same) supported protocol, for 
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))
+* Connect a device speaking RTP MIDI (for example, an iPad) to your computer or lighting console ([Example configuration](configs/rtpmidi.cfg))
 * Play games, type, or control your mouse using MIDI controllers ([Example configuration](configs/midi-mouse.cfg))
 
 If you encounter a bug or suspect a problem with a protocol implementation, please
@@ -145,6 +147,7 @@ special information. These documentation files are located in the `backends/` di
 * [`winmidi` backend documentation](backends/winmidi.md)
 * [`artnet` backend documentation](backends/artnet.md)
 * [`sacn` backend documentation](backends/sacn.md)
+* [`rtpmidi` backend documentation](backends/rtpmidi.md)
 * [`evdev` backend documentation](backends/evdev.md)
 * [`loopback` backend documentation](backends/loopback.md)
 * [`ola` backend documentation](backends/ola.md)

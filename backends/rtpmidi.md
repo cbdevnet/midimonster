@@ -27,7 +27,7 @@ stream, which may lead to inconsistencies during playback.
 |-----------------------|-----------------------|-----------------------|-----------------------|
 | `detect`      	| `on`                  | `off`                 | Output channel specifications for any events coming in on configured instances to help with configuration. |
 | `mdns-name`		| `computer1`		| none			| mDNS hostname to announce (`<mdns-name>.local`). Apple-mode instances will be announced via mDNS if set. |
-| `mdns-interface` 	| `wlan0`		| none			| Limit addresses announced via mDNS to this interface. On Windows, this is prefix-matched against the user-editable "friendly" interface name. |
+| `mdns-interface` 	| `wlan0`		| none			| Limit addresses announced via mDNS to this interface. On Windows, this is prefix-matched against the user-editable "friendly" interface name. If this name matches an interface exactly, discovery uses exactly this device. |
 
 #### Instance configuration
 
@@ -84,7 +84,7 @@ rmidi1.ch0.pitch > rmidi2.ch1.pitch
 
 #### Known bugs / problems
 
-This backend is currently still a work in progress, and is not mentioned on the main README yet for that reason.
+This backend has been in development for a long time due to its complexity. There may still be bugs hidden in there.
 Critical feedback and tests across multiple devices are very welcome.
 
 The mDNS and DNS-SD implementations in this backend are extremely terse, to the point of violating the

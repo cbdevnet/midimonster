@@ -1,5 +1,5 @@
 #define BACKEND_NAME "rtpmidi"
-#define DEBUG
+//#define DEBUG
 
 #include <string.h>
 #include <errno.h>
@@ -15,6 +15,7 @@
 #include <iphlpapi.h>
 #else
 #include <arpa/inet.h>
+#include <net/if.h>
 #include <sys/types.h>
 #include <ifaddrs.h>
 #endif
@@ -47,6 +48,10 @@ static struct /*_rtpmidi_global*/ {
 
 	char* mdns_name;
 	char* mdns_interface;
+	#ifdef _WIN32
+	unsigned mdns_adapter;
+	unsigned mdns6_adapter;
+	#endif
 
 	uint8_t detect;
 	uint64_t last_service;
@@ -281,6 +286,13 @@ static int rtpmidi_announce_addrs(){
 		//filter interfaces if requested
 		if(cfg.mdns_interface && strncmp(iface, cfg.mdns_interface, min(strlen(iface), strlen(cfg.mdns_interface)))){
 			continue;
+		}
+
+		//for exact matches, use exactly this interface for multicasts
+		if(!strcmp(iface, cfg.mdns_interface)){
+			LOGPF("Using interface %s for mDNS discovery", iface);
+			cfg.mdns_adapter = iter->IfIndex;
+			cfg.mdns6_adapter = iter->Ipv6IfIndex;
 		}
 
 		for(unicast_addr = (IP_ADAPTER_UNICAST_ADDRESS_LH*) iter->FirstUnicastAddress; unicast_addr; unicast_addr = unicast_addr->Next){
@@ -1437,7 +1449,7 @@ static int rtpmidi_apple_peermatch(uint8_t* session_raw, struct sockaddr* peer, 
 		for(n = 0; n < cfg.invite[u].invites; n++){
 			if(!strcmp(cfg.invite[u].name[n], "*")){
 				done = 1;
-				DBGPF("Peer %.*s implicitly invited on instance %s, converting to explicit invitation", session_name[0], session_name + 1, cfg.invite[u].inst->name);
+				DBGPF("Peer %s implicitly invited on instance %s, converting to explicit invitation", session_name, cfg.invite[u].inst->name);
 				if(rtpmidi_push_invite(cfg.invite[u].inst, session_name)){
 					return 1;
 				}
@@ -1524,6 +1536,9 @@ static int rtpmidi_handle_mdns(int fd){
 	ssize_t bytes = 0;
 	struct sockaddr_storage peer_addr;
 	socklen_t peer_len = sizeof(peer_addr);
+	#ifdef DEBUG
+	char peer_name[INET6_ADDRSTRLEN + 1];
+	#endif
 
 	for(bytes = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &peer_addr, &peer_len);
 			bytes > 0;
@@ -1542,10 +1557,11 @@ static int rtpmidi_handle_mdns(int fd){
 		//rfc6762 18.3: opcode != 0 -> ignore
 		//rfc6762 18.11: response code != 0 -> ignore
 
-		DBGPF("%" PRIsize_t " bytes on v%c, ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional",
+		DBGPF("%" PRIsize_t " bytes on v%c, ID %d, Opcode %d, %s, %d questions, %d answers, %d servers, %d additional, src %s",
 				bytes, (fd == cfg.mdns_fd ? '6' : '4'), hdr->id,
 				DNS_OPCODE(hdr->flags[0]), DNS_RESPONSE(hdr->flags[0]) ? "response" : "query",
-				hdr->questions, hdr->answers, hdr->servers, hdr->additional);
+				hdr->questions, hdr->answers, hdr->servers, hdr->additional,
+				mmbackend_sockaddr_ntop((struct sockaddr*) &peer_addr, peer_name, sizeof(peer_name)));
 		rtpmidi_parse_announce(buffer, bytes, hdr, &name, &host, (struct sockaddr*) &peer_addr, peer_len);
 
 		peer_len = sizeof(peer_addr);
@@ -1605,9 +1621,15 @@ static int rtpmidi_handle(size_t num, managed_fd* fds){
 }
 
 static int rtpmidi_start_mdns(){
+	//use ip_mreqn where possible, but that renames the interface member
+	#ifdef _WIN32
 	struct ip_mreq mcast_req = {
-		.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xe00000fb)),
-		.imr_interface.s_addr = INADDR_ANY
+		.imr_interface.s_addr = INADDR_ANY,
+	#else
+	struct ip_mreqn mcast_req = {
+		.imr_address.s_addr = INADDR_ANY,
+	#endif
+		.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xe00000fb))
 	};
 
 	struct ipv6_mreq mcast6_req = {
@@ -1621,6 +1643,16 @@ static int rtpmidi_start_mdns(){
 	if(!cfg.mdns_name){
 		LOG("No mDNS name set, disabling AppleMIDI discovery");
 		return 0;
+	}
+
+	if(cfg.mdns_interface){
+		#ifdef _WIN32
+		mcast6_req.ipv6mr_interface = cfg.mdns6_adapter;
+		mcast_req.imr_interface.s_addr = htobe32(cfg.mdns_adapter);
+		#else
+		mcast6_req.ipv6mr_interface = if_nametoindex(cfg.mdns_interface);
+		mcast_req.imr_ifindex = if_nametoindex(cfg.mdns_interface);
+		#endif
 	}
 
 	//FIXME might try passing NULL as host here to work around possible windows ipv6 handicaps

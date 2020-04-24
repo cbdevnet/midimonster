@@ -167,7 +167,7 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 		}
 
 		yes = dualstack ? 0 : 1;
-		if(setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (void*) &yes, sizeof(yes)) < 0){
+		if(addr_it->ai_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (void*) &yes, sizeof(yes)) < 0){
 			LOGPF("Failed to %s dualstack operations on socket: %s", dualstack ? "enable" : "disable", mmbackend_socket_strerror(errno));
 		}
 
@@ -178,7 +178,7 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 			}
 
 			yes = 0;
-			if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*) &yes, sizeof(yes)) < 0){
+			if(setsockopt(fd, addr_it->ai_family == AF_INET ? IPPROTO_IP : IPPROTO_IPV6, addr_it->ai_family == AF_INET ? IP_MULTICAST_LOOP : IPV6_MULTICAST_LOOP, (void*) &yes, sizeof(yes)) < 0){
 				LOGPF("Failed to disable IP_MULTICAST_LOOP on socket: %s", mmbackend_socket_strerror(errno));
 			}
 		}

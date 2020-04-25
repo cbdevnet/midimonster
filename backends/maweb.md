@@ -18,17 +18,17 @@ Web Remote. Set a web remote password using the option below the activation sett
 
 | Option	| Example value		| Default value		| Description							|
 |---------------|-----------------------|-----------------------|---------------------------------------------------------------|
-| `interval`	| `100`			| `50`			| Query interval for input data polling (in msec)		|
-| `quiet`	| `1`			| `0`			| Turn off some warning messages, for use by experts		|
+| `interval`	| `100`			| `50`			| Query interval for input data polling (in msec).		|
+| `quiet`	| `1`			| `0`			| Turn off some warning messages, for use by experts.		|
 
 #### Instance configuration
 
 | Option	| Example value		| Default value		| Description							|
 |---------------|-----------------------|-----------------------|---------------------------------------------------------------|
-| `host`	| `10.23.42.21 80`	| none			| Host address (and optional port) of the MA Web Remote		|
-| `user`	| `midimonster`		| none			| User for the remote session (GrandMA2)			|
-| `password`	| `midimonster`		| `midimonster`		| Password for the remote session				|
-| `cmdline`	| `console`		| `remote`		| Commandline key handling mode (see below)			|
+| `host`	| `10.23.42.21 80`	| none			| Host address (and optional port) of the MA Web Remote. When specified multiple times, the instance will connect the next address when the current connection fails.	|
+| `user`	| `midimonster`		| none			| User for the remote session (GrandMA2).			|
+| `password`	| `midimonster`		| `midimonster`		| Password for the remote session.				|
+| `cmdline`	| `console`		| `remote`		| Commandline key handling mode (see below).			|
 
 The per-instance command line mode may be one of `remote`, `console` or `downgrade`. The first option handles
 command keys with a "virtual" commandline belonging to the Web Remote connection. Any commands entered are

@@ -79,8 +79,11 @@ typedef struct /*_maweb_channel*/ {
 } maweb_channel_data;
 
 typedef struct /*_maweb_instance_data*/ {
-	char* host;
-	char* port;
+	size_t next_host;
+	size_t hosts;
+	char** host;
+	char** port;
+
 	char* user;
 	char* pass;
 

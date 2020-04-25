@@ -163,19 +163,29 @@ static int maweb_configure_instance(instance* inst, char* option, char* value){
 			LOGPF("Invalid host specified for instance %s", inst->name);
 			return 1;
 		}
-		free(data->host);
-		data->host = strdup(host);
-		free(data->port);
-		data->port = NULL;
-		if(port){
-			data->port = strdup(port);
+
+		data->host = realloc(data->host, (data->hosts + 1) * sizeof(char*));
+		data->port = realloc(data->port, (data->hosts + 1) * sizeof(char*));
+
+		if(!data->host || !data->port){
+			LOG("Failed to allocate memory");
+			return 1;
 		}
+
+		data->host[data->hosts] = strdup(host);
+		data->port[data->hosts] = port ? strdup(port) : NULL;
+		if(!data->host[data->hosts] || (port && !data->port[data->hosts])){
+			LOG("Failed to allocate memory");
+			free(data->host[data->hosts]);
+			free(data->port[data->hosts]);
+			return 1;
+		}
+
+		data->hosts++;
 		return 0;
 	}
 	else if(!strcmp(option, "user")){
-		free(data->user);
-		data->user = strdup(value);
-		return 0;
+		return mmbackend_strdup(&data->user, value);
 	}
 	else if(!strcmp(option, "password")){
 		#ifndef MAWEB_NO_LIBSSL
@@ -629,9 +639,11 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 }
 
 static int maweb_connect(instance* inst){
+	int rv = 1;
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
-	if(!data->host){
-		return 1;
+	if(!data->host || !data->host[data->next_host]){
+		LOGPF("Invalid host configuration on instance %s, host %" PRIsize_t, inst->name, data->next_host + 1);
+		goto bail;
 	}
 
 	//unregister old fd from core
@@ -639,9 +651,14 @@ static int maweb_connect(instance* inst){
 		mm_manage_fd(data->fd, BACKEND_NAME, 0, NULL);
 	}
 
-	data->fd = mmbackend_socket(data->host, data->port ? data->port : MAWEB_DEFAULT_PORT, SOCK_STREAM, 0, 0, 1);
+	LOGPF("Connecting to host %" PRIsize_t " of %" PRIsize_t " on %s", data->next_host + 1, data->hosts, inst->name);
+
+	data->fd = mmbackend_socket(data->host[data->next_host],
+			data->port[data->next_host] ? data->port[data->next_host] : MAWEB_DEFAULT_PORT,
+			SOCK_STREAM, 0, 0, 1);
+
 	if(data->fd < 0){
-		return 1;
+		goto bail;
 	}
 
 	data->state = ws_new;
@@ -654,15 +671,20 @@ static int maweb_connect(instance* inst){
 			|| mmbackend_send_str(data->fd, "Sec-WebSocket-Key: rbEQrXMEvCm4ZUjkj6juBQ==\r\n")
 			|| mmbackend_send_str(data->fd, "\r\n")){
 		LOG("Failed to communicate with peer");
-		return 1;
+		goto bail;
 	}
 
 	//register new fd
 	if(mm_manage_fd(data->fd, BACKEND_NAME, 1, (void*) inst)){
 		LOG("Failed to register FD");
-		return 1;
+		goto bail;
 	}
-	return 0;
+
+	rv = 0;
+bail:
+	data->next_host++;
+	data->next_host %= data->hosts;
+	return rv;
 }
 
 static ssize_t maweb_handle_lines(instance* inst, ssize_t bytes_read){
@@ -691,6 +713,21 @@ static ssize_t maweb_handle_lines(instance* inst, ssize_t bytes_read){
 	}
 
 	return data->offset + begin;
+}
+
+static int maweb_establish(instance* inst){
+	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
+	uint8_t connected = 0;
+	size_t start = data->next_host;
+
+	do{
+		if(!maweb_connect(inst)){
+			connected = 1;
+			break;
+		}
+	} while(data->next_host != start);
+
+	return connected ? 0 : 1;
 }
 
 static ssize_t maweb_handle_ws(instance* inst, ssize_t bytes_read){
@@ -775,12 +812,18 @@ static int maweb_handle_fd(instance* inst){
 	bytes_read = recv(data->fd, data->buffer + data->offset, bytes_left - 1, 0);
 	if(bytes_read < 0){
 		LOGPF("Failed to receive on %s: %s", inst->name, mmbackend_socket_strerror(errno));
-		//TODO close, reopen
-		return 1;
+		if(maweb_establish(inst)){
+			LOGPF("Failed to reconnect with any configured host on instance %s", inst->name);
+			return 1;
+		}
+		return 0;
 	}
 	else if(bytes_read == 0){
-		//client closed connection
-		//TODO try to reopen
+		//client closed connection, try to reopen the connection
+		if(maweb_establish(inst)){
+			LOGPF("Failed to reconnect with any configured host on instance %s", inst->name);
+			return 1;
+		}
 		return 0;
 	}
 
@@ -1003,8 +1046,13 @@ static int maweb_start(size_t n, instance** inst){
 	maweb_instance_data* data = NULL;
 
 	for(u = 0; u < n; u++){
-		//sort channels
 		data = (maweb_instance_data*) inst[u]->impl;
+		if(!data->hosts){
+			LOGPF("No hosts configured on instance %s", inst[u]->name);
+			return 1;
+		}
+
+		//sort channels
 		qsort(data->channel, data->channels, sizeof(maweb_channel_data), channel_comparator);
 
 		//re-set channel identifiers
@@ -1012,9 +1060,9 @@ static int maweb_start(size_t n, instance** inst){
 			data->channel[p].chan->ident = p;
 		}
 
-		if(maweb_connect(inst[u])){
-			LOGPF("Failed to open connection for instance %s", inst[u]->name);
-			free(inst);
+		//try to connect to any available host
+		if(maweb_establish(inst[u])){
+			LOGPF("Failed to connect to any host configured on instance %s", inst[u]->name);
 			return 1;
 		}
 	}
@@ -1027,15 +1075,26 @@ static int maweb_start(size_t n, instance** inst){
 }
 
 static int maweb_shutdown(size_t n, instance** inst){
-	size_t u;
+	size_t u, p;
 	maweb_instance_data* data = NULL;
 
 	for(u = 0; u < n; u++){
 		data = (maweb_instance_data*) inst[u]->impl;
+
+		for(p = 0; p < data->hosts; p++){
+			//one of these might have failed to allocate
+			if(data->host){
+				free(data->host[p]);
+			}
+			if(data->port){
+				free(data->port[p]);
+			}
+		}
 		free(data->host);
 		data->host = NULL;
 		free(data->port);
 		data->port = NULL;
+
 		free(data->user);
 		data->user = NULL;
 		free(data->pass);

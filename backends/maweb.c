@@ -232,6 +232,7 @@ static int maweb_instance(instance* inst){
 	}
 
 	data->fd = -1;
+	data->state = ws_closed;
 	data->buffer = calloc(MAWEB_RECV_CHUNK, sizeof(uint8_t));
 	if(!data->buffer){
 		LOG("Failed to allocate memory");
@@ -350,6 +351,9 @@ static int maweb_send_frame(instance* inst, maweb_operation op, uint8_t* payload
 
 	if(mmbackend_send(data->fd, frame_header, header_bytes)
 			|| mmbackend_send(data->fd, payload, len)){
+		LOGPF("Failed to send on instance %s, assuming connection failure", inst->name);
+		data->state = ws_closed;
+		data->login = 0;
 		return 1;
 	}
 
@@ -649,7 +653,11 @@ static int maweb_connect(instance* inst){
 	//unregister old fd from core
 	if(data->fd >= 0){
 		mm_manage_fd(data->fd, BACKEND_NAME, 0, NULL);
+		close(data->fd);
+		data->fd = -1;
 	}
+	data->state = ws_closed;
+	data->login = 0;
 
 	LOGPF("Connecting to host %" PRIsize_t " of %" PRIsize_t " on %s", data->next_host + 1, data->hosts, inst->name);
 
@@ -717,17 +725,15 @@ static ssize_t maweb_handle_lines(instance* inst, ssize_t bytes_read){
 
 static int maweb_establish(instance* inst){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
-	uint8_t connected = 0;
 	size_t start = data->next_host;
 
 	do{
 		if(!maweb_connect(inst)){
-			connected = 1;
 			break;
 		}
 	} while(data->next_host != start);
 
-	return connected ? 0 : 1;
+	return data->state != ws_closed ? 0 : 1;
 }
 
 static ssize_t maweb_handle_ws(instance* inst, ssize_t bytes_read){
@@ -803,7 +809,7 @@ static int maweb_handle_fd(instance* inst){
 		data->buffer = realloc(data->buffer, (data->allocated + MAWEB_RECV_CHUNK) * sizeof(uint8_t));
 		if(!data->buffer){
 			LOG("Failed to allocate memory");
-			return 1;
+			return -1;
 		}
 		data->allocated += MAWEB_RECV_CHUNK;
 		bytes_left += MAWEB_RECV_CHUNK;
@@ -812,19 +818,11 @@ static int maweb_handle_fd(instance* inst){
 	bytes_read = recv(data->fd, data->buffer + data->offset, bytes_left - 1, 0);
 	if(bytes_read < 0){
 		LOGPF("Failed to receive on %s: %s", inst->name, mmbackend_socket_strerror(errno));
-		if(maweb_establish(inst)){
-			LOGPF("Failed to reconnect with any configured host on instance %s", inst->name);
-			return 1;
-		}
-		return 0;
+		return 1;
 	}
 	else if(bytes_read == 0){
 		//client closed connection, try to reopen the connection
-		if(maweb_establish(inst)){
-			LOGPF("Failed to reconnect with any configured host on instance %s", inst->name);
-			return 1;
-		}
-		return 0;
+		return 1;
 	}
 
 	do{
@@ -844,7 +842,6 @@ static int maweb_handle_fd(instance* inst){
 		if(bytes_handled < 0){
 			bytes_handled = data->offset + bytes_read;
 			data->offset = 0;
-			//TODO close, reopen
 			LOG("Failed to handle incoming data");
 			return 1;
 		}
@@ -990,6 +987,12 @@ static int maweb_keepalive(){
 			snprintf(xmit_buffer, sizeof(xmit_buffer), "{\"session\":%" PRIu64 "}", data->session);
 			maweb_send_frame(inst[u], ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 		}
+		else if(data->state == ws_closed){
+			//try to reconnect to any remote
+			if(maweb_establish(inst[u])){
+				LOGPF("Failed to reconnect to any host on %s, will retry in %d seconds", inst[u]->name, MAWEB_CONNECTION_KEEPALIVE / 1000);
+			}
+		}
 	}
 
 	free(inst);
@@ -1024,7 +1027,18 @@ static int maweb_handle(size_t num, managed_fd* fds){
 	int rv = 0;
 
 	for(n = 0; n < num; n++){
-		rv |= maweb_handle_fd((instance*) fds[n].impl);
+		rv = maweb_handle_fd((instance*) fds[n].impl);
+		//try to reconnect soft failures
+		if(rv == 1 && maweb_establish((instance*) fds[n].impl)){
+			//keepalive will retry periodically
+			LOGPF("Failed to reconnect with any configured host on instance %s", ((instance*) fds[n].impl)->name);
+		}
+		else if(rv){
+			//propagate critical failures
+			return rv;
+		}
+		//errors handled
+		rv = 0;
 	}
 
 	//FIXME all keepalive processing allocates temporary buffers, this might an optimization target
@@ -1062,8 +1076,8 @@ static int maweb_start(size_t n, instance** inst){
 
 		//try to connect to any available host
 		if(maweb_establish(inst[u])){
+			//do not return failure here, keepalive will periodically try to reconnect
 			LOGPF("Failed to connect to any host configured on instance %s", inst[u]->name);
-			return 1;
 		}
 	}
 
@@ -1107,7 +1121,7 @@ static int maweb_shutdown(size_t n, instance** inst){
 		data->buffer = NULL;
 
 		data->offset = data->allocated = 0;
-		data->state = ws_new;
+		data->state = ws_closed;
 
 		free(data->channel);
 		data->channel = NULL;

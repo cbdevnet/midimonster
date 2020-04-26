@@ -71,7 +71,6 @@ elif [ "$TASK" = "windows" ]; then
 	if make windows; then
 		exit "$?"
 	fi
-	# Build the lua backend but disable it by default to avoid scary error messages
 	make -C backends lua.dll
 	travis_fold end "make_windows"
 	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then

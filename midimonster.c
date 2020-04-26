@@ -284,6 +284,9 @@ static int platform_initialize(){
 	if(WSAStartup(version, &wsa)){
 		return 1;
 	}
+
+	unsigned error_mode = SetErrorMode(0);
+	SetErrorMode(error_mode | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 	#endif
 	return 0;
 }

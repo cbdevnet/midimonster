@@ -34,6 +34,8 @@ in spirit rather than by the letter.
 		* Prefer to name unsigned loop counters `u` and signed ones `i`
 * Place comments above the section they are commenting on
 	* Use inline comments sparingly
+* Do not omit '{}' brackets, even if optional (e.g. single-statement conditional bodies)
+* Opening braces stay on the same line as the condition
 
 #### C specific
 

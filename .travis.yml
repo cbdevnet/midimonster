@@ -134,6 +134,7 @@ before_cache:
 before_install:
 # Travis clones with --branch, which omits tags. Since we use them for the version string at build time, fetch them
  - git pull --tags
+ - printf "This is %s on %s\n" "$(git describe)" "$TRAVIS_OS_NAME"
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
 # 'brew install' sometimes returns non-zero for some arcane reason. Executing 'true' resets the exit code and allows Travis to continue building...
 # Travis seems to have Python 2.7 installed by default, which for some reason prevents pkg-config from reading python3.pc

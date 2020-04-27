@@ -62,13 +62,13 @@ elif [ "$TASK" = "codesmell" ]; then
 elif [ "$TASK" = "sanitize" ]; then
 	# Run sanitized compile
 	travis_fold start "make_sanitize"
-	if make sanitize; then
+	if ! make sanitize; then
 		exit "$?"
 	fi
 	travis_fold end "make_sanitize"
 elif [ "$TASK" = "windows" ]; then
 	travis_fold start "make_windows"
-	if make windows; then
+	if ! make windows; then
 		exit "$?"
 	fi
 	make -C backends lua.dll
@@ -92,7 +92,7 @@ elif [ "$TASK" = "windows" ]; then
 else
 	# Otherwise compile as normal
 	travis_fold start "make"
-	if make full; then
+	if ! make full; then
 		exit "$?"
 	fi
 	travis_fold end "make"

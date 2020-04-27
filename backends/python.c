@@ -559,18 +559,19 @@ static int python_set(instance* inst, size_t num, channel** c, channel_value* v)
 	for(u = 0; u < num; u++){
 		chan = data->channel + c[u]->ident;
 
-		//update input value buffer
-		chan->in = v[u].normalised;
-
 		//call handler if present
 		if(chan->handler){
 			DBGPF("Calling handler for %s.%s", inst->name, chan->name);
 			data->current_channel = chan;
-			result = PyObject_CallFunction(chan->handler, "d", chan->in);
+			result = PyObject_CallFunction(chan->handler, "d", v[u].normalised);
 			Py_XDECREF(result);
 			data->current_channel = NULL;
 			DBGPF("Done with handler for %s.%s", inst->name, chan->name);
 		}
+
+		//update input value buffer after finishing the handler
+		chan->in = v[u].normalised;
+
 	}
 
 	//release interpreter

@@ -26,6 +26,9 @@ The `midimonster` module provides the following functions:
 | `manage(function, socket)`	| `midimonster.manage(handler, socket)`	| Register a (connected/listening) socket to the MIDIMonster core. Calls `function(socket)` when the socket is ready to read. Calling this method with `None` as the function argument unregisters the socket. A socket may only have one associated handler |
 | `cleanup_handler(function)`	| `midimonster.cleanup_handler(save_all)`| Register a function to be called when the instance is destroyed (on MIDIMonster shutdown). One cleanup handler can be registered per instance. Calling this function when the instance already has a cleanup handler registered replaces the handler, returning the old one. |
 
+When a channel handler executes, calling `midimonster.inputvalue()` for that exact channel returns the previous value,
+while the argument to the handler is the current value. The stored value is updated after the handler finishes executing.
+
 Example Python module:
 ```python
 import socket

@@ -570,7 +570,7 @@ static int maweb_request_playbacks(instance* inst){
 				item_types,
 				view,
 				data->session);
-		rv |= maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
+		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 		DBGPF("Poll request: %s", xmit_buffer);
 		updates_inflight++;
 	}

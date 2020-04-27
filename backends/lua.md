@@ -26,8 +26,8 @@ The following functions are provided within the Lua interpreter for interaction 
 | `thread(function)`		| `thread(run_show)`		| Run a function as a Lua thread (see below) |
 | `sleep(number)`		| `sleep(100)`			| Suspend current thread for time specified in milliseconds |
 
-While a channel handler executes, calling `input_value` for that channel returns the previous value. Once
-the handler returns, the internal buffer is updated.
+While a channel handler executes, calling `input_value` for that channel returns the previous value.
+The stored value is updated once the handler returns.
 
 Example script:
 ```lua

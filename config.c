@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <errno.h>
 #ifndef _WIN32
-#include <linux/limits.h>
+#include <limits.h>
 #endif
 
 #define BACKEND_NAME "core/cfg"

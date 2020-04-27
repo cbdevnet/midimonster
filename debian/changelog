@@ -1,3 +1,18 @@
+midimonster (0.5-1) unstable; urgency=medium
+
+  * New RTP MIDI backend
+  * Support for deprecated MIDI channel syntax removed
+  * Core performance improvements
+  * ArtNet and sACN performance improvements
+  * Bugfixes to OpenPixelControl, ArtNet and sACN backends
+  * Lua/Python default channel handlers and cleanup handlers
+  * Lua/Python now allow output() calls during initial script parsing
+  * Lua cooperative multithreading API
+  * OSC bundle reception
+  * maweb now supports fallback connections
+
+ -- Fabian "cbdev" Stumpf <cb@cbcdn.com>  Mon, 27 Apr 2020 22:51:20 +0200
+
 midimonster (0.4-1) unstable; urgency=medium
 
   * Add input_channel and timestamp calls to Lua core interface

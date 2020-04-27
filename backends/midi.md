@@ -30,12 +30,9 @@ The MIDI backend supports mapping different MIDI events to MIDIMonster channels.
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
-* `nrpn` - NRPNs (not yet implemented)
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
-The earlier syntax of `<type><channel>.<index>` is officially deprecated but still supported for compatibility
-reasons. This support may be removed at some future time.
 
 The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 
@@ -58,8 +55,6 @@ This can usually be done by adding this user to the `audio` system group.
 Currently, no Note Off messages are sent (instead, Note On messages with a velocity of 0 are
 generated, which amount to the same thing according to the spec). This may be implemented as
 a configuration option at a later time.
-
-NRPNs are not yet fully implemented, though rudimentary support is in the codebase.
 
 To see which events your MIDI devices output, ALSA provides the `aseqdump` utility. You can
 list all incoming events using `aseqdump -p <portname>`.

@@ -48,7 +48,7 @@ static int openpixel_configure_instance(instance* inst, char* option, char* valu
 			return 1;
 		}
 
-		data->dest_fd = mmbackend_socket(host, port, SOCK_STREAM, 0, 0);
+		data->dest_fd = mmbackend_socket(host, port, SOCK_STREAM, 0, 0, 1);
 		if(data->dest_fd >= 0){
 			return 0;
 		}
@@ -62,7 +62,7 @@ static int openpixel_configure_instance(instance* inst, char* option, char* valu
 			return 1;
 		}
 
-		data->listen_fd = mmbackend_socket(host, port, SOCK_STREAM, 1, 0);
+		data->listen_fd = mmbackend_socket(host, port, SOCK_STREAM, 1, 0, 1);
 		if(data->listen_fd >= 0 && !listen(data->listen_fd, SOMAXCONN)){
 			return 0;
 		}
@@ -495,11 +495,11 @@ static ssize_t openpixel_client_headerdata(instance* inst, openpixel_client* cli
 		}
 		else{
 			client->buffer = openpixel_buffer_find(data, client->hdr.strip, 1);
-		}
-		//if no buffer or mode mismatch, ignore data
-		if(client->buffer < 0
-				|| data->mode != client->hdr.mode){
-			client->buffer = -2; //mark for ignore
+			//if no buffer or mode mismatch, ignore data
+			if(client->buffer < 0
+					|| data->mode != client->hdr.mode){
+				client->buffer = -2; //mark for ignore
+			}
 		}
 		client->left = be16toh(client->hdr.length);
 		client->offset = 0;
@@ -534,7 +534,7 @@ static int openpixel_client_handle(instance* inst, int fd){
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer), 0);
 	if(bytes <= 0){
 		if(bytes < 0){
-			LOGPF("Failed to receive from client: %s", strerror(errno));
+			LOGPF("Failed to receive from client: %s", mmbackend_socket_strerror(errno));
 		}
 
 		//close the connection

@@ -117,7 +117,7 @@ static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){
 			next_token = spec + 7;
 		}
 	}
-	
+
 	if(!next_token){
 		LOGPF("Invalid channel specification %s", spec);
 		return NULL;
@@ -185,11 +185,6 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	};
 	size_t u;
 
-	//early exit
-	if(!num){
-		return 0;
-	}
-
 	if(!data->device_out){
 		LOGPF("Instance %s has no output device", inst->name);
 		return 0;
@@ -213,7 +208,7 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 
 		midiOutShortMsg(data->device_out, output.dword);
 	}
-	
+
 	return 0;
 }
 
@@ -310,7 +305,7 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 			ident.fields.type = input.components.status & 0xF0;
 			ident.fields.control = input.components.data1;
 			val.normalised = (double) input.components.data2 / 127.0;
-			
+
 			if(ident.fields.type == 0x80){
 				ident.fields.type = note;
 				val.normalised = 0;
@@ -335,7 +330,6 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 		case MIM_CLOSE:
 			//device opened/closed
 			return;
-		
 	}
 
 	DBGPF("Incoming message type %d channel %d control %d value %f",
@@ -435,32 +429,22 @@ static int winmidi_match_output(char* prefix){
 	return -1;
 }
 
-static int winmidi_start(size_t n, instance** inst){
-	size_t p;
-	int device, rv = -1;
-	winmidi_instance_data* data = NULL;
+static int winmidi_socket_pair(int* fds){
+	//this really should be a size_t but getsockname specifies int* for some reason
+	int sockadd_len = sizeof(struct sockaddr_storage);
+	char* error = NULL;
 	struct sockaddr_storage sockadd = {
 		0
 	};
-	//this really should be a size_t but getsockname specifies int* for some reason
-	int sockadd_len = sizeof(sockadd);
-	char* error = NULL;
-	DBGPF("Main thread ID is %ld", GetCurrentThreadId());
 
-	//output device list if requested
-	if(backend_config.list_devices){
-		winmidi_match_input(NULL);
-		winmidi_match_output(NULL);
-	}
-
-	//open the feedback sockets
 	//for some reason the feedback connection fails to work on 'real' windows with ipv6
-	backend_config.socket_pair[0] = mmbackend_socket("127.0.0.1", "0", SOCK_DGRAM, 1, 0);
-	if(backend_config.socket_pair[0] < 0){
+	fds[0] = mmbackend_socket("127.0.0.1", "0", SOCK_DGRAM, 1, 0, 0);
+	if(fds[0] < 0){
 		LOG("Failed to open feedback socket");
 		return 1;
 	}
-	if(getsockname(backend_config.socket_pair[0], (struct sockaddr*) &sockadd, &sockadd_len)){
+
+	if(getsockname(fds[0], (struct sockaddr*) &sockadd, &sockadd_len)){
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
 		LOGPF("Failed to query feedback socket information: %s", error);
@@ -483,12 +467,32 @@ static int winmidi_start(size_t n, instance** inst){
 			return 1;
 	}
 	DBGPF("Feedback socket family %d port %d", sockadd.ss_family, be16toh(((struct sockaddr_in*)&sockadd)->sin_port));
-	backend_config.socket_pair[1] = socket(sockadd.ss_family, SOCK_DGRAM, IPPROTO_UDP);
-	if(backend_config.socket_pair[1] < 0 || connect(backend_config.socket_pair[1], (struct sockaddr*) &sockadd, sockadd_len)){
+	fds[1] = socket(sockadd.ss_family, SOCK_DGRAM, IPPROTO_UDP);
+	if(fds[1] < 0 || connect(backend_config.socket_pair[1], (struct sockaddr*) &sockadd, sockadd_len)){
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
 		LOGPF("Failed to connect to feedback socket: %s", error);
 		LocalFree(error);
+		return 1;
+	}
+
+	return 0;
+}
+
+static int winmidi_start(size_t n, instance** inst){
+	size_t p;
+	int device, rv = -1;
+	winmidi_instance_data* data = NULL;
+	DBGPF("Main thread ID is %ld", GetCurrentThreadId());
+
+	//output device list if requested
+	if(backend_config.list_devices){
+		winmidi_match_input(NULL);
+		winmidi_match_output(NULL);
+	}
+
+	//open the feedback sockets
+	if(winmidi_socket_pair(backend_config.socket_pair)){
 		return 1;
 	}
 

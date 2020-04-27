@@ -16,6 +16,7 @@ Currently, the MIDIMonster supports the following protocols:
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)	|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)		|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)		|
+| RTP-MIDI			| Linux, Windows, OSX	| AppleMIDI sessions supported	| [`rtpmidi`](backends/rtpmidi.md)	|
 | OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
 | evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)		|
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)		|
@@ -36,6 +37,7 @@ one protocol into channel(s) on any other (or the same) supported protocol, for 
 * Use an OSC app as a simple lighting controller via ArtNet or sACN
 * Visualize ArtNet data using OSC tools
 * Control lighting fixtures or DAWs using gamepad controllers, trackballs, etc ([Example configuration](configs/evdev.cfg))
+* Connect a device speaking RTP MIDI (for example, an iPad) to your computer or lighting console ([Example configuration](configs/rtpmidi.cfg))
 * Play games, type, or control your mouse using MIDI controllers ([Example configuration](configs/midi-mouse.cfg))
 
 If you encounter a bug or suspect a problem with a protocol implementation, please
@@ -75,6 +77,10 @@ lines of the form `option = value`.
 
 Lines starting with a semicolon are treated as comments and ignored. Inline comments
 are not currently supported.
+
+Configuration files may be included recursively in other configuration files using
+the syntax `[include <file>]`. This will read the referenced configuration file as
+if it were inserted at that point.
 
 Example configuration files may be found in [configs/](configs/).
 
@@ -141,6 +147,7 @@ special information. These documentation files are located in the `backends/` di
 * [`winmidi` backend documentation](backends/winmidi.md)
 * [`artnet` backend documentation](backends/artnet.md)
 * [`sacn` backend documentation](backends/sacn.md)
+* [`rtpmidi` backend documentation](backends/rtpmidi.md)
 * [`evdev` backend documentation](backends/evdev.md)
 * [`loopback` backend documentation](backends/loopback.md)
 * [`ola` backend documentation](backends/ola.md)
@@ -172,6 +179,10 @@ chmod +x ./installer.sh
 ./installer.sh
 ```
 
+The installer can also be used for automating installations or upgrades by specifying additional
+command line arguments. To see a list of valid arguments, run the installer with the
+`--help` argument.
+
 The installer script can also update MIDIMonster to the latest version automatically,
 using a configuration file generated during the installation.
 To do so, run `midimonster-updater` as root on your system after using the installer.
@@ -187,8 +198,9 @@ dpkg -i <file>.deb
 ### Building from source
 
 To build the MIDIMonster directly from the sources, you'll need some libraries that provide
-support for the protocols to translate. When building from source, you can also to exclude
-backends (for example, if you don't need them or don't want to install their prerequisites).
+support for the protocols to translate. When building from source, you can also choose to
+exclude backends (for example, if you don't need them or don't want to install their
+prerequisites).
 
 * `libasound2-dev` (for the ALSA MIDI backend)
 * `libevdev-dev` (for the evdev backend)

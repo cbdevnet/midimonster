@@ -18,6 +18,10 @@
 	#define htole64(x) OSSwapHostToLittleInt64(x)
 	#define be64toh(x) OSSwapBigToHostInt64(x)
 	#define le64toh(x) OSSwapLittleToHostInt64(x)
+
+	#ifndef IPV6_ADD_MEMBERSHIP
+		#define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
+	#endif
 #endif
 
 #ifdef _WIN32

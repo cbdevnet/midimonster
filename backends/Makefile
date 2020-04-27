@@ -1,7 +1,7 @@
 .PHONY: all clean full
 LINUX_BACKENDS = midi.so evdev.so
-WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll
-BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so
+WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll rtpmidi.dll
+BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.so
 OPTIONAL_BACKENDS = ola.so
 BACKEND_LIB = libmmbackend.o
 
@@ -46,6 +46,10 @@ maweb.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 maweb.dll: LDLIBS += -lws2_32
 maweb.dll: CFLAGS += -DMAWEB_NO_LIBSSL
 
+rtpmidi.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+rtpmidi.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
+rtpmidi.dll: LDLIBS += -lws2_32 -liphlpapi
+
 winmidi.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 winmidi.dll: LDLIBS += -lwinmm -lws2_32
 
@@ -61,7 +65,7 @@ ola.so: CPPFLAGS += -Wno-write-strings
 lua.so: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
 lua.so: LDLIBS += $(shell pkg-config --libs lua53 || pkg-config --libs lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
 lua.dll: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
-lua.dll: LDLIBS += -L../libs -llua53
+lua.dll: LDLIBS += -L../ -llua53
 
 python.so: CFLAGS += $(shell pkg-config --cflags python3 || pkg-config --cflags python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
 python.so: CFLAGS += $(shell pkg-config --libs python3 || pkg-config --libs python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")

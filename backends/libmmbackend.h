@@ -5,6 +5,7 @@
 #include <ws2tcpip.h>
 //#define close closesocket
 #else
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #endif
@@ -17,6 +18,34 @@
 #include "../portability.h"
 
 /*** BACKEND IMPLEMENTATION LIBRARY ***/
+
+/** Convenience functions **/
+
+/*
+ * Duplicate src into *dest, freeing earlier content of *dest if present
+ * On success, 0 is returned
+ * On failure, a message is printed, *dest is a NULL pointer and 1 is returned
+ */
+int mmbackend_strdup(char** dest, char* src);
+
+/*
+ * Return a formatted error message pertaining to the last socket operation.
+ * On Linux/OSX, this calls through to strerror using the provided err_no.
+ * On Windows, err_no is ignored and WSAGetLastError is called to retrieve
+ * the status of the last operation. This information is then processed via
+ * FormatMessage into a fixed buffer, which is returned. Thus, this function
+ * is not thread-safe on Windows. On Linux, refer to strerror's documentation
+ * for information on thread-safety.
+ */
+char* mmbackend_socket_strerror(int err_no);
+
+/* 
+ * Wrap / reimplement (on Windows) inet_ntop to work with struct sockaddr* directly.
+ * Prints the address in a "human-readable" form into buffer.
+ * Will modify at most length bytes into buffer, output will be zero-terminated.
+ * This function only works with AF_INET and AF_INET6 addresses.
+ */
+const char* mmbackend_sockaddr_ntop(struct sockaddr* peer, char* buffer, size_t length);
 
 /** Networking functions **/
 
@@ -43,7 +72,7 @@ int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* ad
  * Create a socket of given type and mode for a bind / connect host.
  * Returns -1 on failure, a valid file descriptor for the socket on success.
  */
-int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast);
+int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast, uint8_t dualstack);
 
 /*
  * Send arbitrary data over multiple writes if necessary

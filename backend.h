@@ -8,9 +8,7 @@ instance* instance_match(char* name);
 struct timeval backend_timeout();
 int backends_start();
 int backends_stop();
-void instances_free();
-void channels_free();
-instance* mm_instance();
+instance* mm_instance(backend* b);
 
 /* Backend API */
 MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create);

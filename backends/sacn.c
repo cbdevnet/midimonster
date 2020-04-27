@@ -80,7 +80,7 @@ static int sacn_listener(char* host, char* port, uint8_t flags){
 		return -1;
 	}
 
-	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
+	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1, 1);
 	if(fd < 0){
 		return -1;
 	}
@@ -101,7 +101,7 @@ static int sacn_listener(char* host, char* port, uint8_t flags){
 	if(flags & mcast_loop){
 		//set IP_MCAST_LOOP to allow local applications to receive output
 		if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-			LOGPF("Failed to re-enable IP_MULTICAST_LOOP on socket: %s", strerror(errno));
+			LOGPF("Failed to re-enable IP_MULTICAST_LOOP on socket: %s", mmbackend_socket_strerror(errno));
 		}
 	}
 
@@ -209,12 +209,20 @@ static int sacn_configure_instance(instance* inst, char* option, char* value){
 }
 
 static int sacn_instance(instance* inst){
-	inst->impl = calloc(1, sizeof(sacn_instance_data));
-	if(!inst->impl){
+	sacn_instance_data* data = calloc(1, sizeof(sacn_instance_data));
+	size_t u;
+
+	if(!data){
 		LOG("Failed to allocate memory");
 		return 1;
 	}
 
+	for(u = 0; u < sizeof(data->data.channel) / sizeof(channel); u++){
+		data->data.channel[u].ident = u;
+		data->data.channel[u].instance = inst;
+	}
+
+	inst->impl = data;
 	return 0;
 }
 
@@ -230,6 +238,11 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 		return NULL;
 	}
 	chan_a--;
+
+	//check output capabilities
+	if((flags & mmchannel_output) && !data->xmit_prio){
+		LOGPF("Channel %s.%s mapped for output, but instance is not configured for output (no priority set)", inst->name, spec);
+	}
 
 	//if wide channel, mark fine
 	if(*spec_next == '+'){
@@ -259,12 +272,13 @@ static channel* sacn_channel(instance* inst, char* spec, uint8_t flags){
 	}
 
 	data->data.map[chan_a] = (*spec_next == '+') ? (MAP_COARSE | chan_b) : (MAP_SINGLE | chan_a);
-	return mm_channel(inst, chan_a, 1);
+	return data->data.channel + chan_a;
 }
 
-static int sacn_transmit(instance* inst){
-	size_t u;
+static int sacn_transmit(instance* inst, sacn_output_universe* output){
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
+
+	//build sacn frame
 	sacn_data_pdu pdu = {
 		.root = {
 			.preamble_size = htobe16(0x10),
@@ -299,16 +313,26 @@ static int sacn_transmit(instance* inst){
 	memcpy((((uint8_t*)pdu.data.data) + 1), data->data.out, 512);
 
 	if(sendto(global_cfg.fd[data->fd_index].fd, (uint8_t*) &pdu, sizeof(pdu), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
+		#ifdef _WIN32
+		if(WSAGetLastError() != WSAEWOULDBLOCK){
+		#else
+		if(errno != EAGAIN){
+		#endif
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, mmbackend_socket_strerror(errno));
+			return 1;
+		}
+
+		//reschedule output
+		output->mark = 1;
+		if(!global_cfg.next_frame || global_cfg.next_frame > SACN_SYNTHESIZE_MARGIN){
+			global_cfg.next_frame = SACN_SYNTHESIZE_MARGIN;
+		}
+		return 0;
 	}
 
 	//update last transmit timestamp, unmark instance
-	for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
-		if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
-			global_cfg.fd[data->fd_index].universe[u].last_frame = mm_timestamp();
-			global_cfg.fd[data->fd_index].universe[u].mark = 0;
-		}
-	}
+	output->last_frame = mm_timestamp();
+	output->mark = 0;
 	return 0;
 }
 
@@ -316,10 +340,6 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u, mark = 0;
 	uint32_t frame_delta = 0;
 	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
-
-	if(!num){
-		return 0;
-	}
 
 	if(!data->xmit_prio){
 		LOGPF("Instance %s not enabled for output (%" PRIsize_t " channel events)", inst->name, num);
@@ -348,26 +368,26 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	//send packet if required
 	if(mark){
-		if(!data->realtime){
-			//find output instance data
-			for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
-				if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
-					break;
-				}
+		//find output instance data
+		for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
+			if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
+				break;
 			}
+		}
 
+		if(!data->realtime){
 			frame_delta = mm_timestamp() - global_cfg.fd[data->fd_index].universe[u].last_frame;
 
 			//check if ratelimiting engaged
 			if(frame_delta < SACN_FRAME_TIMEOUT){
 				global_cfg.fd[data->fd_index].universe[u].mark = 1;
-				if(!global_cfg.next_frame || global_cfg.next_frame > (SACN_KEEPALIVE_INTERVAL - frame_delta)){
-					global_cfg.next_frame = (SACN_KEEPALIVE_INTERVAL - frame_delta);
+				if(!global_cfg.next_frame || global_cfg.next_frame > (SACN_FRAME_TIMEOUT - frame_delta)){
+					global_cfg.next_frame = (SACN_FRAME_TIMEOUT - frame_delta);
 				}
 				return 0;
 			}
 		}
-		sacn_transmit(inst);
+		sacn_transmit(inst, global_cfg.fd[data->fd_index].universe + u);
 	}
 
 	return 0;
@@ -418,16 +438,9 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 		if(inst_data->data.map[u] & MAP_MARK){
 			//unmark and get channel
 			inst_data->data.map[u] &= ~MAP_MARK;
+			chan = inst_data->data.channel + u;
 			if(inst_data->data.map[u] & MAP_FINE){
-				chan = mm_channel(inst, MAPPED_CHANNEL(inst_data->data.map[u]), 0);
-			}
-			else{
-				chan = mm_channel(inst, u, 0);
-			}
-
-			if(!chan){
-				LOGPF("Active channel %" PRIsize_t " on %s not known to core", u, inst->name);
-				return 1;
+				chan = inst_data->data.channel + MAPPED_CHANNEL(inst_data->data.map[u]);
 			}
 
 			//generate value
@@ -494,7 +507,13 @@ static void sacn_discovery(size_t fd){
 		memcpy(pdu.data.data, global_cfg.fd[fd].universe + page * 512, universes * sizeof(uint16_t));
 
 		if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &pdu, sizeof(pdu) - (512 - universes) * sizeof(uint16_t), 0, (struct sockaddr*) &discovery_dest, sizeof(discovery_dest)) < 0){
-			LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, strerror(errno));
+			#ifdef _WIN32
+			if(WSAGetLastError() != WSAEWOULDBLOCK){
+			#else
+			if(errno != EAGAIN){
+			#endif
+				LOGPF("Failed to output universe discovery frame for interface %" PRIsize_t ": %s", fd, mmbackend_socket_strerror(errno));
+			}
 		}
 	}
 }
@@ -535,7 +554,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 				instance_id.fields.uni = global_cfg.fd[u].universe[c].universe;
 				inst = mm_instance_find(BACKEND_NAME, instance_id.label);
 				if(inst){
-					sacn_transmit(inst);
+					sacn_transmit(inst, global_cfg.fd[u].universe + c);
 				}
 			}
 
@@ -546,11 +565,6 @@ static int sacn_handle(size_t num, managed_fd* fds){
 			}
 
 		}
-	}
-
-	//early exit
-	if(!num){
-		return 0;
 	}
 
 	for(u = 0; u < num; u++){
@@ -578,7 +592,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 		#else
 		if(bytes_read < 0 && errno != EAGAIN){
 		#endif
-			LOGPF("Failed to receive data: %s", strerror(errno));
+			LOGPF("Failed to receive data: %s", mmbackend_socket_strerror(errno));
 		}
 
 		if(bytes_read == 0){
@@ -630,7 +644,7 @@ static int sacn_start(size_t n, instance** inst){
 		if(!data->unicast_input){
 			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
 			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
-				LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst[u]->name, strerror(errno));
+				LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst[u]->name, mmbackend_socket_strerror(errno));
 			}
 		}
 

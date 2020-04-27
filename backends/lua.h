@@ -22,13 +22,21 @@ static int lua_shutdown(size_t n, instance** inst);
 static uint32_t lua_interval();
 #endif
 
+typedef struct /*_lua_channel*/ {
+	char* name;
+	int reference;
+	double in;
+	double out;
+	uint8_t mark;
+} lua_channel_data;
+
 typedef struct /*_lua_instance_data*/ {
 	size_t channels;
-	char** channel_name;
-	int* reference;
-	double* input;
-	double* output;
+	lua_channel_data* channel;
+
 	lua_State* interpreter;
+	int cleanup_handler;
+	char* default_handler;
 } lua_instance_data;
 
 typedef struct /*_lua_interval_callback*/ {
@@ -37,3 +45,10 @@ typedef struct /*_lua_interval_callback*/ {
 	lua_State* interpreter;
 	int reference;
 } lua_timer;
+
+typedef struct /*_lua_coroutine*/ {
+	instance* instance;
+	lua_State* thread;
+	int reference;
+	uint64_t timeout;
+} lua_thread;

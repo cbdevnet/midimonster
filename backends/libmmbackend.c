@@ -1,6 +1,77 @@
 #include "libmmbackend.h"
 
 #define LOGPF(format, ...) fprintf(stderr, "libmmbe\t" format "\n", __VA_ARGS__)
+#define LOG(message) fprintf(stderr, "libmmbe\t%s\n", (message))
+
+int mmbackend_strdup(char** dest, char* src){
+	if(*dest){
+		free(*dest);
+	}
+
+	*dest = strdup(src);
+
+	if(!*dest){
+		LOG("Failed to allocate memory");
+		return 1;
+	}
+	return 0;
+}
+
+char* mmbackend_socket_strerror(int err_no){
+	#ifdef _WIN32
+	static char error[2048] = "";
+	ssize_t u; 
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, WSAGetLastError(),
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), error, sizeof(error), NULL);
+	//remove trailing newline that for some reason is included in most of these...
+	for(u = strlen(error) - 1; u > 0; u--){
+		if(!isprint(error[u])){
+			error[u] = 0;
+		}
+	}
+	return error;
+	#else
+	return strerror(err_no);
+	#endif
+}
+
+const char* mmbackend_sockaddr_ntop(struct sockaddr* peer, char* buffer, size_t length){
+	union {
+		struct sockaddr* in;
+		struct sockaddr_in* in4;
+		struct sockaddr_in6* in6;
+	} addr;
+	addr.in = peer;
+	#ifdef _WIN32
+	uint8_t* data = NULL;
+	#endif
+
+	switch(addr.in->sa_family){
+		//inet_ntop has become available in the winapi with vista, but eh.
+		#ifdef _WIN32
+		case AF_INET6:
+			data = addr.in6->sin6_addr.s6_addr;
+			snprintf(buffer, length, "%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X",
+					data[0], data[1], data[2], data[3],
+					data[4], data[5], data[6], data[7],
+					data[8], data[9], data[10], data[11],
+					data[12], data[13], data[14], data[15]);
+			return buffer;
+		case AF_INET:
+			data = (uint8_t*) &(addr.in4->sin_addr.s_addr);
+			snprintf(buffer, length, "%d.%d.%d.%d", data[0], data[1], data[2], data[3]);
+			return buffer;
+		#else
+		case AF_INET6:
+			return inet_ntop(addr.in->sa_family, &(addr.in6->sin6_addr), buffer, length);
+		case AF_INET:
+			return inet_ntop(addr.in->sa_family, &(addr.in4->sin_addr), buffer, length);
+		#endif
+		default:
+			snprintf(buffer, length, "Socket family not implemented");
+			return buffer;
+	}
+}
 
 void mmbackend_parse_hostspec(char* spec, char** host, char** port, char** options){
 	size_t u = 0;
@@ -67,7 +138,7 @@ int mmbackend_parse_sockaddr(char* host, char* port, struct sockaddr_storage* ad
 	return 0;
 }
 
-int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast){
+int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uint8_t mcast, uint8_t dualstack){
 	int fd = -1, status, yes = 1;
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
@@ -91,19 +162,24 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 
 		//set required socket options
 		yes = 1;
-		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) < 0){
-			LOGPF("Failed to enable SO_REUSEADDR on socket: %s", strerror(errno));
+		if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*) &yes, sizeof(yes)) < 0){
+			LOGPF("Failed to enable SO_REUSEADDR on socket: %s", mmbackend_socket_strerror(errno));
+		}
+
+		yes = dualstack ? 0 : 1;
+		if(addr_it->ai_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (void*) &yes, sizeof(yes)) < 0){
+			LOGPF("Failed to %s dualstack operations on socket: %s", dualstack ? "enable" : "disable", mmbackend_socket_strerror(errno));
 		}
 
 		if(mcast){
 			yes = 1;
-			if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*)&yes, sizeof(yes)) < 0){
-				LOGPF("Failed to enable SO_BROADCAST on socket: %s", strerror(errno));
+			if(setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void*) &yes, sizeof(yes)) < 0){
+				LOGPF("Failed to enable SO_BROADCAST on socket: %s", mmbackend_socket_strerror(errno));
 			}
 
 			yes = 0;
-			if(setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void*)&yes, sizeof(yes)) < 0){
-				LOGPF("Failed to disable IP_MULTICAST_LOOP on socket: %s", strerror(errno));
+			if(setsockopt(fd, addr_it->ai_family == AF_INET ? IPPROTO_IP : IPPROTO_IPV6, addr_it->ai_family == AF_INET ? IP_MULTICAST_LOOP : IPV6_MULTICAST_LOOP, (void*) &yes, sizeof(yes)) < 0){
+				LOGPF("Failed to disable IP_MULTICAST_LOOP on socket: %s", mmbackend_socket_strerror(errno));
 			}
 		}
 
@@ -141,7 +217,7 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 	#else
 	int flags = fcntl(fd, F_GETFL, 0);
 	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
-		LOGPF("Failed to set socket nonblocking: %s", strerror(errno));
+		LOGPF("Failed to set socket nonblocking: %s", mmbackend_socket_strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -159,7 +235,7 @@ int mmbackend_send(int fd, uint8_t* data, size_t length){
 		sent = send(fd, data + total, 1, 0);
 		#endif
 		if(sent < 0){
-			LOGPF("Failed to send: %s", strerror(errno));
+			LOGPF("Failed to send: %s", mmbackend_socket_strerror(errno));
 			return 1;
 		}
 		total += sent;

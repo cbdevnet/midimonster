@@ -16,7 +16,7 @@ static int sacn_shutdown(size_t n, instance** inst);
 //spec 6.6.2.1
 #define SACN_KEEPALIVE_INTERVAL 1000
 //spec 6.6.1
-#define SACN_FRAME_TIMEOUT 15
+#define SACN_FRAME_TIMEOUT 20
 #define SACN_SYNTHESIZE_MARGIN 10
 #define SACN_DISCOVERY_TIMEOUT 9000
 #define SACN_PDU_MAGIC "ASC-E1.17\0\0\0"
@@ -36,6 +36,7 @@ typedef struct /*_sacn_universe_model*/ {
 	uint8_t in[512];
 	uint8_t out[512];
 	uint16_t map[512];
+	channel channel[512];
 } sacn_universe;
 
 typedef struct /*_sacn_instance_model*/ {

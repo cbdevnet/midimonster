@@ -7,7 +7,7 @@
 
 /* Core version unless set by the build process */
 #ifndef MIDIMONSTER_VERSION
-	#define MIDIMONSTER_VERSION "v0.4-dist"
+	#define MIDIMONSTER_VERSION "v0.5-dist"
 #endif
 
 /* Set backend name if unset */
@@ -192,8 +192,8 @@ typedef struct _backend_instance {
 
 /* 
  * Instance channel structure
- * Backends may either manage their own channel registry
- * or use the memory returned by mm_channel()
+ * Backends may either manage their own channel registry or use the global
+ * channel store via the mm_channel() API
  */
 typedef struct _backend_channel {
 	instance* instance;
@@ -218,39 +218,41 @@ MM_API int mm_backend_register(backend b);
 
 /*
  * Finds an instance matching the specified backend and identifier.
- * Since setting an identifier for an instance is optional,
- * this may not work depending on the backend.
- * Instance identifiers may for example be set in the backends
- * mmbackend_start call.
+ * Since setting an identifier for an instance is optional, this may not work
+ * depending on the backend. Instance identifiers may for example be set in the
+ * backends mmbackend_start call.
  */
 MM_API instance* mm_instance_find(char* backend, uint64_t ident);
 
 /*
- * Provides a pointer to a channel structure, pre-filled with
- * the provided instance reference and identifier.
- * The `create` parameter is a boolean flag indicating whether
- * a channel matching the `ident` parameter should be created if
- * none exists. If the instance already registered a channel
- * matching `ident`, a pointer to it is returned.
- * This API is just a convenience function. The array of channels is
- * only used for mapping internally, creating and managing your own
- * channel store is possible.
+ * Provides a pointer to a channel structure, pre-filled with the provided
+ * instance reference and identifier.
+ * The `create` parameter is a boolean flag indicating whether a channel
+ * matching the `ident` parameter should be created in the global channel store
+ * if none exists yet. If the instance already registered a channel matching
+ * `ident`, a pointer to the existing channel is returned.
+ * This API is just a convenience function. Creating and managing a
+ * backend-internal channel store is possible (and encouraged for performance
+ * reasons). When returning pointers from a backend-local channel store, the
+ * returned pointers must stay valid over the lifetime of the instance and
+ * provide valid `instance` members, as they are used for callbacks.
  * For each channel with a non-NULL `impl` field registered using
  * this function, the backend will receive a call to its channel_free
- * function.
+ * function (if it exists).
  */
 MM_API channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
 
 /*
- * Register (manage = 1) or unregister (manage = 0) a file descriptor
- * to be selected on. The backend will be notified when the descriptor
- * becomes ready to read via its registered mmbackend_process_fd call.
+ * Register (manage = 1) or unregister (manage = 0) a file descriptor to be
+ * selected on. The backend will be notified when the descriptor becomes ready
+ * to read via its registered mmbackend_process_fd call. The `impl` argument
+ * will be provided within the corresponding managed_fd structure upon callback.
  */
 MM_API int mm_manage_fd(int fd, char* backend, int manage, void* impl);
 
 /*
- * Notifies the core of a channel event. Called by backends to
- * inject events gathered from their backing implementation.
+ * Notifies the core of a channel event. Called by backends to inject events
+ * gathered from their backing implementation.
  */
 MM_API int mm_channel_event(channel* c, channel_value v);
 
@@ -262,14 +264,14 @@ MM_API int mm_backend_instances(char* backend, size_t* n, instance*** i);
 
 /*
  * Query an internal timestamp, which is updated every core iteration.
- * This timestamp should not be used as a performance counter, but can be
- * used for timeouting. Resolution is milliseconds.
+ * This timestamp should not be used as a performance counter, but can be used
+ * for timeouting. Resolution is milliseconds.
  */
 MM_API uint64_t mm_timestamp();
 
 /*
- * Create a channel-to-channel mapping. This API should not
- * be used by backends. It is only exported for core modules.
+ * Create a channel-to-channel mapping. This API should not be used by backends.
+ * It is only exported for core modules.
  */
 int mm_map_channel(channel* from, channel* to);
 #endif

@@ -21,7 +21,7 @@ static int artnet_listener(char* host, char* port){
 		return -1;
 	}
 
-	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1);
+	fd = mmbackend_socket(host, port, SOCK_DGRAM, 1, 1, 1);
 	if(fd < 0){
 		return -1;
 	}
@@ -104,12 +104,18 @@ static int artnet_configure(char* option, char* value){
 
 static int artnet_instance(instance* inst){
 	artnet_instance_data* data = calloc(1, sizeof(artnet_instance_data));
+	size_t u;
+
 	if(!data){
 		LOG("Failed to allocate memory");
 		return 1;
 	}
 
 	data->net = default_net;
+	for(u = 0; u < sizeof(data->data.channel) / sizeof(channel); u++){
+		data->data.channel[u].ident = u;
+		data->data.channel[u].instance = inst;
+	}
 
 	inst->impl = data;
 	return 0;
@@ -164,6 +170,11 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	}
 	chan_a--;
 
+	//check output capabilities
+	if((flags & mmchannel_output) && !data->dest_len){
+		LOGPF("Channel %s.%s mapped for output, but instance is not configured for output (missing destination)", inst->name, spec);
+	}
+
 	//secondary channel setup
 	if(*spec_next == '+'){
 		chan_b = strtoul(spec_next + 1, NULL, 10);
@@ -192,13 +203,13 @@ static channel* artnet_channel(instance* inst, char* spec, uint8_t flags){
 	}
 	data->data.map[chan_a] = (*spec_next == '+') ? (MAP_COARSE | chan_b) : (MAP_SINGLE | chan_a);
 
-	return mm_channel(inst, chan_a, 1);
+	return data->data.channel + chan_a;
 }
 
-static int artnet_transmit(instance* inst){
-	size_t u;
+static int artnet_transmit(instance* inst, artnet_output_universe* output){
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
-	//output frame
+
+	//build output frame
 	artnet_pkt frame = {
 		.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
 		.opcode = htobe16(OpDmx),
@@ -213,22 +224,31 @@ static int artnet_transmit(instance* inst){
 	memcpy(frame.data, data->data.out, 512);
 
 	if(sendto(artnet_fd[data->fd_index].fd, (uint8_t*) &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
-		LOGPF("Failed to output frame for instance %s: %s", inst->name, strerror(errno));
+		#ifdef _WIN32
+		if(WSAGetLastError() != WSAEWOULDBLOCK){
+		#else
+		if(errno != EAGAIN){
+		#endif
+			LOGPF("Failed to output frame for instance %s: %s", inst->name, mmbackend_socket_strerror(errno));
+			return 1;
+		}
+		//reschedule frame output
+		output->mark = 1;
+		if(!next_frame || next_frame > ARTNET_SYNTHESIZE_MARGIN){
+			next_frame = ARTNET_SYNTHESIZE_MARGIN;
+		}
+		return 0;
 	}
 
 	//update last frame timestamp
-	for(u = 0; u < artnet_fd[data->fd_index].output_instances; u++){
-		if(artnet_fd[data->fd_index].output_instance[u].label == inst->ident){
-			artnet_fd[data->fd_index].output_instance[u].last_frame = mm_timestamp();
-			artnet_fd[data->fd_index].output_instance[u].mark = 0;
-		}
-	}
+	output->last_frame = mm_timestamp();
+	output->mark = 0;
 	return 0;
 }
 
 static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v){
 	uint32_t frame_delta = 0;
-	size_t u, mark = 0;
+	size_t u, mark = 0, channel_offset = 0;
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	if(!data->dest_len){
@@ -237,22 +257,23 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	}
 
 	for(u = 0; u < num; u++){
-		if(IS_WIDE(data->data.map[c[u]->ident])){
+		channel_offset = c[u]->ident;
+		if(IS_WIDE(data->data.map[channel_offset])){
 			uint32_t val = v[u].normalised * ((double) 0xFFFF);
 			//the primary (coarse) channel is the one registered to the core, so we don't have to check for that
-			if(data->data.out[c[u]->ident] != ((val >> 8) & 0xFF)){
+			if(data->data.out[channel_offset] != ((val >> 8) & 0xFF)){
 				mark = 1;
-				data->data.out[c[u]->ident] = (val >> 8) & 0xFF;
+				data->data.out[channel_offset] = (val >> 8) & 0xFF;
 			}
 
-			if(data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] != (val & 0xFF)){
+			if(data->data.out[MAPPED_CHANNEL(data->data.map[channel_offset])] != (val & 0xFF)){
 				mark = 1;
-				data->data.out[MAPPED_CHANNEL(data->data.map[c[u]->ident])] = val & 0xFF;
+				data->data.out[MAPPED_CHANNEL(data->data.map[channel_offset])] = val & 0xFF;
 			}
 		}
-		else if(data->data.out[c[u]->ident] != (v[u].normalised * 255.0)){
+		else if(data->data.out[channel_offset] != (v[u].normalised * 255.0)){
 			mark = 1;
-			data->data.out[c[u]->ident] = v[u].normalised * 255.0;
+			data->data.out[channel_offset] = v[u].normalised * 255.0;
 		}
 	}
 
@@ -268,12 +289,12 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 		//check output rate limit, request next frame
 		if(frame_delta < ARTNET_FRAME_TIMEOUT){
 			artnet_fd[data->fd_index].output_instance[u].mark = 1;
-			if(!next_frame || next_frame > (ARTNET_KEEPALIVE_INTERVAL - frame_delta)){
-				next_frame = (ARTNET_KEEPALIVE_INTERVAL - frame_delta);
+			if(!next_frame || next_frame > (ARTNET_FRAME_TIMEOUT - frame_delta)){
+				next_frame = (ARTNET_FRAME_TIMEOUT - frame_delta);
 			}
 			return 0;
 		}
-		return artnet_transmit(inst);
+		return artnet_transmit(inst, artnet_fd[data->fd_index].output_instance + u);
 	}
 
 	return 0;
@@ -304,16 +325,9 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 	for(p = 0; p <= max_mark; p++){
 		if(data->data.map[p] & MAP_MARK){
 			data->data.map[p] &= ~MAP_MARK;
+			chan = data->data.channel + p;
 			if(data->data.map[p] & MAP_FINE){
-				chan = mm_channel(inst, MAPPED_CHANNEL(data->data.map[p]), 0);
-			}
-			else{
-				chan = mm_channel(inst, p, 0);
-			}
-
-			if(!chan){
-				LOGPF("Active channel %" PRIsize_t " on %s not known to core", p, inst->name);
-				return 1;
+				chan = data->data.channel + MAPPED_CHANNEL(data->data.map[p]);
 			}
 
 			if(IS_WIDE(data->data.map[p])){
@@ -361,7 +375,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 					|| synthesize_delta >= ARTNET_KEEPALIVE_INTERVAL){ //keepalive timeout
 				inst = mm_instance_find(BACKEND_NAME, artnet_fd[u].output_instance[c].label);
 				if(inst){
-					artnet_transmit(inst);
+					artnet_transmit(inst, artnet_fd[u].output_instance + c);
 				}
 			}
 
@@ -371,11 +385,6 @@ static int artnet_handle(size_t num, managed_fd* fds){
 				next_frame = ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta;
 			}
 		}
-	}
-
-	if(!num){
-		//early exit
-		return 0;
 	}
 
 	for(u = 0; u < num; u++){
@@ -400,7 +409,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 		#else
 		if(bytes_read < 0 && errno != EAGAIN){
 		#endif
-			LOGPF("Failed to receive data: %s", strerror(errno));
+			LOGPF("Failed to receive data: %s", mmbackend_socket_strerror(errno));
 		}
 
 		if(bytes_read == 0){

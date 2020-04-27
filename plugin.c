@@ -51,7 +51,7 @@ static int plugin_attach(char* path, char* file){
 		char* error = NULL;
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-		fprintf(stderr, "Failed to load plugin %s: %s\n", lib, error);
+		fprintf(stderr, "Failed to load plugin %s, check that all supporting libraries are present: %s\n", lib, error);
 		LocalFree(error);
 		#else
 		fprintf(stderr, "Failed to load plugin %s: %s\n", lib, dlerror());

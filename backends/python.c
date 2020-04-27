@@ -78,7 +78,8 @@ static void python_timer_recalculate(){
 				}
 
 				//10msec is absolute lower limit and minimum gcd due to rounding
-				if(next_interval == 10){
+				if(next_interval <= 10){
+					next_interval = 10;
 					break;
 				}
 			}
@@ -115,7 +116,6 @@ static PyObject* mmpy_output(PyObject* self, PyObject* args){
 	instance* inst = *((instance**) PyModule_GetState(self));
 	python_instance_data* data = (python_instance_data*) inst->impl;
 	const char* channel_name = NULL;
-	channel* chan = NULL;
 	channel_value val = {
 		{0}
 	};
@@ -126,19 +126,22 @@ static PyObject* mmpy_output(PyObject* self, PyObject* args){
 	}
 
 	val.normalised = clamp(val.normalised, 1.0, 0.0);
+	//if not started yet, create any requested channels so we can set them at load time
+	if(!last_timestamp){
+		python_channel(inst, (char*) channel_name, mmchannel_output);
+	}
 
 	for(u = 0; u < data->channels; u++){
 		if(!strcmp(data->channel[u].name, channel_name)){
 			DBGPF("Setting channel %s.%s to %f", inst->name, channel_name, val.normalised);
-			chan = mm_channel(inst, u, 0);
-			//this should never happen
-			if(!chan){
-				LOGPF("Failed to fetch parsed channel %s.%s", inst->name, channel_name);
-				break;
-			}
 			data->channel[u].out = val.normalised;
-			mm_channel_event(chan, val);
-			break;
+			if(!last_timestamp){
+				data->channel[u].mark = 1;
+			}
+			else{
+				mm_channel_event(mm_channel(inst, u, 0), val);
+			}
+			return 0;
 		}
 	}
 
@@ -254,6 +257,35 @@ static PyObject* mmpy_interval(PyObject* self, PyObject* args){
 	return Py_None;
 }
 
+static PyObject* mmpy_cleanup_handler(PyObject* self, PyObject* args){
+	instance* inst = *((instance**) PyModule_GetState(self));
+	python_instance_data* data = (python_instance_data*) inst->impl;
+	PyObject* current_handler = data->cleanup_handler;
+
+	if(!PyArg_ParseTuple(args, "O", &(data->cleanup_handler))
+			|| (data->cleanup_handler != Py_None && !PyCallable_Check(data->cleanup_handler))){
+		data->cleanup_handler = current_handler;
+		return NULL;
+	}
+
+	if(data->cleanup_handler == Py_None){
+		DBGPF("Cleanup handler removed on %s (previously %s)", inst->name, current_handler ? "active" : "inactive");
+		data->cleanup_handler = NULL;
+	}
+	else{
+		DBGPF("Cleanup handler installed on %s (previously %s)", inst->name, current_handler ? "active" : "inactive");
+		Py_INCREF(data->cleanup_handler);
+	}
+
+	if(!current_handler){
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+
+	//do not decrease refcount on current_handler here as the reference may be used by python code again
+	return current_handler;
+}
+
 static PyObject* mmpy_manage_fd(PyObject* self, PyObject* args){
 	instance* inst = *((instance**) PyModule_GetState(self));
 	python_instance_data* data = (python_instance_data*) inst->impl;
@@ -261,12 +293,10 @@ static PyObject* mmpy_manage_fd(PyObject* self, PyObject* args){
 	size_t u = 0, last_free = 0;
 	int fd = -1;
 
-	if(!PyArg_ParseTuple(args, "OO", &handler, &sock)){
-		return NULL;
-	}
-
-	if(handler != Py_None && !PyCallable_Check(handler)){
-		PyErr_SetString(PyExc_TypeError, "manage() requires either None or a callable");
+	if(!PyArg_ParseTuple(args, "OO", &handler, &sock)
+			|| sock == Py_None
+			|| (handler != Py_None && !PyCallable_Check(handler))){
+		PyErr_SetString(PyExc_TypeError, "manage() requires either None or a callable and a socket-like object");
 		return NULL;
 	}
 
@@ -378,6 +408,11 @@ static int python_configure_instance(instance* inst, char* option, char* value){
 		PyEval_ReleaseThread(data->interpreter);
 		return 0;
 	}
+	else if(!strcmp(option, "default-handler")){
+		free(data->default_handler);
+		data->default_handler = strdup(value);
+		return 0;
+	}
 
 	LOGPF("Unknown instance parameter %s for instance %s", option, inst->name);
 	return 1;
@@ -390,13 +425,14 @@ static PyObject* mmpy_init(){
 	};
 
 	static PyMethodDef mmpy_methods[] = {
-		{"output", mmpy_output, METH_VARARGS, "Output a channel event"},
-		{"inputvalue", mmpy_input_value, METH_VARARGS, "Get last input value for a channel"},
-		{"outputvalue", mmpy_output_value, METH_VARARGS, "Get the last output value for a channel"},
+		{"output", mmpy_output, METH_VARARGS, "Output a channel event on the instance"},
+		{"inputvalue", mmpy_input_value, METH_VARARGS, "Get last input value for a channel on the instance"},
+		{"outputvalue", mmpy_output_value, METH_VARARGS, "Get the last output value for a channel on the instance"},
 		{"current", mmpy_current_handler, METH_VARARGS, "Get the name of the currently executing channel handler"},
 		{"timestamp", mmpy_timestamp, METH_VARARGS, "Get the core timestamp (in milliseconds)"},
 		{"manage", mmpy_manage_fd, METH_VARARGS, "(Un-)register a socket or file descriptor for notifications"},
 		{"interval", mmpy_interval, METH_VARARGS, "Register or update an interval handler"},
+		{"cleanup_handler", mmpy_cleanup_handler, METH_VARARGS, "Register or update the instances cleanup handler"},
 		{0}
 	};
 
@@ -523,18 +559,19 @@ static int python_set(instance* inst, size_t num, channel** c, channel_value* v)
 	for(u = 0; u < num; u++){
 		chan = data->channel + c[u]->ident;
 
-		//update input value buffer
-		chan->in = v[u].normalised;
-
 		//call handler if present
 		if(chan->handler){
 			DBGPF("Calling handler for %s.%s", inst->name, chan->name);
 			data->current_channel = chan;
-			result = PyObject_CallFunction(chan->handler, "d", chan->in);
+			result = PyObject_CallFunction(chan->handler, "d", v[u].normalised);
 			Py_XDECREF(result);
 			data->current_channel = NULL;
 			DBGPF("Done with handler for %s.%s", inst->name, chan->name);
 		}
+
+		//update input value buffer after finishing the handler
+		chan->in = v[u].normalised;
+
 	}
 
 	//release interpreter
@@ -561,6 +598,7 @@ static int python_handle(size_t num, managed_fd* fds){
 				//if timer expired, call handler
 				if(interval[u].delta >= interval[u].interval){
 					interval[u].delta %= interval[u].interval;
+					DBGPF("Calling interval handler %" PRIsize_t ", last delta %" PRIu64, u, delta);
 
 					//swap to interpreter
 					PyEval_RestoreThread(interval[u].interpreter);
@@ -569,7 +607,6 @@ static int python_handle(size_t num, managed_fd* fds){
 					Py_XDECREF(result);
 					//release interpreter
 					PyEval_ReleaseThread(interval[u].interpreter);
-					DBGPF("Calling interval handler %" PRIsize_t, u);
 				}
 			}
 		}
@@ -600,38 +637,62 @@ static int python_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
+static PyObject* python_resolve_symbol(char* spec_raw){
+	char* module_name = NULL, *object_name = NULL, *spec = strdup(spec_raw);
+	PyObject* module = NULL, *result = NULL;
+
+	module = PyImport_AddModule("__main__");
+	object_name = spec;
+	module_name = strchr(object_name, '.');
+	if(module_name){
+		*module_name = 0;
+		//returns borrowed reference
+		module = PyImport_AddModule(object_name);
+
+		if(!module){
+			LOGPF("Module %s for symbol %s.%s is not loaded", object_name, object_name, module_name + 1);
+			return NULL;
+		}
+
+		object_name = module_name + 1;
+
+		//returns new reference
+		result = PyObject_GetAttrString(module, object_name);
+	}
+
+	free(spec);
+	return result;
+}
+
 static int python_start(size_t n, instance** inst){
 	python_instance_data* data = NULL;
-	PyObject* module = NULL;
 	size_t u, p;
-	char* module_name = NULL, *channel_name = NULL;
+	channel_value v;
 
 	//resolve channel references to handler functions
 	for(u = 0; u < n; u++){
 		data = (python_instance_data*) inst[u]->impl;
+		DBGPF("Starting up instance %s", inst[u]->name);
 
 		//switch to interpreter
 		PyEval_RestoreThread(data->interpreter);
+
+		if(data->default_handler){
+			data->handler = python_resolve_symbol(data->default_handler);
+		}
+
 		for(p = 0; p < data->channels; p++){
-			module = PyImport_AddModule("__main__");
-			channel_name = data->channel[p].name;
-			module_name = strchr(channel_name, '.');
-			if(module_name){
-				*module_name = 0;
-				//returns borrowed reference
-				module = PyImport_AddModule(channel_name);
-
-				if(!module){
-					LOGPF("Module %s for qualified channel %s.%s is not loaded on instance %s", channel_name, channel_name, module_name + 1, inst[u]->name);
-					return 1;
-				}
-
-				*module_name = '.';
-				channel_name = module_name + 1;
+			if(!strchr(data->channel[p].name, '.') && data->handler){
+				data->channel[p].handler = data->handler;
 			}
-
-			//returns new reference
-			data->channel[p].handler = PyObject_GetAttrString(module, channel_name);
+			else{
+				data->channel[p].handler = python_resolve_symbol(data->channel[p].name);
+			}
+			//push initial values
+			if(data->channel[p].mark){
+				v.normalised = data->channel[p].out;
+				mm_channel_event(mm_channel(inst[u], p, 0), v);
+			}
 		}
 
 		//release interpreter
@@ -642,27 +703,43 @@ static int python_start(size_t n, instance** inst){
 
 static int python_shutdown(size_t n, instance** inst){
 	size_t u, p;
+	PyObject* result = NULL;
 	python_instance_data* data = NULL;
 
-	//clean up channels
-	//this needs to be done before stopping the interpreters,
-	//because the handler references are refcounted
-	for(u = 0; u < n; u++){
-		data = (python_instance_data*) inst[u]->impl;
-		for(p = 0; p < data->channels; p++){
-			free(data->channel[p].name);
-			Py_XDECREF(data->channel[p].handler);
-		}
-		free(data->channel);
-		//do not free data here, needed for shutting down interpreters
-	}
-
+	//if there are no instances, the python interpreter is not started, so cleanup can be skipped
 	if(python_main){
-		//just used to lock the GIL
+		//release interval references
+		for(p = 0; p < intervals; p++){
+			//swap to interpreter
+			PyEval_RestoreThread(interval[p].interpreter);
+			Py_XDECREF(interval[p].reference);
+			PyEval_ReleaseThread(interval[p].interpreter);
+		}
+
+		//lock the GIL for later interpreter release
 		PyEval_RestoreThread(python_main);
 
 		for(u = 0; u < n; u++){
 			data = (python_instance_data*) inst[u]->impl;
+
+			//swap to interpreter to be safe for releasing the references
+			PyThreadState_Swap(data->interpreter);
+
+			//run cleanup handler before cleaning up channel data to allow reading channel data
+			if(data->cleanup_handler){
+				result = PyObject_CallFunction(data->cleanup_handler, NULL);
+				Py_XDECREF(result);
+				Py_XDECREF(data->cleanup_handler);
+			}
+
+			//clean up channels
+			for(p = 0; p < data->channels; p++){
+				free(data->channel[p].name);
+				Py_XDECREF(data->channel[p].handler);
+			}
+			free(data->channel);
+			free(data->default_handler);
+			Py_XDECREF(data->handler);
 
 			//close sockets
 			for(p = 0; p < data->sockets; p++){
@@ -671,25 +748,18 @@ static int python_shutdown(size_t n, instance** inst){
 				Py_XDECREF(data->socket[p].handler);
 			}
 
-			//release interval references
-			for(p = 0; p <intervals; p++){
-				Py_XDECREF(interval[p].reference);
-			}
-
+			//shut down interpreter, GIL is held after this but state is NULL
 			DBGPF("Shutting down interpreter for instance %s", inst[u]->name);
-			//swap to interpreter and end it, GIL is held after this but state is NULL
-			PyThreadState_Swap(data->interpreter);
 			PyErr_Clear();
 			//PyThreadState_Clear(data->interpreter);
 			Py_EndInterpreter(data->interpreter);
-
 			free(data);
 		}
 
 		//shut down main interpreter
 		PyThreadState_Swap(python_main);
 		if(Py_FinalizeEx()){
-			LOG("Failed to destroy python interpreters");
+			LOG("Failed to shut down python library");
 		}
 		PyMem_RawFree(program_name);
 	}

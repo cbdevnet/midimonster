@@ -18,13 +18,19 @@ enum /*wininput_channel_type*/ {
 };
 
 enum /*wininput_control_channel*/ {
+	keypress = 0,
+	button,
 	position,
 	//wheel, /*relative*/
-	button,
 
-	keypress,
 	key_unicode
 };
+
+typedef struct /*_wininput_key_info*/ {
+	uint8_t keycode;
+	char* name;
+	uint8_t channel;
+} key_info;
 
 typedef union {
 	struct {

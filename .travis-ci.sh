@@ -78,6 +78,8 @@ elif [ "$TASK" = "windows" ]; then
 		mkdir ./deployment
 		mkdir ./deployment/backends
 		mkdir ./deployment/docs
+		# Strip the Windows binaries as they become huge quickly
+		strip midimonster.exe backends/*.dll
 		cp ./midimonster.exe ./deployment/
 		cp ./backends/*.dll ./deployment/backends/
 		cp ./backends/*.dll.disabled ./deployment/backends/

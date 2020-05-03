@@ -234,12 +234,12 @@ struct timeval backend_timeout(){
 		//only call interval if backend has instances
 		if(registry.instances[u] && registry.backends[u].interval){
 			res = registry.backends[u].interval();
-			if((res / 1000) < secs){
+			if(res && (res / 1000) < secs){
 				DBGPF("Updating interval to %" PRIu32 " msecs by request from %s", res, registry.backends[u].name);
 				secs = res / 1000;
 				msecs = res % 1000;
 			}
-			else if(res / 1000 == secs && (res % 1000) < msecs){
+			else if(res && res / 1000 == secs && (res % 1000) < msecs){
 				DBGPF("Updating interval to %" PRIu32 " msecs by request from %s", res, registry.backends[u].name);
 				msecs = res % 1000;
 			}

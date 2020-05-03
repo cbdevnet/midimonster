@@ -129,6 +129,8 @@ struct _managed_fd;
  *		* (optional) mmbackend_interval
  *			Return the maximum sleep interval for this backend in milliseconds.
  *			If not implemented, a maximum interval of one second is used.
+ *			Returning 0 signals that the backend does not have a minimum
+ *			interval.
  *	* mmbackend_shutdown
  *		Clean up all allocations, finalize all hardware connections. All registered
  *		backends receive the shutdown call, regardless of whether they have been

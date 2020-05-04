@@ -61,7 +61,7 @@ The following keynames are defined in an internal mapping table:
 | `minus`			|			| `dot`				|			|
 | `divide`			|			| `f1` - `f24`			|			|
 | `lwin`, `rwin`		|			| `lshift`, `rshift`		|			|
-| `lctrl, `rctrl`		|			| `lmenu`, `rmenu`		|			|
+| `lctrl`, `rctrl`		|			| `lmenu`, `rmenu`		|			|
 | `previous`, `next`		| Browser controls	| `refresh`			| Browser controls	|
 | `stop`			| Browser controls	| `search`			| Browser controls	|
 | `favorites`			| Browser controls	| `homepage`			| Browser controls	|
@@ -81,6 +81,10 @@ input.X > wi1.key.escape
 
 Keyboard and mouse input is subject to UIPI. You can not send input to applications that run at a higher
 privilege level than the MIDIMonster.
+
+Due to inconsistencies in the Windows API, mouse position input and output may differ for the same cursor location.
+This may be correlated with the use and arrangement of multi-monitor desktops. If you encounter problems with either
+receiving or sending mouse positions, please include a description of your monitor alignment in the issue.
 
 Some antivirus applications may detect this backend as problematic because it uses the same system
 interfaces to read keyboard and mouse input as any malicious application would. While it is definitely

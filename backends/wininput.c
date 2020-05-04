@@ -4,6 +4,9 @@
 #include <string.h>
 #include "wininput.h"
 
+//TODO check whether feedback elimination is required
+//TODO refactor & simplify
+
 static key_info keys[] = {
 	{VK_LBUTTON, "lmb", button}, {VK_RBUTTON, "rmb", button}, {VK_MBUTTON, "mmb", button},
 	{VK_XBUTTON1, "xmb1", button}, {VK_XBUTTON2, "xmb2", button},
@@ -53,11 +56,23 @@ static key_info keys[] = {
 	{VK_ZOOM, "zoom"}
 };
 
+static struct {
+	int virtual_x, virtual_y, virtual_width, virtual_height;
+	uint16_t mouse_x, mouse_y;
+	size_t requests;
+	wininput_request* request;
+	uint32_t interval;
+} cfg = {
+	.requests = 0,
+	.interval = 50
+};
+
 MM_PLUGIN_API int init(){
 	backend wininput = {
 		.name = BACKEND_NAME,
 		.conf = wininput_configure,
 		.create = wininput_instance,
+		.interval = wininput_interval,
 		.conf_instance = wininput_configure_instance,
 		.channel = wininput_channel,
 		.handle = wininput_set,
@@ -79,8 +94,17 @@ MM_PLUGIN_API int init(){
 	return 0;
 }
 
+static uint32_t wininput_interval(){
+	return cfg.interval;
+}
+
 static int wininput_configure(char* option, char* value){
-	LOG("The backend does not take any global configuration");
+	if(!strcmp(option, "interval")){
+		cfg.interval = strtoul(value, NULL, 0);
+		return 0;
+	}
+
+	LOGPF("Unknown backend configuration option %s", option);
 	return 1;
 }
 
@@ -90,18 +114,57 @@ static int wininput_configure_instance(instance* inst, char* option, char* value
 }
 
 static int wininput_instance(instance* inst){
-	wininput_instance_data* data = calloc(1, sizeof(wininput_instance_data));
-	if(!data){
+	return 0;
+}
+
+static int wininput_subscribe(wininput_channel_ident ident, channel* chan){
+	size_t u, n;
+
+	//find an existing request
+	for(u = 0; u < cfg.requests; u++){
+		if(cfg.request[u].ident.label == ident.label){
+			break;
+		}
+	}
+	
+	if(u == cfg.requests){
+		//create a new request
+		cfg.request = realloc(cfg.request, (cfg.requests + 1) * sizeof(wininput_request));
+		if(!cfg.request){
+			cfg.requests = 0;
+			LOG("Failed to allocate memory");
+			return 1;
+		}
+
+		cfg.request[u].ident.label = ident.label;
+		cfg.request[u].channels = 0;
+		cfg.request[u].channel = NULL;
+		cfg.request[u].state = 0;
+		cfg.requests++;
+	}
+
+	//check if already in subscriber list
+	for(n = 0; n < cfg.request[u].channels; n++){
+		if(cfg.request[u].channel[n] == chan){
+			return 0;
+		}
+	}
+
+	//add to subscriber list
+	cfg.request[u].channel = realloc(cfg.request[u].channel, (cfg.request[u].channels + 1) * sizeof(channel*));
+	if(!cfg.request[u].channel){
+		cfg.request[u].channels = 0;
 		LOG("Failed to allocate memory");
 		return 1;
 	}
-
-	inst->impl = data;
+	cfg.request[u].channel[n] = chan;
+	cfg.request[u].channels++;
 	return 0;
 }
 
 static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
 	size_t u;
+	channel* chan = NULL;
 	uint16_t scancode = 0;
 	char* token = spec;
 	wininput_channel_ident ident = {
@@ -128,6 +191,11 @@ static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
 					ident.fields.control = keys[u].keycode;
 					break;
 				}
+			}
+
+			if(u == sizeof(keys) / sizeof(keys[0])){
+				LOGPF("Unknown mouse control %s", token);
+				return NULL;
 			}
 		}
 	}
@@ -181,12 +249,26 @@ static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
 	}
 
 	if(ident.label){
-		return mm_channel(inst, ident.label, 1);
+		chan = mm_channel(inst, ident.label, 1);
+		if(chan && (flags & mmchannel_input) && wininput_subscribe(ident, chan)){
+			return NULL;
+		}
+		return chan;
 	}
 	return NULL;
 }
 
-static INPUT wininput_event_mouse(wininput_instance_data* data, uint8_t channel, uint8_t control, double value){
+//for some reason, sendinput only takes "normalized absolute coordinates", which are never again used in the API
+static void wininput_mouse_normalize(long* x, long* y){
+	//TODO this needs to take a possible origin offset into account
+	long normalized_x = (double) (*x) * (65535.0f / (double) cfg.virtual_width);
+	long normalized_y = (double) (*y) * (65535.0f / (double) cfg.virtual_height);
+
+	*x = normalized_x;
+	*y = normalized_y;
+}
+
+static INPUT wininput_event_mouse(uint8_t channel, uint8_t control, double value){
 	DWORD flags_down = 0, flags_up = 0;
 	INPUT ev = {
 		.type = INPUT_MOUSE
@@ -194,15 +276,15 @@ static INPUT wininput_event_mouse(wininput_instance_data* data, uint8_t channel,
 
 	if(channel == position){
 		if(control){
-			data->mouse.y = value * 0xFFFF;
+			cfg.mouse_y = value * 0xFFFF;
 		}
 		else{
-			data->mouse.x = value * 0xFFFF;
+			cfg.mouse_x = value * 0xFFFF;
 		}
 
-		ev.mi.dwFlags |= MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
-		ev.mi.dx = data->mouse.x;
-		ev.mi.dy = data->mouse.y;
+		ev.mi.dwFlags |= MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
+		ev.mi.dx = cfg.mouse_x;
+		ev.mi.dy = cfg.mouse_y;
 	}
 	if(channel == button){
 		switch(control){
@@ -237,7 +319,7 @@ static INPUT wininput_event_mouse(wininput_instance_data* data, uint8_t channel,
 	return ev;
 }
 
-static INPUT wininput_event_keyboard(wininput_instance_data* data, uint8_t channel, uint8_t control, double value){
+static INPUT wininput_event_keyboard(uint8_t channel, uint8_t control, double value){
 	INPUT ev = {
 		.type = INPUT_KEYBOARD
 	};
@@ -256,7 +338,6 @@ static int wininput_set(instance* inst, size_t num, channel** c, channel_value* 
 	wininput_channel_ident ident = {
 		.label = 0
 	};
-	wininput_instance_data* data = (wininput_instance_data*) inst->impl;
 	size_t n = 0, offset = 0;
 	INPUT events[500];
 
@@ -268,10 +349,10 @@ static int wininput_set(instance* inst, size_t num, channel** c, channel_value* 
 	for(n = 0; n + offset < num; n++){
 		ident.label = c[n + offset]->ident;
 		if(ident.fields.type == mouse){
-			events[n] = wininput_event_mouse(data, ident.fields.channel, ident.fields.control, v[n + offset].normalised);
+			events[n] = wininput_event_mouse(ident.fields.channel, ident.fields.control, v[n + offset].normalised);
 		}
 		else if(ident.fields.type == keyboard){
-			events[n] = wininput_event_keyboard(data, ident.fields.channel, ident.fields.control, v[n + offset].normalised);
+			events[n] = wininput_event_keyboard(ident.fields.channel, ident.fields.control, v[n + offset].normalised);
 		}
 		else{
 			n--;
@@ -289,21 +370,123 @@ static int wininput_set(instance* inst, size_t num, channel** c, channel_value* 
 }
 
 static int wininput_handle(size_t num, managed_fd* fds){
-	//TODO
+	channel_value val = {
+		.normalised = 0
+	};
+	uint8_t mouse_updated = 0, synthesize_off = 0, push_event = 0;
+	uint16_t key_state = 0;
+	POINT cursor_position;
+	size_t u = 0, n;
+
+	for(u = 0; u < cfg.requests; u++){
+		synthesize_off = 0;
+		push_event = 0;
+		val.normalised = 0;
+
+		if(cfg.request[u].ident.fields.type == mouse
+				&& cfg.request[u].ident.fields.channel == position){
+			if(!mouse_updated){
+				//update mouse coordinates
+				if(!GetCursorPos(&cursor_position)){
+					LOG("Failed to update mouse position");
+					continue;
+				}
+				wininput_mouse_normalize(&cursor_position.x, &cursor_position.y);
+				mouse_updated = 1;
+				if(cfg.mouse_x != cursor_position.x
+						|| cfg.mouse_y != cursor_position.y){
+					cfg.mouse_x = cursor_position.x;
+					cfg.mouse_y = cursor_position.y;
+					mouse_updated = 2;
+				}
+			}
+
+			val.normalised = (double) cfg.mouse_x / (double) 0xFFFF;
+			if(cfg.request[u].ident.fields.control){
+				val.normalised = (double) cfg.mouse_y / (double) 0xFFFF;
+			}
+
+			if(mouse_updated == 2){
+				push_event = 1;
+			}
+		}
+		else{
+			//check key state
+			key_state = GetAsyncKeyState(cfg.request[u].ident.fields.control);
+			if(key_state == 1){
+				//pressed and released?
+				synthesize_off = 1;
+			}
+			if((key_state & ~1) != cfg.request[u].state){
+				//key state changed
+				if(key_state){
+					val.normalised = 1.0;
+				}
+				cfg.request[u].state = key_state & ~1;
+				push_event = 1;
+			}
+		}
+
+		if(push_event){
+			//push current value to all channels
+			DBGPF("Pushing event %f on request %" PRIsize_t, val.normalised, u);
+			for(n = 0; n < cfg.request[u].channels; n++){
+				mm_channel_event(cfg.request[u].channel[n], val);
+			}
+
+			if(synthesize_off){
+				val.normalised = 0;
+				//push synthesized value to all channels
+				DBGPF("Synthesizing event %f on request %" PRIsize_t, val.normalised, u);
+				for(n = 0; n < cfg.request[u].channels; n++){
+					mm_channel_event(cfg.request[u].channel[n], val);
+				}
+			}
+		}
+	}
 	return 0;
 }
 
 static int wininput_start(size_t n, instance** inst){
-	//TODO
+	POINT cursor_position;
+
+	//if no input requested, don't request polling
+	if(!cfg.requests){
+		cfg.interval = 0;
+	}
+
+	//read virtual desktop extents for later normalization
+	cfg.virtual_width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+	cfg.virtual_height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+	cfg.virtual_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+	cfg.virtual_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+	DBGPF("Virtual screen is %dx%d with offset %dx%d", cfg.virtual_width, cfg.virtual_height, cfg.virtual_x, cfg.virtual_y);
+
+	//initialize mouse position
+	if(!GetCursorPos(&cursor_position)){
+		LOG("Failed to read initial mouse position");
+		return 1;
+	}
+
+	DBGPF("Current mouse coordinates: %dx%d (%04Xx%04X)", cursor_position.x, cursor_position.y, cursor_position.x, cursor_position.y);
+	wininput_mouse_normalize(&cursor_position.x, &cursor_position.y);
+	DBGPF("Current normalized mouse position: %04Xx%04X", cursor_position.x, cursor_position.y);
+	cfg.mouse_x = cursor_position.x;
+	cfg.mouse_y = cursor_position.y;
+
+	DBGPF("Tracking %" PRIsize_t " input requests", cfg.requests);
 	return 0;
 }
 
 static int wininput_shutdown(size_t n, instance** inst){
 	size_t u;
 
-	for(u = 0; u < n; u++){
-		free(inst[u]->impl);
+	for(u = 0; u < cfg.requests; u++){
+		free(cfg.request[u].channel);
 	}
+	free(cfg.request);
+	cfg.request = NULL;
+	cfg.requests = 0;
 
 	LOG("Backend shut down");
 	return 0;

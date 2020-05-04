@@ -5,6 +5,7 @@ static int wininput_configure(char* option, char* value);
 static int wininput_configure_instance(instance* inst, char* option, char* value);
 static int wininput_instance(instance* inst);
 static channel* wininput_channel(instance* inst, char* spec, uint8_t flags);
+static uint32_t wininput_interval();
 static int wininput_set(instance* inst, size_t num, channel** c, channel_value* v);
 static int wininput_handle(size_t num, managed_fd* fds);
 static int wininput_start(size_t n, instance** inst);
@@ -42,9 +43,9 @@ typedef union {
 	uint64_t label;
 } wininput_channel_ident;
 
-typedef struct {
-	struct {
-		uint16_t x;
-		uint16_t y;
-	} mouse;
-} wininput_instance_data;
+typedef struct /*_input_request*/ {
+	wininput_channel_ident ident;
+	size_t channels;
+	channel** channel;
+	uint16_t state;
+} wininput_request;

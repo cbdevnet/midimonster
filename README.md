@@ -18,7 +18,7 @@ Currently, the MIDIMonster supports the following protocols:
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)		|
 | RTP-MIDI			| Linux, Windows, OSX	| AppleMIDI sessions supported	| [`rtpmidi`](backends/rtpmidi.md)	|
 | OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
-| evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)		|
+| Input devices (Mouse, Keyboard, etc)| Linux, Windows	|				| [`evdev`](backends/evdev.md), [`wininput`](backends/wininput.md) |
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)		|
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
 | JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)		|
@@ -156,6 +156,7 @@ special information. These documentation files are located in the `backends/` di
 * [`lua` backend documentation](backends/lua.md)
 * [`python` backend documentation](backends/python.md)
 * [`maweb` backend documentation](backends/maweb.md)
+* [`wininput` backend documentation](backends/wininput.md)
 
 ## Installation
 

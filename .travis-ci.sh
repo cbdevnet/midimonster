@@ -73,7 +73,7 @@ elif [ "$TASK" = "windows" ]; then
 	fi
 	make -C backends lua.dll
 	travis_fold end "make_windows"
-	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
+	if [ "$(git describe)" == "$(git describe --abbrev=0)" ] || [ -n "$DEPLOY" ]; then
 		travis_fold start "deploy_windows"
 		mkdir ./deployment
 		mkdir ./deployment/backends
@@ -98,7 +98,7 @@ else
 		exit "$?"
 	fi
 	travis_fold end "make"
-	if [ "$(git describe)" == "$(git describe --abbrev=0)" ]; then
+	if [ "$(git describe)" == "$(git describe --abbrev=0)" ] || [ -n "$DEPLOY" ]; then
 		travis_fold start "deploy_unix"
 		mkdir ./deployment
 		mkdir ./deployment/backends

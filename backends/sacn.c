@@ -612,7 +612,7 @@ static int sacn_start(size_t n, instance** inst){
 		.label = 0
 	};
 	struct ip_mreq mcast_req = {
-		.imr_interface = { INADDR_ANY }
+		.imr_interface.s_addr = INADDR_ANY
 	};
 	struct sockaddr_in* dest_v4 = NULL;
 

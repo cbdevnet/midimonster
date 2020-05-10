@@ -4,8 +4,9 @@
 #include <string.h>
 #include "wininput.h"
 
+#include <mmsystem.h>
+
 //TODO check whether feedback elimination is required
-//TODO refactor & simplify
 
 static key_info keys[] = {
 	{VK_LBUTTON, "lmb", button}, {VK_RBUTTON, "rmb", button}, {VK_MBUTTON, "mmb", button},
@@ -117,16 +118,16 @@ static int wininput_instance(instance* inst){
 	return 0;
 }
 
-static int wininput_subscribe(wininput_channel_ident ident, channel* chan){
+static int wininput_subscribe(uint64_t ident, channel* chan){
 	size_t u, n;
 
 	//find an existing request
 	for(u = 0; u < cfg.requests; u++){
-		if(cfg.request[u].ident.label == ident.label){
+		if(cfg.request[u].ident.label == ident){
 			break;
 		}
 	}
-	
+
 	if(u == cfg.requests){
 		//create a new request
 		cfg.request = realloc(cfg.request, (cfg.requests + 1) * sizeof(wininput_request));
@@ -136,7 +137,7 @@ static int wininput_subscribe(wininput_channel_ident ident, channel* chan){
 			return 1;
 		}
 
-		cfg.request[u].ident.label = ident.label;
+		cfg.request[u].ident.label = ident;
 		cfg.request[u].channels = 0;
 		cfg.request[u].channel = NULL;
 		cfg.request[u].state = 0;
@@ -162,95 +163,96 @@ static int wininput_subscribe(wininput_channel_ident ident, channel* chan){
 	return 0;
 }
 
-static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
+static uint64_t wininput_channel_mouse(instance* inst, char* spec, uint8_t flags){
 	size_t u;
-	channel* chan = NULL;
-	uint16_t scancode = 0;
-	char* token = spec;
 	wininput_channel_ident ident = {
-		.label = 0
+		.fields.type = mouse
 	};
 
-	if(!strncmp(spec, "mouse.", 6)){
-		//TODO wheel
-		token += 6;
-		ident.fields.type = mouse;
-		if(!strcmp(token, "x")){
-			ident.fields.channel = position;
-		}
-		else if(!strcmp(token, "y")){
-			ident.fields.channel = position;
-			ident.fields.control = 1;
-		}
-		else{
-			//check the buttons
-			for(u = 0; u < sizeof(keys) / sizeof(keys[0]); u++){
-				if(keys[u].channel == button && !strcmp(keys[u].name, token)){
-					DBGPF("Using keymap %" PRIsize_t " (%d) for spec %s", u, keys[u].keycode, token);
-					ident.fields.channel = button;
-					ident.fields.control = keys[u].keycode;
-					break;
-				}
-			}
-
-			if(u == sizeof(keys) / sizeof(keys[0])){
-				LOGPF("Unknown mouse control %s", token);
-				return NULL;
-			}
-		}
+	if(!strcmp(spec, "x")){
+		ident.fields.channel = position;
 	}
-	else if(!strncmp(spec, "key.", 4)){
-		token += 4;
-		ident.fields.type = keyboard;
-		ident.fields.channel = keypress;
-	
+	else if(!strcmp(spec, "y")){
+		ident.fields.channel = position;
+		ident.fields.control = 1;
+	}
+	else{
+		//check the buttons
 		for(u = 0; u < sizeof(keys) / sizeof(keys[0]); u++){
-			if(keys[u].channel == keypress && !strcmp(keys[u].name, token)){
-				DBGPF("Using keymap %" PRIsize_t " (%d) for spec %s", u, keys[u].keycode, token);
+			if(keys[u].channel == button && !strcmp(keys[u].name, spec)){
+				DBGPF("Using keymap %" PRIsize_t " (%d) for spec %s", u, keys[u].keycode, spec);
+				ident.fields.channel = button;
 				ident.fields.control = keys[u].keycode;
 				break;
 			}
 		}
 
-		//no entry in translation table
 		if(u == sizeof(keys) / sizeof(keys[0])){
-			if(strlen(token) == 1){
-				//try to translate
-				scancode = VkKeyScan(token[0]);
-				if(scancode != 0x7f7f){
-					DBGPF("Using keyscan result %02X (via %04X) for spec %s", scancode & 0xFF, scancode, token);
-					ident.fields.type = keyboard;
-					ident.fields.channel = keypress;
-					ident.fields.control = scancode & 0xFF;
-				}
-				else{
-					LOGPF("Invalid channel specification %s", token);
-					return NULL;
-				}
-			}
-			else if(strlen(token) > 1){
-				//try to use as literal
-				scancode = strtoul(token, NULL, 0);
-				if(!scancode){
-					LOGPF("Invalid channel specification %s", token);
-					return NULL;
-				}
-				DBGPF("Using direct conversion %d for spec %s", scancode & 0xFF, token);
-				ident.fields.control = scancode & 0xFF;
-			}
-			else{
-				LOGPF("Invalid channel specification %s", spec);
-				return NULL;
-			}
+			LOGPF("Unknown mouse control %s", spec);
+			return 0;
 		}
 	}
-	else{
-		LOGPF("Unknown channel spec %s", spec);
+
+	return ident.label;
+}
+
+static uint64_t wininput_channel_key(instance* inst, char* spec, uint8_t flags){
+	size_t u;
+	uint16_t scancode = 0;
+	wininput_channel_ident ident = {
+		.fields.type = keyboard,
+		.fields.channel = keypress
+	};
+
+	for(u = 0; u < sizeof(keys) / sizeof(keys[0]); u++){
+		if(keys[u].channel == keypress && !strcmp(keys[u].name, spec)){
+			DBGPF("Using keymap %" PRIsize_t " (%d) for spec %s", u, keys[u].keycode, spec);
+			ident.fields.control = keys[u].keycode;
+			return ident.label;
+		}
 	}
 
-	if(ident.label){
-		chan = mm_channel(inst, ident.label, 1);
-		if(chan && (flags & mmchannel_input) && wininput_subscribe(ident, chan)){
+	//no entry in translation table
+	if(strlen(spec) == 1){
+		//try to translate
+		scancode = VkKeyScan(spec[0]);
+		if(scancode != 0x7f7f){
+			DBGPF("Using keyscan result %02X (via %04X) for spec %s", scancode & 0xFF, scancode, spec);
+			ident.fields.control = scancode & 0xFF;
+			return ident.label;
+		}
+	}
+	else if(strlen(spec) > 1){
+		//try to use as literal
+		scancode = strtoul(spec, NULL, 0);
+		if(scancode){
+			DBGPF("Using direct conversion %d for spec %s", scancode & 0xFF, spec);
+			ident.fields.control = scancode & 0xFF;
+			return ident.label;
+		}
+	}
+
+	LOGPF("Invalid channel specification %s", spec);
+	return 0;
+}
+
+static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
+	channel* chan = NULL;
+	uint64_t label = 0;
+
+	if(!strncmp(spec, "mouse.", 6)){
+		label = wininput_channel_mouse(inst, spec + 6, flags);
+	}
+	else if(!strncmp(spec, "key.", 4)){
+		label = wininput_channel_key(inst, spec + 4, flags);
+	}
+	else{
+		LOGPF("Unknown channel spec type %s", spec);
+	}
+
+	if(label){
+		chan = mm_channel(inst, label, 1);
+		if(chan && (flags & mmchannel_input) && wininput_subscribe(label, chan)){
 			return NULL;
 		}
 		return chan;
@@ -448,11 +450,22 @@ static int wininput_handle(size_t num, managed_fd* fds){
 }
 
 static int wininput_start(size_t n, instance** inst){
+	size_t u;
 	POINT cursor_position;
+	JOYINFOEX joy_info;
 
 	//if no input requested, don't request polling
 	if(!cfg.requests){
 		cfg.interval = 0;
+	}
+
+	DBGPF("This system supports a maximum of %u joysticks", joyGetNumDevs());
+	for(u = 0; u < joyGetNumDevs(); u++){
+		joy_info.dwSize = sizeof(joy_info);
+		joy_info.dwFlags = 0;
+		if(joyGetPosEx(u, &joy_info) == JOYERR_NOERROR){
+			LOGPF("Joystick %" PRIsize_t " is available for input", u);
+		}
 	}
 
 	//read virtual desktop extents for later normalization

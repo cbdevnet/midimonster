@@ -53,6 +53,8 @@ rtpmidi.dll: LDLIBS += -lws2_32 -liphlpapi
 winmidi.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 winmidi.dll: LDLIBS += -lwinmm -lws2_32
 
+wininput.dll: LDLIBS += -lwinmm
+
 jack.so: LDLIBS = -ljack -lpthread
 midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev || echo "-DBUILD_ERROR=\"Missing pkg-config data for libevdev\"")

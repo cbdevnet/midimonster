@@ -1,5 +1,5 @@
 #define BACKEND_NAME "wininput"
-#define DEBUG
+//#define DEBUG
 
 #include <string.h>
 #include "wininput.h"
@@ -232,7 +232,7 @@ static uint64_t wininput_channel_key(instance* inst, char* spec, uint8_t flags){
 		}
 	}
 
-	LOGPF("Invalid channel specification %s", spec);
+	LOGPF("Unknown keyboard control %s", spec);
 	return 0;
 }
 

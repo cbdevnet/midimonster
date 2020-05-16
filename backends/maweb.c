@@ -1,4 +1,5 @@
 #define BACKEND_NAME "maweb"
+//#define DEBUG
 
 #include <string.h>
 #include <unistd.h>
@@ -15,14 +16,9 @@
 #define WS_FLAG_FIN 0x80
 #define WS_FLAG_MASK 0x80
 
-/*
- * TODO handle peer close/unregister/reopen and fallback connections
- */
-
 static uint64_t last_keepalive = 0;
-static uint64_t update_interval = 50;
+static uint64_t update_interval = 0;
 static uint64_t last_update = 0;
-static uint64_t updates_inflight = 0;
 static uint64_t quiet_mode = 0;
 
 static maweb_command_key cmdline_keys[] = {
@@ -136,7 +132,10 @@ static int channel_comparator(const void* raw_a, const void* raw_b){
 }
 
 static uint32_t maweb_interval(){
-	return update_interval - (last_update % update_interval);
+	if(update_interval){
+		return update_interval - (last_update % update_interval);
+	}
+	return 0;
 }
 
 static int maweb_configure(char* option, char* value){
@@ -423,6 +422,7 @@ static int maweb_process_playback(instance* inst, int64_t page, maweb_channel_ty
 }
 
 static int maweb_process_playbacks(instance* inst, int64_t page, char* payload, size_t payload_length){
+	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
 	size_t base_offset = json_obj_offset(payload, "itemGroups"), group_offset, subgroup_offset, item_offset;
 	uint64_t group = 0, subgroup, item, metatype;
 
@@ -466,8 +466,9 @@ static int maweb_process_playbacks(instance* inst, int64_t page, char* payload, 
 		}
 		group++;
 	}
-	updates_inflight--;
-	DBGPF("Playback message processing done, %" PRIu64 " updates inflight", updates_inflight);
+
+	data->updates_inflight--;
+	DBGPF("Playback message processing done, %" PRIu64 " updates inflight on %s", data->updates_inflight, inst->name);
 	return 0;
 }
 
@@ -479,9 +480,9 @@ static int maweb_request_playbacks(instance* inst){
 	char item_indices[1024] = "[300,400,500]", item_counts[1024] = "[16,16,16]", item_types[1024] = "[3,3,3]";
 	size_t page_index = 0, view = 3, channel = 0, offsets[3], channel_offset, channels;
 
-	if(updates_inflight){
+	if(data->updates_inflight){
 		if(quiet_mode < 1){
-			LOGPF("Skipping update request, %" PRIu64 " updates still inflight - consider raising the interval time", updates_inflight);
+			LOGPF("Skipping update request on %s, %" PRIu64 " updates still inflight - consider raising the interval time", inst->name, data->updates_inflight);
 		}
 		return 0;
 	}
@@ -572,15 +573,16 @@ static int maweb_request_playbacks(instance* inst){
 				data->session);
 		maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
 		DBGPF("Poll request: %s", xmit_buffer);
-		updates_inflight++;
+		data->updates_inflight++;
 	}
 
-	DBGPF("Poll request handling done, %" PRIu64 " updates requested", updates_inflight);
+	DBGPF("Poll request handling done, %" PRIu64 " updates requested on %s", data->updates_inflight, inst->name);
 	return rv;
 }
 
 static int maweb_handle_message(instance* inst, char* payload, size_t payload_length){
 	char xmit_buffer[MAWEB_XMIT_CHUNK];
+	int64_t session = 0;
 	char* field;
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
 
@@ -591,6 +593,11 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 			if(json_obj_bool(payload, "result", 0)){
 				LOG("Login successful");
 				data->login = 1;
+				
+				//initially request playbacks
+				if(!update_interval){
+					maweb_request_playbacks(inst);
+				}
 			}
 			else{
 				LOG("Login failed");
@@ -601,21 +608,28 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 			if(maweb_process_playbacks(inst, json_obj_int(payload, "iPage", 0), payload, payload_length)){
 				LOG("Failed to handle/request input data");
 			}
+
+			//request playbacks again if configured
+			if(!update_interval && data->login && !data->updates_inflight){
+				maweb_request_playbacks(inst);
+			}
 			return 0;
 		}
 	}
 
 	DBGPF("Incoming message (%" PRIsize_t "): %s", payload_length, payload);
 	if(json_obj(payload, "session") == JSON_NUMBER){
-		data->session = json_obj_int(payload, "session", data->session);
-		if(data->session < 0){
+		session = json_obj_int(payload, "session", data->session);
+		if(session < 0){
 				LOG("Login failed");
+				data->session = -1;
 				data->login = 0;
 				return 0;
 		}
-		if(quiet_mode < 2){
-			LOGPF("Session id is now %" PRId64, data->session);
+		if(data->session != session){
+			LOGPF("Session ID changed from %" PRId64 " to %" PRId64 "", data->session, session);
 		}
+		data->session = session;
 	}
 
 	if(json_obj_bool(payload, "forceLogin", 0)){
@@ -1047,7 +1061,7 @@ static int maweb_handle(size_t num, managed_fd* fds){
 		last_keepalive = mm_timestamp();
 	}
 
-	if(last_update && mm_timestamp() - last_update >= update_interval){
+	if(update_interval && last_update && mm_timestamp() - last_update >= update_interval){
 		rv |= maweb_poll();
 		last_update = mm_timestamp();
 	}

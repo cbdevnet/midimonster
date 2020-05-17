@@ -1,5 +1,5 @@
 #define BACKEND_NAME "wininput"
-//#define DEBUG
+#define DEBUG
 
 #include <string.h>
 #include "wininput.h"
@@ -262,9 +262,8 @@ static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
 
 //for some reason, sendinput only takes "normalized absolute coordinates", which are never again used in the API
 static void wininput_mouse_normalize(long* x, long* y){
-	//TODO this needs to take a possible origin offset into account
-	long normalized_x = (double) (*x) * (65535.0f / (double) cfg.virtual_width);
-	long normalized_y = (double) (*y) * (65535.0f / (double) cfg.virtual_height);
+	long normalized_x = (double) (*x + cfg.virtual_x) * (65535.0f / (double) cfg.virtual_width);
+	long normalized_y = (double) (*y + cfg.virtual_y) * (65535.0f / (double) cfg.virtual_height);
 
 	*x = normalized_x;
 	*y = normalized_y;

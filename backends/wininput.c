@@ -59,7 +59,7 @@ static key_info keys[] = {
 
 static struct {
 	int virtual_x, virtual_y, virtual_width, virtual_height;
-	uint16_t mouse_x, mouse_y;
+	long mouse_x, mouse_y;
 	size_t requests;
 	wininput_request* request;
 	uint32_t interval;
@@ -236,6 +236,48 @@ static uint64_t wininput_channel_key(instance* inst, char* spec, uint8_t flags){
 	return 0;
 }
 
+static uint64_t wininput_channel_joystick(instance* inst, char* spec, uint8_t flags){
+	char* token = NULL, *axes = "xyzruvp";
+	uint16_t controller = strtoul(spec, &token, 0);
+	wininput_channel_ident ident = {
+		.fields.type = joystick
+	};
+
+	if(flags & mmchannel_output){
+		LOG("Joystick channels can only be mapped as inputs on Windows");
+		return 0;
+	}
+
+	if(!controller || !token || *token != '.'){
+		LOGPF("Invalid joystick specification %s", spec);
+		return 0;
+	}
+
+	if(strlen(token) == 1 || !strcmp(token, "pov")){
+		if(strchr(axes, token[0])){
+			ident.fields.channel = position;
+			ident.fields.control = (controller << 8) | token[0];
+			return ident.label;
+		}
+
+		LOGPF("Unknown joystick axis specification %s", token);
+		return 0;
+	}
+
+	if(!strncmp(token, "button", 6)){
+		ident.fields.control = strtoul(token + 6, NULL, 10);
+		if(!ident.fields.control || ident.fields.control > 32){
+			LOGPF("Button index out of range for specification %s", token);
+			return 0;
+		}
+		ident.fields.control |= (controller << 8);
+		return ident.label;
+	}
+
+	printf("Invalid joystick control %s", spec);
+	return 0;
+}
+
 static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
 	channel* chan = NULL;
 	uint64_t label = 0;
@@ -245,6 +287,9 @@ static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
 	}
 	else if(!strncmp(spec, "key.", 4)){
 		label = wininput_channel_key(inst, spec + 4, flags);
+	}
+	else if(!strncmp(spec, "joy", 3)){
+		label = wininput_channel_joystick(inst, spec + 3, flags);
 	}
 	else{
 		LOGPF("Unknown channel spec type %s", spec);
@@ -262,8 +307,8 @@ static channel* wininput_channel(instance* inst, char* spec, uint8_t flags){
 
 //for some reason, sendinput only takes "normalized absolute coordinates", which are never again used in the API
 static void wininput_mouse_normalize(long* x, long* y){
-	long normalized_x = (double) (*x + cfg.virtual_x) * (65535.0f / (double) cfg.virtual_width);
-	long normalized_y = (double) (*y + cfg.virtual_y) * (65535.0f / (double) cfg.virtual_height);
+	long normalized_x = (double) (*x - cfg.virtual_x) * (65535.0f / (double) cfg.virtual_width);
+	long normalized_y = (double) (*y - cfg.virtual_y) * (65535.0f / (double) cfg.virtual_height);
 
 	*x = normalized_x;
 	*y = normalized_y;
@@ -411,7 +456,8 @@ static int wininput_handle(size_t num, managed_fd* fds){
 				push_event = 1;
 			}
 		}
-		else{
+		else if(cfg.request[u].ident.fields.type == keyboard
+				|| cfg.request[u].ident.fields.type == mouse){
 			//check key state
 			key_state = GetAsyncKeyState(cfg.request[u].ident.fields.control);
 			if(key_state == 1){
@@ -463,7 +509,7 @@ static int wininput_start(size_t n, instance** inst){
 		joy_info.dwSize = sizeof(joy_info);
 		joy_info.dwFlags = 0;
 		if(joyGetPosEx(u, &joy_info) == JOYERR_NOERROR){
-			LOGPF("Joystick %" PRIsize_t " is available for input", u);
+			LOGPF("Joystick %" PRIsize_t " is available for input", u + 1);
 		}
 	}
 

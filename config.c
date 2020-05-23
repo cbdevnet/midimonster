@@ -76,7 +76,7 @@ static ssize_t getline(char** line, size_t* alloc, FILE* stream){
 		}
 
 		//input broken
-		if(ferror(stream) || c < 0){
+		if(ferror(stream)){
 			return -1;
 		}
 

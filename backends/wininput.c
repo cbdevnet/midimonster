@@ -61,6 +61,7 @@ static struct {
 	int virtual_x, virtual_y, virtual_width, virtual_height;
 	long mouse_x, mouse_y;
 	size_t requests;
+	//sorted in _start
 	wininput_request* request;
 	uint32_t interval;
 } cfg = {
@@ -92,6 +93,24 @@ MM_PLUGIN_API int init(){
 		LOG("Failed to register backend");
 		return 1;
 	}
+	return 0;
+}
+
+static int request_comparator(const void * raw_a, const void * raw_b){
+	wininput_request* a = (wininput_request*) raw_a, *b = (wininput_request*) raw_b;
+
+	//sort by type first
+	if(a->ident.fields.type != b->ident.fields.type){
+		return a->ident.fields.type - b->ident.fields.type;
+	}
+
+	//joysticks need to be sorted by controller id first so we can query them once
+	if(a->ident.fields.type == joystick){
+		//joystick id is in the upper bits of control and we dont actually care about anything else
+		return a->ident.fields.control - b->ident.fields.control;
+	}
+
+	//the rest doesnt actually need to be sorted at all
 	return 0;
 }
 
@@ -252,6 +271,7 @@ static uint64_t wininput_channel_joystick(instance* inst, char* spec, uint8_t fl
 		LOGPF("Invalid joystick specification %s", spec);
 		return 0;
 	}
+	token++;
 
 	if(strlen(token) == 1 || !strcmp(token, "pov")){
 		if(strchr(axes, token[0])){
@@ -270,11 +290,12 @@ static uint64_t wininput_channel_joystick(instance* inst, char* spec, uint8_t fl
 			LOGPF("Button index out of range for specification %s", token);
 			return 0;
 		}
+		ident.fields.channel = button;
 		ident.fields.control |= (controller << 8);
 		return ident.label;
 	}
 
-	printf("Invalid joystick control %s", spec);
+	LOGPF("Invalid joystick control %s", spec);
 	return 0;
 }
 
@@ -419,10 +440,11 @@ static int wininput_handle(size_t num, managed_fd* fds){
 	channel_value val = {
 		.normalised = 0
 	};
-	uint8_t mouse_updated = 0, synthesize_off = 0, push_event = 0;
+	uint8_t mouse_updated = 0, synthesize_off = 0, push_event = 0, current_joystick = 0;
 	uint16_t key_state = 0;
-	POINT cursor_position;
 	size_t u = 0, n;
+	POINT cursor_position;
+	JOYINFOEX joy_info;
 
 	for(u = 0; u < cfg.requests; u++){
 		synthesize_off = 0;
@@ -473,6 +495,32 @@ static int wininput_handle(size_t num, managed_fd* fds){
 				push_event = 1;
 			}
 		}
+		else if(cfg.request[u].ident.fields.type == joystick){
+			if(cfg.request[u].ident.fields.control >> 8 != current_joystick){
+				joy_info.dwSize = sizeof(joy_info);
+				joy_info.dwFlags = JOY_RETURNALL;
+				if(joyGetPosEx((cfg.request[u].ident.fields.control >> 8) - 1, &joy_info) != JOYERR_NOERROR){
+					LOGPF("Failed to query joystick %d", cfg.request[u].ident.fields.control >> 8);
+					//early exit because other joystick probably won't be connected either (though this may be wrong)
+					//else we would need to think of a way to mark the data invalid for subsequent requests on the same joystick
+					return 0;
+				}
+				current_joystick = cfg.request[u].ident.fields.control >> 8;
+			}
+
+			if(cfg.request[u].ident.fields.channel == button){
+				//button query
+				if(joy_info.dwFlags & JOY_RETURNBUTTONS){
+					//TODO handle button requests
+				}
+				else{
+					LOGPF("No button data received for joystick %d", cfg.request[u].ident.fields.control >> 8);
+				}
+			}
+			else{
+				//TODO handle axis requests
+			}
+		}
 
 		if(push_event){
 			//push current value to all channels
@@ -498,6 +546,7 @@ static int wininput_start(size_t n, instance** inst){
 	size_t u;
 	POINT cursor_position;
 	JOYINFOEX joy_info;
+	JOYCAPS joy_caps;
 
 	//if no input requested, don't request polling
 	if(!cfg.requests){
@@ -509,7 +558,12 @@ static int wininput_start(size_t n, instance** inst){
 		joy_info.dwSize = sizeof(joy_info);
 		joy_info.dwFlags = 0;
 		if(joyGetPosEx(u, &joy_info) == JOYERR_NOERROR){
-			LOGPF("Joystick %" PRIsize_t " is available for input", u + 1);
+			if(joyGetDevCaps(u, &joy_caps, sizeof(joy_caps)) == JOYERR_NOERROR){
+				LOGPF("Joystick %" PRIsize_t " (%s) is available for input", u + 1, joy_caps.szPname ? joy_caps.szPname : "unknown model");
+			}
+			else{
+				LOGPF("Joystick %" PRIsize_t " available for input, but no capabilities reported", u + 1);
+			}
 		}
 	}
 
@@ -519,6 +573,9 @@ static int wininput_start(size_t n, instance** inst){
 	cfg.virtual_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
 	cfg.virtual_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
 	DBGPF("Virtual screen is %dx%d with offset %dx%d", cfg.virtual_width, cfg.virtual_height, cfg.virtual_x, cfg.virtual_y);
+
+	//sort requests to allow querying each joystick only once
+	qsort(cfg.request, cfg.requests, sizeof(wininput_request), request_comparator);
 
 	//initialize mouse position
 	if(!GetCursorPos(&cursor_position)){

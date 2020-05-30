@@ -593,15 +593,24 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 			if(json_obj_bool(payload, "result", 0)){
 				LOG("Login successful");
 				data->login = 1;
-				
+
 				//initially request playbacks
 				if(!update_interval){
 					maweb_request_playbacks(inst);
 				}
 			}
 			else{
-				LOG("Login failed");
 				data->login = 0;
+
+				if(data->hosts > 1){
+					LOGPF("Console login failed on %s, will try again with the next host", inst->name);
+					//mark as closed to reconnect
+					data->state = ws_closed;
+				}
+				else{
+					LOGPF("Console login failed on %s", inst->name);
+				}
+				return 0;
 			}
 		}
 		if(!strncmp(field, "playbacks", 9)){
@@ -621,10 +630,13 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 	if(json_obj(payload, "session") == JSON_NUMBER){
 		session = json_obj_int(payload, "session", data->session);
 		if(session < 0){
-				LOG("Login failed");
-				data->session = -1;
-				data->login = 0;
-				return 0;
+			LOG("Invalid session ID received, closing connection");
+			data->session = -1;
+			data->login = 0;
+
+			//this should be enough to mark the socket for the next keepalive/establish run
+			data->state = ws_closed;
+			return 0;
 		}
 		if(data->session != session){
 			LOGPF("Session ID changed from %" PRId64 " to %" PRId64 "", data->session, session);

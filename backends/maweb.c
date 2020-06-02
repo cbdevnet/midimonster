@@ -630,7 +630,7 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 	if(json_obj(payload, "session") == JSON_NUMBER){
 		session = json_obj_int(payload, "session", data->session);
 		if(session < 0){
-			LOG("Invalid session ID received, closing connection");
+			LOG("Invalid web remote session identifier received, closing connection");
 			data->session = -1;
 			data->login = 0;
 
@@ -639,7 +639,7 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 			return 0;
 		}
 		if(data->session != session){
-			LOGPF("Session ID changed from %" PRId64 " to %" PRId64 "", data->session, session);
+			LOGPF("Web remote session ID changed from %" PRId64 " to %" PRId64 "", data->session, session);
 		}
 		data->session = session;
 	}

@@ -16,6 +16,8 @@
 #define WS_FLAG_FIN 0x80
 #define WS_FLAG_MASK 0x80
 
+static void maweb_disconnect(instance* inst);
+
 static uint64_t last_keepalive = 0;
 static uint64_t update_interval = 0;
 static uint64_t last_update = 0;
@@ -351,8 +353,7 @@ static int maweb_send_frame(instance* inst, maweb_operation op, uint8_t* payload
 	if(mmbackend_send(data->fd, frame_header, header_bytes)
 			|| mmbackend_send(data->fd, payload, len)){
 		LOGPF("Failed to send on instance %s, assuming connection failure", inst->name);
-		data->state = ws_closed;
-		data->login = 0;
+		maweb_disconnect(inst);
 		return 1;
 	}
 
@@ -604,8 +605,7 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 
 				if(data->hosts > 1){
 					LOGPF("Console login failed on %s, will try again with the next host", inst->name);
-					//mark as closed to reconnect
-					data->state = ws_closed;
+					maweb_disconnect(inst);
 				}
 				else{
 					LOGPF("Console login failed on %s", inst->name);
@@ -631,11 +631,7 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 		session = json_obj_int(payload, "session", data->session);
 		if(session < 0){
 			LOG("Invalid web remote session identifier received, closing connection");
-			data->session = -1;
-			data->login = 0;
-
-			//this should be enough to mark the socket for the next keepalive/establish run
-			data->state = ws_closed;
+			maweb_disconnect(inst);
 			return 0;
 		}
 		if(data->session != session){
@@ -668,6 +664,30 @@ static int maweb_handle_message(instance* inst, char* payload, size_t payload_le
 	return 0;
 }
 
+static void maweb_disconnect(instance* inst){
+	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
+	char xmit_buffer[MAWEB_XMIT_CHUNK];
+
+	if(data->fd){
+	//close the session if one is active
+		if(data->session > 0){
+			snprintf(xmit_buffer, sizeof(xmit_buffer), "{\"requestType\":\"close\",\"session\":%" PRIu64 "}", data->session);
+			maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));
+		}
+
+		mm_manage_fd(data->fd, BACKEND_NAME, 0, NULL);
+		close(data->fd);
+	}
+
+	data->fd = -1;
+	data->state = ws_closed;
+	data->login = 0;
+	data->session = -1;
+	data->peer_type = peer_unidentified;
+	data->offset = 0;
+	data->updates_inflight = 0;
+}
+
 static int maweb_connect(instance* inst){
 	int rv = 1;
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
@@ -676,14 +696,8 @@ static int maweb_connect(instance* inst){
 		goto bail;
 	}
 
-	//unregister old fd from core
-	if(data->fd >= 0){
-		mm_manage_fd(data->fd, BACKEND_NAME, 0, NULL);
-		close(data->fd);
-		data->fd = -1;
-	}
-	data->state = ws_closed;
-	data->login = 0;
+	//close old connection and reset state
+	maweb_disconnect(inst);
 
 	LOGPF("Connecting to host %" PRIsize_t " of %" PRIsize_t " on %s", data->next_host + 1, data->hosts, inst->name);
 
@@ -1140,14 +1154,10 @@ static int maweb_shutdown(size_t n, instance** inst){
 		free(data->pass);
 		data->pass = NULL;
 
-		close(data->fd);
-		data->fd = -1;
-
+		maweb_disconnect(inst[u]);
 		free(data->buffer);
 		data->buffer = NULL;
-
-		data->offset = data->allocated = 0;
-		data->state = ws_closed;
+		data->allocated = 0;
 
 		free(data->channel);
 		data->channel = NULL;

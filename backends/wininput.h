@@ -47,5 +47,8 @@ typedef struct /*_input_request*/ {
 	wininput_channel_ident ident;
 	size_t channels;
 	channel** channel;
-	uint16_t state;
+	uint32_t state;
+
+	//used for jostick axes
+	uint32_t min, max;
 } wininput_request;

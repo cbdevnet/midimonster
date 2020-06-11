@@ -79,8 +79,11 @@ input.X > wi1.key.escape
 
 #### Known bugs / problems
 
+Joysticks can only be used as input to the MIDIMonster, as Windows does not provide a method to emulate
+Joystick input from user space. This is unlikely to change.
+
 Keyboard and mouse input is subject to UIPI. You can not send input to applications that run at a higher
-privilege level than the MIDIMonster.
+privilege level than the MIDIMonster. This limitation is by design and will not change.
 
 Due to inconsistencies in the Windows API, mouse position input and output may differ for the same cursor location.
 This may be correlated with the use and arrangement of multi-monitor desktops. If you encounter problems with either

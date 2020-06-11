@@ -1,5 +1,5 @@
 #define BACKEND_NAME "wininput"
-#define DEBUG
+//#define DEBUG
 
 #include <string.h>
 #include "wininput.h"
@@ -7,6 +7,7 @@
 #include <mmsystem.h>
 
 //TODO check whether feedback elimination is required
+//TODO might want to store virtual desktop extents in request->limit
 
 static key_info keys[] = {
 	{VK_LBUTTON, "lmb", button}, {VK_RBUTTON, "rmb", button}, {VK_MBUTTON, "mmb", button},
@@ -56,6 +57,17 @@ static key_info keys[] = {
 	{VK_OEM_MINUS, "minus"}, {VK_OEM_PERIOD, "period"},
 	{VK_ZOOM, "zoom"}
 };
+
+//this monstrosity is necessary because not only are the buttons not a simple bitmask, the bits are also partially reused.
+//i get why they replaced this heap of trash API, but the replacement would require me to jump through even more hoops.
+static uint32_t button_masks[32] = {JOY_BUTTON1, JOY_BUTTON2, JOY_BUTTON3, JOY_BUTTON4,
+	JOY_BUTTON5, JOY_BUTTON6, JOY_BUTTON7, JOY_BUTTON8,
+	JOY_BUTTON9, JOY_BUTTON10, JOY_BUTTON11, JOY_BUTTON12,
+	JOY_BUTTON13, JOY_BUTTON14, JOY_BUTTON15, JOY_BUTTON16,
+	JOY_BUTTON17, JOY_BUTTON18, JOY_BUTTON19, JOY_BUTTON20,
+	JOY_BUTTON21, JOY_BUTTON22, JOY_BUTTON23, JOY_BUTTON24,
+	JOY_BUTTON25, JOY_BUTTON26, JOY_BUTTON27, JOY_BUTTON28,
+	JOY_BUTTON29, JOY_BUTTON30, JOY_BUTTON31, JOY_BUTTON32};
 
 static struct {
 	int virtual_x, virtual_y, virtual_width, virtual_height;
@@ -159,7 +171,7 @@ static int wininput_subscribe(uint64_t ident, channel* chan){
 		cfg.request[u].ident.label = ident;
 		cfg.request[u].channels = 0;
 		cfg.request[u].channel = NULL;
-		cfg.request[u].state = 0;
+		cfg.request[u].state = cfg.request[u].min = cfg.request[u].max = 0;
 		cfg.requests++;
 	}
 
@@ -276,7 +288,7 @@ static uint64_t wininput_channel_joystick(instance* inst, char* spec, uint8_t fl
 	if(strlen(token) == 1 || !strcmp(token, "pov")){
 		if(strchr(axes, token[0])){
 			ident.fields.channel = position;
-			ident.fields.control = (controller << 8) | token[0];
+			ident.fields.control = ((controller - 1) << 8) | token[0];
 			return ident.label;
 		}
 
@@ -511,13 +523,25 @@ static int wininput_handle(size_t num, managed_fd* fds){
 			if(cfg.request[u].ident.fields.channel == button){
 				//button query
 				if(joy_info.dwFlags & JOY_RETURNBUTTONS){
-					//TODO handle button requests
+					key_state = (joy_info.dwButtons & button_masks[(cfg.request[u].ident.fields.control & 0xFF)]) > 0 ? 1 : 0;
+					if(key_state != cfg.request[u].state){
+						if(key_state){
+							val.normalised = 1.0;
+						}
+						cfg.request[u].state = key_state;
+						push_event = 1;
+						DBGPF("Joystick %d button %d: %d",
+								cfg.request[u].ident.fields.control >> 8,
+								cfg.request[u].ident.fields.control & 0xFF,
+								key_state);
+					}
 				}
 				else{
 					LOGPF("No button data received for joystick %d", cfg.request[u].ident.fields.control >> 8);
 				}
 			}
 			else{
+
 				//TODO handle axis requests
 			}
 		}
@@ -542,16 +566,10 @@ static int wininput_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static int wininput_start(size_t n, instance** inst){
-	size_t u;
-	POINT cursor_position;
+static void wininput_start_joystick(){
+	size_t u, p;
 	JOYINFOEX joy_info;
 	JOYCAPS joy_caps;
-
-	//if no input requested, don't request polling
-	if(!cfg.requests){
-		cfg.interval = 0;
-	}
 
 	DBGPF("This system supports a maximum of %u joysticks", joyGetNumDevs());
 	for(u = 0; u < joyGetNumDevs(); u++){
@@ -560,12 +578,57 @@ static int wininput_start(size_t n, instance** inst){
 		if(joyGetPosEx(u, &joy_info) == JOYERR_NOERROR){
 			if(joyGetDevCaps(u, &joy_caps, sizeof(joy_caps)) == JOYERR_NOERROR){
 				LOGPF("Joystick %" PRIsize_t " (%s) is available for input", u + 1, joy_caps.szPname ? joy_caps.szPname : "unknown model");
+				for(p = 0; p < cfg.requests; p++){
+					if(cfg.request[p].ident.fields.type == joystick
+							&& cfg.request[p].ident.fields.channel == position
+							&& (cfg.request[p].ident.fields.control >> 8) == u){
+						//this looks really dumb, but the structure is defined in a way that prevents us from doing anything clever here
+						switch(cfg.request[p].ident.fields.control & 0xFF){
+							case 'x':
+								cfg.request[p].min = joy_caps.wXmin;
+								cfg.request[p].max = joy_caps.wXmax;
+								break;
+							case 'y':
+								cfg.request[p].min = joy_caps.wYmin;
+								cfg.request[p].max = joy_caps.wYmax;
+								break;
+							case 'z':
+								cfg.request[p].min = joy_caps.wZmin;
+								cfg.request[p].max = joy_caps.wZmax;
+								break;
+							case 'r':
+								cfg.request[p].min = joy_caps.wRmin;
+								cfg.request[p].max = joy_caps.wRmax;
+								break;
+							case 'u':
+								cfg.request[p].min = joy_caps.wUmin;
+								cfg.request[p].max = joy_caps.wUmax;
+								break;
+							case 'v':
+								cfg.request[p].min = joy_caps.wVmin;
+								cfg.request[p].max = joy_caps.wVmax;
+								break;
+						}
+						DBGPF("Updated limits on request %" PRIsize_t " to %" PRIu32 " / %" PRIu32, p, cfg.request[p].min, cfg.request[p].max);
+					}
+				}
 			}
 			else{
 				LOGPF("Joystick %" PRIsize_t " available for input, but no capabilities reported", u + 1);
 			}
 		}
 	}
+}
+
+static int wininput_start(size_t n, instance** inst){
+	POINT cursor_position;
+
+	//if no input requested, don't request polling
+	if(!cfg.requests){
+		cfg.interval = 0;
+	}
+
+	wininput_start_joystick();
 
 	//read virtual desktop extents for later normalization
 	cfg.virtual_width = GetSystemMetrics(SM_CXVIRTUALSCREEN);

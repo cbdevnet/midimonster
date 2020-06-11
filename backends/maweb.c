@@ -669,7 +669,7 @@ static void maweb_disconnect(instance* inst){
 	char xmit_buffer[MAWEB_XMIT_CHUNK];
 
 	if(data->fd){
-	//close the session if one is active
+		//close the session if one is active
 		if(data->session > 0){
 			snprintf(xmit_buffer, sizeof(xmit_buffer), "{\"requestType\":\"close\",\"session\":%" PRIu64 "}", data->session);
 			maweb_send_frame(inst, ws_text, (uint8_t*) xmit_buffer, strlen(xmit_buffer));

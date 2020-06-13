@@ -77,6 +77,33 @@ input.a > wi1.key.a
 input.X > wi1.key.escape
 ```
 
+Joystick and gamepad controllers with up to 32 buttons and 6 axes plus POV hat can be mapped as inputs to the
+MIDIMonster. When starting up, the MIDIMonster will output a list of all connected and usable game controllers.
+
+Controllers can be mapped using the syntax
+
+* `joy<n>.<axisname>` for axes, where `<n>` is the ID of the controller and `<axisname>` is one of
+	* `x`, `y`: Main joystick / analog controller axes
+	* `z`: Third axis / joystick rotation
+	* `r`: Fourth axis / Rudder controller / Slider
+	* `u`, `v`: non-specific fifth/sixth axis
+* `joy<n>.button<b>` for buttons, with `<n>` again being the controller ID and `b` being the button number between
+	1 and 32 (the maximum supported by Windows)
+
+Use the Windows game controller input calibration and configuration tool to identify the axes and button IDs
+relevant to your controller.
+
+For button channels, the channel value will either be `0` or `1.0`, for axis channels it will be the normalized
+value of the axis (with calibration offsets applied), with the exception of the POV axis, where the channel value
+will be in some way correlated with the direction of view.
+
+Example mappings:
+```
+input.joy1.x > movinghead.pan
+input.joy1.y > movinghead.tilt
+input.joy1.button1 > movinghead.dim
+```
+
 #### Known bugs / problems
 
 Joysticks can only be used as input to the MIDIMonster, as Windows does not provide a method to emulate

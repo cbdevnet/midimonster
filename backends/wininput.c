@@ -510,7 +510,7 @@ static int wininput_handle(size_t num, managed_fd* fds){
 		else if(cfg.request[u].ident.fields.type == joystick){
 			if(cfg.request[u].ident.fields.control >> 8 != current_joystick){
 				joy_info.dwSize = sizeof(joy_info);
-				joy_info.dwFlags = JOY_RETURNALL;
+				joy_info.dwFlags = JOY_RETURNALL | JOY_RETURNPOVCTS;
 				if(joyGetPosEx((cfg.request[u].ident.fields.control >> 8) - 1, &joy_info) != JOYERR_NOERROR){
 					LOGPF("Failed to query joystick %d", cfg.request[u].ident.fields.control >> 8);
 					//early exit because other joystick probably won't be connected either (though this may be wrong)
@@ -523,7 +523,7 @@ static int wininput_handle(size_t num, managed_fd* fds){
 			if(cfg.request[u].ident.fields.channel == button){
 				//button query
 				if(joy_info.dwFlags & JOY_RETURNBUTTONS){
-					key_state = (joy_info.dwButtons & button_masks[(cfg.request[u].ident.fields.control & 0xFF)]) > 0 ? 1 : 0;
+					key_state = (joy_info.dwButtons & button_masks[(cfg.request[u].ident.fields.control & 0xFF) - 1]) > 0 ? 1 : 0;
 					if(key_state != cfg.request[u].state){
 						if(key_state){
 							val.normalised = 1.0;
@@ -541,12 +541,61 @@ static int wininput_handle(size_t num, managed_fd* fds){
 				}
 			}
 			else{
+				if(!cfg.request[u].max){
+					cfg.request[u].max = 0xFFFF;
+				}
+				val.raw.u64 = cfg.request[u].state;
 
-				//TODO handle axis requests
+				//axis requests, every single access to these structures is stupid.
+				switch(cfg.request[u].ident.fields.control & 0xFF){
+					case 'x':
+						if(joy_info.dwFlags & JOY_RETURNX){
+							val.raw.u64 = joy_info.dwXpos;
+						}
+						break;
+					case 'y':
+						if(joy_info.dwFlags & JOY_RETURNY){
+							val.raw.u64 = joy_info.dwYpos;
+						}
+						break;
+					case 'z':
+						if(joy_info.dwFlags & JOY_RETURNZ){
+							val.raw.u64 = joy_info.dwZpos;
+						}
+						break;
+					case 'r':
+						if(joy_info.dwFlags & JOY_RETURNR){
+							val.raw.u64 = joy_info.dwRpos;
+						}
+						break;
+					case 'u':
+						if(joy_info.dwFlags & JOY_RETURNU){
+							val.raw.u64 = joy_info.dwUpos;
+						}
+						break;
+					case 'v':
+						if(joy_info.dwFlags & JOY_RETURNV){
+							val.raw.u64 = joy_info.dwVpos;
+						}
+						break;
+					case 'p':
+						if(joy_info.dwFlags & (JOY_RETURNPOV | JOY_RETURNPOVCTS)){
+							val.raw.u64 = joy_info.dwPOV;
+						}
+						break;
+				}
+
+				if(val.raw.u64 != cfg.request[u].state){
+					val.normalised = (double) (val.raw.u64 - cfg.request[u].min) / (double) (cfg.request[u].max - cfg.request[u].min);
+					cfg.request[u].state = val.raw.u64;
+					push_event = 1;
+				}
 			}
 		}
 
 		if(push_event){
+			//clamp value just to be safe
+			val.normalised = clamp(val.normalised, 1.0, 0.0);
 			//push current value to all channels
 			DBGPF("Pushing event %f on request %" PRIsize_t, val.normalised, u);
 			for(n = 0; n < cfg.request[u].channels; n++){
@@ -609,7 +658,7 @@ static void wininput_start_joystick(){
 								cfg.request[p].max = joy_caps.wVmax;
 								break;
 						}
-						DBGPF("Updated limits on request %" PRIsize_t " to %" PRIu32 " / %" PRIu32, p, cfg.request[p].min, cfg.request[p].max);
+						DBGPF("Updated limits on request %" PRIsize_t " (%c) to %" PRIu32 " / %" PRIu32, p, cfg.request[p].ident.fields.control & 0xFF, cfg.request[p].min, cfg.request[p].max);
 					}
 				}
 			}

@@ -3,6 +3,7 @@ LINUX_BACKENDS = midi.so evdev.so
 WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll rtpmidi.dll wininput.dll
 BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.so
 OPTIONAL_BACKENDS = ola.so
+MANUAL_BACKENDS = lua.dll
 BACKEND_LIB = libmmbackend.o
 
 SYSTEM := $(shell uname -s)
@@ -97,4 +98,4 @@ windows: ../libmmapi.a $(BACKEND_LIB) $(WINDOWS_BACKENDS)
 full: $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS)
 
 clean:
-	$(RM) $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS) $(WINDOWS_BACKENDS)
+	$(RM) $(BACKEND_LIB) $(BACKENDS) $(OPTIONAL_BACKENDS) $(WINDOWS_BACKENDS) $(MANUAL_BACKENDS)

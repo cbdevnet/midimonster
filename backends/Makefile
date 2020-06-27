@@ -1,7 +1,7 @@
 .PHONY: all clean full
 LINUX_BACKENDS = midi.so evdev.so
-WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll rtpmidi.dll wininput.dll
-BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.so
+WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll rtpmidi.dll wininput.dll atem.dll
+BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.so atem.so
 OPTIONAL_BACKENDS = ola.so
 MANUAL_BACKENDS = lua.dll
 BACKEND_LIB = libmmbackend.o
@@ -40,6 +40,10 @@ sacn.dll: LDLIBS += -lws2_32
 openpixelcontrol.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
 openpixelcontrol.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 openpixelcontrol.dll: LDLIBS += -lws2_32
+
+atem.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+atem.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
+atem.dll: LDLIBS += -lws2_32
 
 maweb.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
 maweb.so: LDLIBS = -lssl

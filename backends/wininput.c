@@ -58,17 +58,6 @@ static key_info keys[] = {
 	{VK_ZOOM, "zoom"}
 };
 
-//this monstrosity is necessary because not only are the buttons not a simple bitmask, the bits are also partially reused.
-//i get why they replaced this heap of trash API, but the replacement would require me to jump through even more hoops.
-static uint32_t button_masks[32] = {JOY_BUTTON1, JOY_BUTTON2, JOY_BUTTON3, JOY_BUTTON4,
-	JOY_BUTTON5, JOY_BUTTON6, JOY_BUTTON7, JOY_BUTTON8,
-	JOY_BUTTON9, JOY_BUTTON10, JOY_BUTTON11, JOY_BUTTON12,
-	JOY_BUTTON13, JOY_BUTTON14, JOY_BUTTON15, JOY_BUTTON16,
-	JOY_BUTTON17, JOY_BUTTON18, JOY_BUTTON19, JOY_BUTTON20,
-	JOY_BUTTON21, JOY_BUTTON22, JOY_BUTTON23, JOY_BUTTON24,
-	JOY_BUTTON25, JOY_BUTTON26, JOY_BUTTON27, JOY_BUTTON28,
-	JOY_BUTTON29, JOY_BUTTON30, JOY_BUTTON31, JOY_BUTTON32};
-
 static struct {
 	int virtual_x, virtual_y, virtual_width, virtual_height;
 	long mouse_x, mouse_y;
@@ -523,7 +512,7 @@ static int wininput_handle(size_t num, managed_fd* fds){
 			if(cfg.request[u].ident.fields.channel == button){
 				//button query
 				if(joy_info.dwFlags & JOY_RETURNBUTTONS){
-					key_state = (joy_info.dwButtons & button_masks[(cfg.request[u].ident.fields.control & 0xFF) - 1]) > 0 ? 1 : 0;
+					key_state = (joy_info.dwButtons & (1 << ((cfg.request[u].ident.fields.control & 0xFF) - 1))) > 0 ? 1 : 0;
 					if(key_state != cfg.request[u].state){
 						if(key_state){
 							val.normalised = 1.0;

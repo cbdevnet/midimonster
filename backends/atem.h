@@ -14,6 +14,12 @@ static uint32_t atem_interval();
 #define ATEM_DEFAULT_PORT "9910"
 #define ATEM_PAYLOAD_MAX 2048 //packet length is 11 bit
 
+#define ATEM_HELLO 0x1000
+#define ATEM_RESPONSE_EXPECTED 0x8000
+#define ATEM_ACK 0x0800
+
+#define ATEM_LENGTH(a) ((a) & 0x07FF)
+
 #pragma pack(push, 1)
 typedef struct /*_atem_proto_hdr*/ {
 	uint16_t length;
@@ -27,5 +33,6 @@ typedef struct /*_atem_proto_hdr*/ {
 typedef struct /*_atem_instance_data*/ {
 	int fd;
 
+	uint8_t established;
 	atem_hdr txhdr;
 } atem_instance_data;

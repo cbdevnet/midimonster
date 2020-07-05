@@ -5,6 +5,14 @@
 #include "atem.h"
 #include "libmmbackend.h"
 
+//#include "../tests/hexdump.c"
+
+typedef int (*atem_command_handler)(instance*, size_t, uint8_t*);
+typedef struct {
+	char command[4];
+	atem_command_handler handler;
+} atem_command_mapping;
+
 MM_PLUGIN_API int init(){
 	backend atem = {
 		.name = BACKEND_NAME,
@@ -77,12 +85,76 @@ static int atem_connect(instance* inst){
 	return atem_send(inst, hello_payload, sizeof(hello_payload));
 }
 
+int atem_handle_time(instance* inst, size_t n, uint8_t* data){
+	//TODO
+	//12 2D 3A 0C 00 00 00 00
+	//12 2D 3A 0C 00 00 00 00
+	return 0;
+}
+
+int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data){
+	//LOGPF("Handling index tally on %s", inst->name);
+	//hex_dump(data + 8, n - 8);
+	//1g 3r -> 00 04 02 00 01 00 00 47
+	//bit 0 -> active/red
+	//bit 1 -> preview/green
+	//[nsources u16] [c1 c2 c3 c4] [00 00]
+	return 0;
+}
+
+int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data){
+	//LOGPF("Handling source tally on %s", inst->name);
+	//hex_dump(data + 8, n - 8);
+	return 0;
+}
+
+int atem_handle_preview(instance* inst, size_t n, uint8_t* data){
+	//LOGPF("Preview changed on %s", inst->name);
+	//1/connect -> 00 0C 00 01 00 6D 70 6C
+	//2 -> 00 06 00 02 00 FF FF FF
+	//1 -> 00 06 00 01 00 FF FF FF
+	//[in x] -> 00 06 00 xx 00 FF FF FF
+	//still -> 00 06 0B C2 00 FF FF FF
+	//black -> x=0
+	//colors?
+	return 0;
+}
+
+int atem_handle_program(instance* inst, size_t n, uint8_t* data){
+	//LOGPF("Program changed on %s", inst->name);
+	//hex_dump(data + 8, n - 8);
+	//1/connect -> 00 0C 00 01
+	//2 -> 00 00 00 02
+	//1 -> 00 00 00 01
+	//still -> 00 00 0B C2
+	//black -> 00 06 00 00
+	//black -> 00 00 00 00
+	//[00 XX] [src] 
+	//xx = 06 between non-cam sources?
+	return 0;
+}
+
+int atem_handle_tbar(instance* inst, size_t n, uint8_t* data){
+	LOGPF("T-Bar moved on %s", inst->name);
+	//hex_dump(data + 8, n - 8);
+	return 0;
+}
+
+static atem_command_mapping atem_command_map[] = {
+	{"Time", atem_handle_time},
+	{"TlIn", atem_handle_tally_index},
+	{"TlSr", atem_handle_tally_source},
+	{"PrvI", atem_handle_preview},
+	{"PrgI", atem_handle_program},
+	{"TrPs", atem_handle_tbar}
+};
+
 static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t payload_len){
 	atem_instance_data* data = (atem_instance_data*) inst->impl;
 	uint8_t payload_buffer[ATEM_PAYLOAD_MAX] = "";
 	uint16_t* payload_u16 = NULL;
 	char* payload_str = NULL;
-	size_t offset = 0;
+	size_t offset = 0, n;
 
 	if(data->txhdr.session && hdr->session != data->txhdr.session){
 		LOGPF("Received data for unknown session %04X on %s (session %04X)", hdr->session, inst->name, data->txhdr.session);
@@ -99,22 +171,36 @@ static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t 
 		return atem_send(inst, NULL, 0);
 	}
 
-	for(offset = 0; offset < payload_len;){
-		//FIXME this is potentially dangerous and will get flagged by static analysis
+	//read commands if present
+	for(offset = 0; offset + 8 < payload_len;){
 		payload_u16 = (uint16_t*) (payload + offset);
 		payload_str = (char*) (payload + offset + 4);
 
-		LOGPF("%d bytes (%04X) of data for command %.*s", be16toh(*payload_u16), *payload_u16, 4, payload_str);
-		if(!be16toh(*payload_u16)){
-			LOG("This seems wrong");
+		if(offset + be16toh(*payload_u16) <= payload_len){
+			//find a handler and call it
+			for(n = 0; n < sizeof(atem_command_map) / sizeof(atem_command_map[0]); n++){
+				if(!memcmp(atem_command_map[n].command, payload_str, 4)){
+					atem_command_map[n].handler(inst, be16toh(*payload_u16), payload + offset);
+					break;
+				}
+			}
+
+			if(n == sizeof(atem_command_map) / sizeof(atem_command_map[0])){
+				DBGPF("%d bytes of data for command %.*s, no handler found", be16toh(*payload_u16), 4, payload_str);
+			}
+
+			//advance to next command
+			offset += be16toh(*payload_u16);
+		}
+		else{
+			LOGPF("Short read on %s for command %.*s, %d indicated, %" PRIsize_t " left", inst->name, 4, payload_str, be16toh(*payload_u16), payload_len - offset);
 			break;
 		}
-		offset += be16toh(*payload_u16);
 	}
 
 	if(hdr->length & ATEM_RESPONSE_EXPECTED){
 		data->txhdr.ack = hdr->seqno;
-		LOGPF("Response expected, acknowledging packet %d on %s", hdr->seqno, inst->name);
+		DBGPF("Response expected, acknowledging packet %d on %s", hdr->seqno, inst->name);
 		return atem_send(inst, NULL, 0);
 	}
 

@@ -7,12 +7,6 @@
 
 //#include "../tests/hexdump.c"
 
-typedef int (*atem_command_handler)(instance*, size_t, uint8_t*);
-typedef struct {
-	char command[4];
-	atem_command_handler handler;
-} atem_command_mapping;
-
 MM_PLUGIN_API int init(){
 	backend atem = {
 		.name = BACKEND_NAME,
@@ -26,6 +20,11 @@ MM_PLUGIN_API int init(){
 		.shutdown = atem_shutdown,
 		.interval = atem_interval
 	};
+
+	if(sizeof(atem_channel_ident) != sizeof(uint64_t)){
+		LOG("Channel identification union out of bounds");
+		return 1;
+	}
 
 	//register backend
 	if(mm_backend_register(atem)){
@@ -85,14 +84,14 @@ static int atem_connect(instance* inst){
 	return atem_send(inst, hello_payload, sizeof(hello_payload));
 }
 
-int atem_handle_time(instance* inst, size_t n, uint8_t* data){
+static int atem_handle_time(instance* inst, size_t n, uint8_t* data){
 	//TODO
 	//12 2D 3A 0C 00 00 00 00
 	//12 2D 3A 0C 00 00 00 00
 	return 0;
 }
 
-int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data){
+static int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data){
 	//LOGPF("Handling index tally on %s", inst->name);
 	//hex_dump(data + 8, n - 8);
 	//1g 3r -> 00 04 02 00 01 00 00 47
@@ -102,13 +101,13 @@ int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
 
-int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data){
+static int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data){
 	//LOGPF("Handling source tally on %s", inst->name);
 	//hex_dump(data + 8, n - 8);
 	return 0;
 }
 
-int atem_handle_preview(instance* inst, size_t n, uint8_t* data){
+static int atem_handle_preview(instance* inst, size_t n, uint8_t* data){
 	//LOGPF("Preview changed on %s", inst->name);
 	//1/connect -> 00 0C 00 01 00 6D 70 6C
 	//2 -> 00 06 00 02 00 FF FF FF
@@ -120,7 +119,7 @@ int atem_handle_preview(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
 
-int atem_handle_program(instance* inst, size_t n, uint8_t* data){
+static int atem_handle_program(instance* inst, size_t n, uint8_t* data){
 	//LOGPF("Program changed on %s", inst->name);
 	//hex_dump(data + 8, n - 8);
 	//1/connect -> 00 0C 00 01
@@ -134,24 +133,14 @@ int atem_handle_program(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
 
-int atem_handle_tbar(instance* inst, size_t n, uint8_t* data){
+static int atem_handle_tbar(instance* inst, size_t n, uint8_t* data){
 	LOGPF("T-Bar moved on %s", inst->name);
 	//hex_dump(data + 8, n - 8);
 	return 0;
 }
 
-static atem_command_mapping atem_command_map[] = {
-	{"Time", atem_handle_time},
-	{"TlIn", atem_handle_tally_index},
-	{"TlSr", atem_handle_tally_source},
-	{"PrvI", atem_handle_preview},
-	{"PrgI", atem_handle_program},
-	{"TrPs", atem_handle_tbar}
-};
-
 static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t payload_len){
 	atem_instance_data* data = (atem_instance_data*) inst->impl;
-	uint8_t payload_buffer[ATEM_PAYLOAD_MAX] = "";
 	uint16_t* payload_u16 = NULL;
 	char* payload_str = NULL;
 	size_t offset = 0, n;
@@ -252,13 +241,115 @@ static int atem_instance(instance* inst){
 	return 0;
 }
 
-static channel* atem_channel(instance* inst, char* spec, uint8_t flags){
+static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
 	//TODO
+	return 1;
+}
+
+static int atem_channel_mediaplayer(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	//TODO
+	return 1;
+}
+
+static int atem_channel_dsk(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	//TODO
+	return 1;
+}
+
+static int atem_channel_usk(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	//TODO
+	return 1;
+}
+
+static int atem_channel_colorgen(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	//TODO
+	return 1;
+}
+
+static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	//TODO
+	return 1;
+}
+
+static int atem_channel_transition(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	//skip transition.
+	spec += 11;
+	
+	if(!strcmp(spec, "auto")){
+		ident->fields.control = control_auto;
+	}
+	if(!strcmp(spec, "cut")){
+		ident->fields.control = control_cut;
+	}
+	if(!strcmp(spec, "ftb")){
+		ident->fields.control = control_ftb;
+	}
+	if(!strcmp(spec, "tbar")){
+		ident->fields.control = control_tbar;
+	}
+	else{
+		LOGPF("Unknown transition channel spec %s", spec);
+		return 1;
+	}
+
+	return 0;
+}
+
+static channel* atem_channel(instance* inst, char* spec, uint8_t flags){
+	char* token = spec;
+	size_t n = 0;
+	atem_channel_ident ident = {
+		.label = 0
+	};
+
+	if(!strncmp(token, "me", 2)){
+		ident.fields.me = strtoul(spec + 2, &token, 10);
+		if(*token != '.'){
+			LOGPF("Failed to read M/E spec for %s", spec);
+			return NULL;
+		}
+		token++;
+	}
+
+	for(n = 0; n < atem_sentinel; n++){
+		if(!strncmp(token, atem_systems[n].id, strlen(atem_systems[n].id))){
+			//parse using subsystem parser
+			if(atem_systems[n].parser){
+				ident.fields.system = n;
+				if(atem_systems[n].parser(inst, &ident, token, flags)){
+					break;
+				}
+				return mm_channel(inst, ident.label, 1);
+			}
+			LOGPF("Failed to detect system of spec %s", spec);
+			break;
+		}
+	}
 	return NULL;
 }
 
-static int atem_set(instance* inst, size_t num, channel** c, channel_value* v){
+static int atem_control_transition(instance* inst, channel* c, channel_value* v){
 	//TODO
+	return 1;
+}
+
+static int atem_set(instance* inst, size_t num, channel** c, channel_value* v){
+	size_t n = 0;
+	atem_channel_ident ident;
+
+	for(n = 0; n < num; n++){
+		ident.label = c[n]->ident;
+
+		//sanity check
+		if(ident.fields.system >= atem_sentinel){
+			continue;
+		}
+
+		//handle input
+		if(atem_systems[ident.fields.system].handler){
+			atem_systems[ident.fields.system].handler(inst, c[n], v + n);
+		}
+	}
 	return 0;
 }
 

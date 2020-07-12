@@ -89,6 +89,24 @@ static int atem_connect(instance* inst){
 	return atem_send(inst, hello_payload, sizeof(hello_payload));
 }
 
+static int atem_handle_version(instance* inst, size_t n, uint8_t* data){
+	uint16_t* major = (uint16_t*) (data + 8);
+	uint16_t* minor = (uint16_t*) (data + 10);
+
+	LOGPF("Instance %s peer speaking protocol version %d.%d", inst->name, be16toh(*major), be16toh(*minor));
+	return 0;
+}
+
+static int atem_handle_strings(instance* inst, size_t n, uint8_t* data){
+	if(!memcmp(data + 4, "_pin", 4)){
+		LOGPF("Instance %s product reports as %.*s", inst->name, (int) n - 8, data + 8);
+	}
+	else if(!memcmp(data + 4, "Warn", 4)){
+		LOGPF("Instance %s warning: %.*s", inst->name, (int) n - 8, data + 8);
+	}
+	return 0;
+}
+
 static int atem_handle_time(instance* inst, size_t n, uint8_t* data){
 	//TODO
 	//12 2D 3A 0C 00 00 00 00
@@ -139,8 +157,22 @@ static int atem_handle_program(instance* inst, size_t n, uint8_t* data){
 }
 
 static int atem_handle_tbar(instance* inst, size_t n, uint8_t* data){
-	LOGPF("T-Bar moved on %s", inst->name);
-	hex_dump(data + 8, n - 8);
+	//hex_dump(data + 8, n - 8);
+	//00 01 1A 00 [04 4D] 00 00
+	//00 01 1A 00 [04 9D] 00 00
+	//00 01 1A 00 [04 EB] 00 00
+	//00 01 19 00 [05 3A] 00 00
+	//00 01 19 00 [05 88] 00 00
+	//00 01 19 00 [05 D7] 00 00
+	uint16_t* active = (uint16_t*) (data + 8);
+	uint16_t* timing = (uint16_t*) (data + 10);
+	uint16_t* position = (uint16_t*) (data + 12);
+	uint16_t* transition = (uint16_t*) (data + 14);
+	LOGPF("T-Bar moved on %s: active %d, time %04X, position %d, transition %04X", inst->name, be16toh(*active), be16toh(*timing), be16toh(*position), be16toh(*transition));
+	return 0;
+}
+
+static int atem_handle_ignore(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
 
@@ -180,7 +212,7 @@ static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t 
 			}
 
 			if(n == sizeof(atem_command_map) / sizeof(atem_command_map[0])){
-				DBGPF("%d bytes of data for command %.*s, no handler found", be16toh(*payload_u16), 4, payload_str);
+				LOGPF("%d bytes of data for command %.*s, no handler found", be16toh(*payload_u16), 4, payload_str);
 			}
 
 			//advance to next command

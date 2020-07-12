@@ -76,23 +76,31 @@ typedef int (*atem_command_handler)(instance*, size_t, uint8_t*);
 typedef int (*atem_channel_parser)(instance*, atem_channel_ident*, char*, uint8_t);
 typedef int (*atem_channel_control)(instance*, atem_channel_ident*, channel* c, channel_value* v);
 
+static int atem_handle_version(instance* inst, size_t n, uint8_t* data);
+static int atem_handle_strings(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_time(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_preview(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_program(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tbar(instance* inst, size_t n, uint8_t* data);
+static int atem_handle_ignore(instance* inst, size_t n, uint8_t* data);
 
 static struct {
 	char command[4];
 	atem_command_handler handler;
 } atem_command_map[] = {
+	{"_ver", atem_handle_version},
+	{"_pin", atem_handle_strings},
+	{"Warn", atem_handle_strings},
 	{"Time", atem_handle_time},
 	{"TlIn", atem_handle_tally_index},
 	{"TlSr", atem_handle_tally_source},
 	{"PrvI", atem_handle_preview},
 	{"PrgI", atem_handle_program},
-	{"TrPs", atem_handle_tbar}
+	{"TrPs", atem_handle_tbar},
+	{"CCdP", atem_handle_ignore}, //camera control?
+	{"MPrp", atem_handle_ignore} //macro
 };
 
 static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);

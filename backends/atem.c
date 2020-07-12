@@ -1,7 +1,7 @@
 #define BACKEND_NAME "atem"
 #include <string.h>
 
-#define DEBUG
+//#define DEBUG
 #include "atem.h"
 #include "libmmbackend.h"
 
@@ -41,26 +41,31 @@ static int atem_send(instance* inst, uint8_t* payload, size_t payload_len){
 		atem_hdr hdr;
 		uint8_t payload[ATEM_PAYLOAD_MAX];
 	} tx = {
-		.hdr = data->txhdr
+		0
 	};
 
 	if(payload_len){
 		memcpy(tx.payload, payload, min(payload_len, ATEM_PAYLOAD_MAX));
 	}
 
+	//byteswap and bitmap the header
+	tx.hdr.session = htobe16(data->txhdr.session);
 	if(data->established){
-		tx.hdr.length = htobe16(ATEM_RESPONSE_EXPECTED | (sizeof(atem_hdr) + payload_len));
-		data->txhdr.seqno++;
+		if(payload_len){
+			data->txhdr.seqno++;
+			tx.hdr.length = htobe16(ATEM_SEQUENCE_VALID | (sizeof(atem_hdr) + payload_len));
+			tx.hdr.seqno = htobe16(data->txhdr.seqno);
+		}
+		else{
+			tx.hdr.length = htobe16(ATEM_ACK_VALID | (sizeof(atem_hdr) + payload_len));
+			tx.hdr.ack = htobe16(data->txhdr.ack);
+		}
 	}
 	else{
 		tx.hdr.length = htobe16(ATEM_HELLO | (sizeof(atem_hdr) + payload_len));
 	}
 
-	tx.hdr.session = htobe16(tx.hdr.session);
-	tx.hdr.ack = htobe16(tx.hdr.ack);
-	tx.hdr.seqno = htobe16(tx.hdr.seqno);
-
-	DBGPF("Sending %" PRIsize_t " bytes, seqno %d", sizeof(atem_hdr) + payload_len, be16toh(tx.hdr.seqno));
+	DBGPF("Sending %" PRIsize_t " bytes, ack %d seqno %d", sizeof(atem_hdr) + payload_len, be16toh(tx.hdr.ack), be16toh(tx.hdr.seqno));
 	if(mmbackend_send(data->fd, (uint8_t*) &tx, sizeof(atem_hdr) + payload_len)){
 		LOGPF("Failed to send on instance %s", inst->name);
 		return 1;
@@ -135,7 +140,7 @@ static int atem_handle_program(instance* inst, size_t n, uint8_t* data){
 
 static int atem_handle_tbar(instance* inst, size_t n, uint8_t* data){
 	LOGPF("T-Bar moved on %s", inst->name);
-	//hex_dump(data + 8, n - 8);
+	hex_dump(data + 8, n - 8);
 	return 0;
 }
 
@@ -187,9 +192,9 @@ static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t 
 		}
 	}
 
-	if(hdr->length & ATEM_RESPONSE_EXPECTED){
+	if(hdr->length & ATEM_SEQUENCE_VALID){
 		data->txhdr.ack = hdr->seqno;
-		DBGPF("Response expected, acknowledging packet %d on %s", hdr->seqno, inst->name);
+		DBGPF("Acknowledging command %d on %s", hdr->seqno, inst->name);
 		return atem_send(inst, NULL, 0);
 	}
 
@@ -278,13 +283,13 @@ static int atem_channel_transition(instance* inst, atem_channel_ident* ident, ch
 	if(!strcmp(spec, "auto")){
 		ident->fields.control = control_auto;
 	}
-	if(!strcmp(spec, "cut")){
+	else if(!strcmp(spec, "cut")){
 		ident->fields.control = control_cut;
 	}
-	if(!strcmp(spec, "ftb")){
+	else if(!strcmp(spec, "ftb")){
 		ident->fields.control = control_ftb;
 	}
-	if(!strcmp(spec, "tbar")){
+	else if(!strcmp(spec, "tbar")){
 		ident->fields.control = control_tbar;
 	}
 	else{
@@ -328,8 +333,51 @@ static channel* atem_channel(instance* inst, char* spec, uint8_t flags){
 	return NULL;
 }
 
-static int atem_control_transition(instance* inst, channel* c, channel_value* v){
-	//TODO
+static int atem_control_transition(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v){
+	uint8_t buffer[ATEM_PAYLOAD_MAX] = "";
+	atem_command_hdr* hdr = (atem_command_hdr*) buffer;
+	uint16_t* parameter = NULL;
+
+	switch(ident->fields.control){
+		case control_cut:
+			//TODO debounce this
+			if(v->normalised > 0.9){
+				hdr->length = htobe16(12);
+				memcpy(hdr->command, "DCut", 4);
+				buffer[sizeof(hdr)] = ident->fields.me;
+				//trailer bd b6 49
+				return atem_send(inst, buffer, 12);
+			}
+			return 0;
+		case control_auto:
+			//TODO debounce this
+			if(v->normalised > 0.9){
+				hdr->length = htobe16(12);
+				memcpy(hdr->command, "DAut", 4);
+				buffer[sizeof(hdr)] = ident->fields.me;
+				//trailer f9 1c b7
+				return atem_send(inst, buffer, 12);
+			}
+			return 0;
+		case control_tbar:
+			//TODO this needs to be inversed after completion
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CTPs", 4);
+			buffer[sizeof(hdr)] = ident->fields.me;
+			parameter = (uint16_t*) (buffer + sizeof(hdr) + 2);
+			*parameter = htobe16((uint16_t) (v->normalised * 10000));
+			return atem_send(inst, buffer, 12);
+		case control_ftb:
+			//TODO debounce this
+			if(v->normalised > 0.9){
+				hdr->length = htobe16(12);
+				memcpy(hdr->command, "FtbA", 4);
+				buffer[sizeof(hdr)] = ident->fields.me;
+				//trailer e5 ab 49
+				return atem_send(inst, buffer, 12);
+			}
+			return 0;
+	}
 	return 1;
 }
 
@@ -347,7 +395,7 @@ static int atem_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 		//handle input
 		if(atem_systems[ident.fields.system].handler){
-			atem_systems[ident.fields.system].handler(inst, c[n], v + n);
+			atem_systems[ident.fields.system].handler(inst, &ident, c[n], v + n);
 		}
 	}
 	return 0;

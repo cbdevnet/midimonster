@@ -15,8 +15,8 @@ static uint32_t atem_interval();
 #define ATEM_PAYLOAD_MAX 2048 //packet length is 11 bit
 
 #define ATEM_HELLO 0x1000
-#define ATEM_RESPONSE_EXPECTED 0x8000
-#define ATEM_ACK 0x0800
+#define ATEM_ACK_VALID 0x8000
+#define ATEM_SEQUENCE_VALID 0x0800
 
 #define ATEM_LENGTH(a) ((a) & 0x07FF)
 
@@ -28,6 +28,12 @@ typedef struct /*_atem_proto_hdr*/ {
 	uint8_t reserved[4];
 	uint16_t seqno;
 } atem_hdr;
+
+typedef struct /*_atem_proto_command*/ {
+	uint16_t length;
+	uint16_t reserved;
+	uint8_t command[4];
+} atem_command_hdr;
 #pragma pack(pop)
 
 typedef union {
@@ -68,7 +74,7 @@ enum /*_atem_control*/ {
 
 typedef int (*atem_command_handler)(instance*, size_t, uint8_t*);
 typedef int (*atem_channel_parser)(instance*, atem_channel_ident*, char*, uint8_t);
-typedef int (*atem_channel_control)(instance*, channel* c, channel_value* v);
+typedef int (*atem_channel_control)(instance*, atem_channel_ident*, channel* c, channel_value* v);
 
 static int atem_handle_time(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data);
@@ -97,7 +103,7 @@ static int atem_channel_colorgen(instance* inst, atem_channel_ident* ident, char
 static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 static int atem_channel_transition(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 
-static int atem_control_transition(instance* inst, channel* c, channel_value* v);
+static int atem_control_transition(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 
 static struct {
 	char* id;
@@ -120,4 +126,6 @@ typedef struct /*_atem_instance_data*/ {
 
 	uint8_t established;
 	atem_hdr txhdr;
+
+	uint8_t tbar_inversed;
 } atem_instance_data;

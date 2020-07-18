@@ -374,8 +374,34 @@ static int atem_channel_usk(instance* inst, atem_channel_ident* ident, char* spe
 }
 
 static int atem_channel_colorgen(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
-	//TODO
-	return 1;
+	//skip colorgen
+	char* token = spec + 8;
+
+	uint8_t generator = strtoul(token, &token, 10);
+	if(!generator || *token != '.'){
+		LOGPF("Invalid color generator spec %s", spec);
+		return 1;
+	}
+
+	//skip dot
+	token++;
+	ident->fields.me = generator;
+
+	if(!strcmp(token, "hue")){
+		ident->fields.control = color_hue;
+	}
+	else if(!strcmp(token, "saturation")){
+		ident->fields.control = color_saturation;
+	}
+	else if(!strcmp(token, "luminance")){
+		ident->fields.control = color_luminance;
+	}
+	else{
+		LOGPF("Unknown colorgen control %s", token);
+		return 1;
+	}
+
+	return 0;
 }
 
 static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
@@ -471,7 +497,7 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 			hdr->length = htobe16(12);
 			memcpy(hdr->command, "CTPs", 4);
 			hdr->me = ident->fields.me;
-			parameter = (uint16_t*) (buffer + sizeof(hdr) + 2);
+			parameter = (uint16_t*) (buffer + sizeof(atem_command_hdr));
 			*parameter = htobe16((uint16_t) (v->normalised * 10000));
 			return atem_send(inst, buffer, 12);
 		case control_ftb:
@@ -491,7 +517,7 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 static int atem_control_input(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v){
 	uint8_t buffer[ATEM_PAYLOAD_MAX] = "";
 	atem_command_hdr* hdr = (atem_command_hdr*) buffer;
-	uint16_t* parameter = (uint16_t*) (buffer + sizeof(hdr) + 2);
+	uint16_t* parameter = (uint16_t*) (buffer + sizeof(atem_command_hdr));
 
 	//all of these are oneshot keys, so bail out early
 	if(v->normalised < 0.9){
@@ -528,6 +554,38 @@ static int atem_control_input(instance* inst, atem_channel_ident* ident, channel
 			break;
 	}
 	return 1;
+}
+
+static int atem_control_colorgen(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v){
+	uint8_t buffer[ATEM_PAYLOAD_MAX] = "";
+	atem_command_hdr* hdr = (atem_command_hdr*) buffer;
+	uint16_t* hue = (uint16_t*) (buffer + sizeof(atem_command_hdr));
+	uint16_t* saturation = (uint16_t*) (buffer + sizeof(atem_command_hdr) + 2);
+	uint16_t* luma = (uint16_t*) (buffer + sizeof(atem_command_hdr) + 4);
+
+	hdr->length = htobe16(16);
+	memcpy(hdr->command, "CClV", 4);
+	hdr->reserved2 = ident->fields.me - 1;
+
+	switch(ident->fields.control){
+		case color_hue:
+			hdr->me = 1;
+			*hue = htobe16((uint16_t) (v->normalised * 3599.0));
+			break;
+		case color_saturation:
+			hdr->me = 1 << 1;
+			*saturation = htobe16((uint16_t) (v->normalised * 1000.0));
+			break;
+		case color_luminance:
+			hdr->me = 1 << 2;
+			*luma = htobe16((uint16_t) (v->normalised * 1000.0));
+			break;
+		default:
+			LOG("Unknown colorgen channel control");
+			return 0;
+	}
+
+	return atem_send(inst, buffer, 18);
 }
 
 static int atem_set(instance* inst, size_t num, channel** c, channel_value* v){

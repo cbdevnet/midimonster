@@ -31,9 +31,10 @@ typedef struct /*_atem_proto_hdr*/ {
 
 typedef struct /*_atem_proto_command*/ {
 	uint16_t length;
-	uint16_t reserved;
+	uint16_t reserved1;
 	uint8_t command[4];
 	uint8_t me;
+	uint8_t reserved2;
 } atem_command_hdr;
 #pragma pack(pop)
 
@@ -61,6 +62,11 @@ enum /*_atem_system*/ {
 };
 
 enum /*_atem_control*/ {
+	/*colorgen controls*/
+	color_hue,
+	color_saturation,
+	color_luminance,
+
 	/*input controls*/
 	input_preview,
 	input_program,
@@ -122,6 +128,7 @@ static int atem_channel_transition(instance* inst, atem_channel_ident* ident, ch
 
 static int atem_control_transition(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 static int atem_control_input(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
+static int atem_control_colorgen(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 
 static struct {
 	char* id;
@@ -133,7 +140,7 @@ static struct {
 	[atem_mediaplayer] = {"mediaplayer", atem_channel_mediaplayer},
 	[atem_dsk] = {"dsk", atem_channel_dsk},
 	[atem_usk] = {"usk", atem_channel_usk},
-	[atem_colorgen] = {"colorgen", atem_channel_colorgen},
+	[atem_colorgen] = {"colorgen", atem_channel_colorgen, atem_control_colorgen},
 	[atem_playout] = {"playout", atem_channel_playout},
 	[atem_transition] = {"transition", atem_channel_transition, atem_control_transition},
 	[atem_sentinel] = {NULL, NULL}

@@ -33,16 +33,17 @@ typedef struct /*_atem_proto_command*/ {
 	uint16_t length;
 	uint16_t reserved;
 	uint8_t command[4];
+	uint8_t me;
 } atem_command_hdr;
 #pragma pack(pop)
 
 typedef union {
 	struct {
 		uint8_t me;
-		uint8_t pad1;
+		uint8_t extra;
 		uint16_t system;
 		uint16_t control;
-		uint16_t pad2;
+		uint16_t subcontrol;
 	} fields;
 	uint64_t label;
 } atem_channel_ident;
@@ -60,6 +61,14 @@ enum /*_atem_system*/ {
 };
 
 enum /*_atem_control*/ {
+	/*input controls*/
+	input_preview,
+	input_program,
+	input_lumafill,
+	input_lumakey,
+	input_chromafill,
+	input_patternfill,
+	input_dvefill,
 
 	/*transition controls*/
 	control_cut,
@@ -112,6 +121,7 @@ static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char*
 static int atem_channel_transition(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 
 static int atem_control_transition(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
+static int atem_control_input(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 
 static struct {
 	char* id;
@@ -119,7 +129,7 @@ static struct {
 	atem_channel_control handler;
 } atem_systems[] = {
 	[atem_unknown] = {"unknown", NULL},
-	[atem_input] = {"input", atem_channel_input},
+	[atem_input] = {"input", atem_channel_input, atem_control_input},
 	[atem_mediaplayer] = {"mediaplayer", atem_channel_mediaplayer},
 	[atem_dsk] = {"dsk", atem_channel_dsk},
 	[atem_usk] = {"usk", atem_channel_usk},

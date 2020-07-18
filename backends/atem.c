@@ -279,8 +279,83 @@ static int atem_instance(instance* inst){
 }
 
 static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
-	//TODO
-	return 1;
+	//skip input.
+	spec += 6;
+	ident->fields.control = input_preview;
+
+	if(!strncmp(spec, "black", 5)){
+		spec += 5;
+		ident->fields.subcontrol = 0;
+	}
+	else if(!strncmp(spec, "bars", 4)){
+		spec += 4;
+		ident->fields.subcontrol = 1000;
+	}
+	else if(!strncmp(spec, "color", 5)){
+		spec += 5;
+		ident->fields.subcontrol = strtoul(spec, &spec, 10);
+		if(!ident->fields.subcontrol){
+			LOGPF("Missing index for color generator input spec %s", spec - 5);
+			return 1;
+		}
+		//add input offset for color gens
+		ident->fields.subcontrol += 2000;
+	}
+	else if(!strncmp(spec, "cam", 3)){
+		spec += 3;
+		ident->fields.subcontrol = strtoul(spec, &spec, 10);
+		if(!ident->fields.subcontrol){
+			LOGPF("Missing index for input spec %s", spec - 3);
+			return 1;
+		}
+	}
+	else if(!strncmp(spec, "mp", 2)){
+		spec += 2;
+		ident->fields.subcontrol = strtoul(spec, &spec, 10);
+		if(!ident->fields.subcontrol){
+			LOGPF("Missing index for mediaplayer input spec %s", spec - 2);
+			return 1;
+		}
+
+		//FIXME mp1 seems to be 3010, however i'm unclear on how this increments for mp2 etc
+		ident->fields.subcontrol *= 10;
+		ident->fields.subcontrol += 3000;
+	}
+	else{
+		LOGPF("Unknown input channel spec %s", spec);
+		return 1;
+	}
+
+	if(*spec == '.'){
+		spec++;
+		if(!strcmp(spec, "preview")){
+			ident->fields.control = input_preview;
+		}
+		else if(!strcmp(spec, "program")){
+			ident->fields.control = input_program;
+		}
+		else if(!strcmp(spec, "lumafill")){
+			ident->fields.control = input_lumafill;
+		}
+		else if(!strcmp(spec, "lumakey")){
+			ident->fields.control = input_lumakey;
+		}
+		else if(!strcmp(spec, "chromafill")){
+			ident->fields.control = input_chromafill;
+		}
+		else if(!strcmp(spec, "patternfill")){
+			ident->fields.control = input_patternfill;
+		}
+		else if(!strcmp(spec, "dvefill")){
+			ident->fields.control = input_dvefill;
+		}
+		else{
+			LOGPF("Unknown input action spec %s", spec);
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 static int atem_channel_mediaplayer(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
@@ -376,7 +451,7 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 			if(v->normalised > 0.9){
 				hdr->length = htobe16(12);
 				memcpy(hdr->command, "DCut", 4);
-				buffer[sizeof(hdr)] = ident->fields.me;
+				hdr->me = ident->fields.me;
 				//trailer bd b6 49
 				return atem_send(inst, buffer, 12);
 			}
@@ -386,16 +461,16 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 			if(v->normalised > 0.9){
 				hdr->length = htobe16(12);
 				memcpy(hdr->command, "DAut", 4);
-				buffer[sizeof(hdr)] = ident->fields.me;
+				hdr->me = ident->fields.me;
 				//trailer f9 1c b7
 				return atem_send(inst, buffer, 12);
 			}
 			return 0;
 		case control_tbar:
-			//TODO this needs to be inversed after completion
+			//TODO value range needs to be inverted after completion
 			hdr->length = htobe16(12);
 			memcpy(hdr->command, "CTPs", 4);
-			buffer[sizeof(hdr)] = ident->fields.me;
+			hdr->me = ident->fields.me;
 			parameter = (uint16_t*) (buffer + sizeof(hdr) + 2);
 			*parameter = htobe16((uint16_t) (v->normalised * 10000));
 			return atem_send(inst, buffer, 12);
@@ -404,11 +479,53 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 			if(v->normalised > 0.9){
 				hdr->length = htobe16(12);
 				memcpy(hdr->command, "FtbA", 4);
-				buffer[sizeof(hdr)] = ident->fields.me;
+				hdr->me = ident->fields.me;
 				//trailer e5 ab 49
 				return atem_send(inst, buffer, 12);
 			}
 			return 0;
+	}
+	return 1;
+}
+
+static int atem_control_input(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v){
+	uint8_t buffer[ATEM_PAYLOAD_MAX] = "";
+	atem_command_hdr* hdr = (atem_command_hdr*) buffer;
+	uint16_t* parameter = (uint16_t*) (buffer + sizeof(hdr) + 2);
+
+	//all of these are oneshot keys, so bail out early
+	if(v->normalised < 0.9){
+		return 0;
+	}
+
+	switch(ident->fields.control){
+		case input_preview:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CPvI", 4);
+			hdr->me = ident->fields.me;
+			*parameter = htobe16(ident->fields.subcontrol);
+			return atem_send(inst, buffer, 12);
+		case input_program:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CPgI", 4);
+			hdr->me = ident->fields.me;
+			*parameter = htobe16(ident->fields.subcontrol);
+			return atem_send(inst, buffer, 12);
+		case input_lumafill:
+			//TODO
+			break;
+		case input_lumakey:
+			//TODO
+			break;
+		case input_chromafill:
+			//TODO
+			break;
+		case input_patternfill:
+			//TODO
+			break;
+		case input_dvefill:
+			//TODO
+			break;
 	}
 	return 1;
 }

@@ -172,6 +172,17 @@ static int atem_handle_tbar(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
 
+static int atem_handle_color(instance* inst, size_t n, uint8_t* data){
+	uint16_t* hue = (uint16_t*) (data + 10);
+	uint16_t* saturation = (uint16_t*) (data + 12);
+	uint16_t* luma = (uint16_t*) (data + 14);
+	LOGPF("Color change on %s colorgen %d: hue %d saturation %d luma %d", inst->name, data[8] + 1, be16toh(*hue), be16toh(*saturation), be16toh(*luma));
+	//01 04 05 FA 03 D8 02 0F
+	//01  04 06 16 03 D8 02 0F
+	//[#] 04 [hue] [sat] [lum]
+	return 0;
+}
+
 static int atem_handle_ignore(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
@@ -326,6 +337,7 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 		return 1;
 	}
 
+	//TODO read keyer index from spec
 	if(*spec == '.'){
 		spec++;
 		if(!strcmp(spec, "preview")){
@@ -334,20 +346,11 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 		else if(!strcmp(spec, "program")){
 			ident->fields.control = input_program;
 		}
-		else if(!strcmp(spec, "lumafill")){
-			ident->fields.control = input_lumafill;
+		else if(!strcmp(spec, "keyfill")){
+			ident->fields.control = input_keyfill;
 		}
-		else if(!strcmp(spec, "lumakey")){
-			ident->fields.control = input_lumakey;
-		}
-		else if(!strcmp(spec, "chromafill")){
-			ident->fields.control = input_chromafill;
-		}
-		else if(!strcmp(spec, "patternfill")){
-			ident->fields.control = input_patternfill;
-		}
-		else if(!strcmp(spec, "dvefill")){
-			ident->fields.control = input_dvefill;
+		else if(!strcmp(spec, "key")){
+			ident->fields.control = input_key;
 		}
 		else{
 			LOGPF("Unknown input action spec %s", spec);
@@ -537,21 +540,20 @@ static int atem_control_input(instance* inst, atem_channel_ident* ident, channel
 			hdr->me = ident->fields.me;
 			*parameter = htobe16(ident->fields.subcontrol);
 			return atem_send(inst, buffer, 12);
-		case input_lumafill:
-			//TODO
-			break;
-		case input_lumakey:
-			//TODO
-			break;
-		case input_chromafill:
-			//TODO
-			break;
-		case input_patternfill:
-			//TODO
-			break;
-		case input_dvefill:
-			//TODO
-			break;
+		case input_keyfill:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CKeF", 4);
+			hdr->me = ident->fields.me;
+			//TODO hdr->reserved2 = keyer;
+			*parameter = htobe16(ident->fields.subcontrol);
+			return atem_send(inst, buffer, 12);
+		case input_key:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CKeC", 4);
+			hdr->me = ident->fields.me;
+			//TODO hdr->reserved2 = keyer;
+			*parameter = htobe16(ident->fields.subcontrol);
+			return atem_send(inst, buffer, 12);
 	}
 	return 1;
 }

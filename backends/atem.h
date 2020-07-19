@@ -70,11 +70,8 @@ enum /*_atem_control*/ {
 	/*input controls*/
 	input_preview,
 	input_program,
-	input_lumafill,
-	input_lumakey,
-	input_chromafill,
-	input_patternfill,
-	input_dvefill,
+	input_keyfill,
+	input_key,
 
 	/*transition controls*/
 	control_cut,
@@ -100,6 +97,7 @@ static int atem_handle_preview(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_program(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tbar(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_ignore(instance* inst, size_t n, uint8_t* data);
+static int atem_handle_color(instance* inst, size_t n, uint8_t* data);
 
 static struct {
 	char command[4];
@@ -115,7 +113,8 @@ static struct {
 	{"PrgI", atem_handle_program},
 	{"TrPs", atem_handle_tbar},
 	{"CCdP", atem_handle_ignore}, //camera control?
-	{"MPrp", atem_handle_ignore} //macro
+	{"MPrp", atem_handle_ignore}, //macro
+	{"ColV", atem_handle_color}
 };
 
 static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);

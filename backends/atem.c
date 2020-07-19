@@ -447,16 +447,16 @@ static int atem_channel_transition(instance* inst, atem_channel_ident* ident, ch
 	spec += 11;
 	
 	if(!strcmp(spec, "auto")){
-		ident->fields.control = control_auto;
+		ident->fields.control = transition_auto;
 	}
 	else if(!strcmp(spec, "cut")){
-		ident->fields.control = control_cut;
+		ident->fields.control = transition_cut;
 	}
 	else if(!strcmp(spec, "ftb")){
-		ident->fields.control = control_ftb;
+		ident->fields.control = transition_ftb;
 	}
 	else if(!strcmp(spec, "tbar")){
-		ident->fields.control = control_tbar;
+		ident->fields.control = transition_tbar;
 	}
 	else{
 		LOGPF("Unknown transition channel spec %s", spec);
@@ -505,7 +505,7 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 	uint16_t* parameter = NULL;
 
 	switch(ident->fields.control){
-		case control_cut:
+		case transition_cut:
 			//TODO debounce this
 			if(v->normalised > 0.9){
 				hdr->length = htobe16(12);
@@ -515,7 +515,7 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 				return atem_send(inst, buffer, 12);
 			}
 			return 0;
-		case control_auto:
+		case transition_auto:
 			//TODO debounce this
 			if(v->normalised > 0.9){
 				hdr->length = htobe16(12);
@@ -525,7 +525,7 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 				return atem_send(inst, buffer, 12);
 			}
 			return 0;
-		case control_tbar:
+		case transition_tbar:
 			//TODO value range needs to be inverted after completion
 			hdr->length = htobe16(12);
 			memcpy(hdr->command, "CTPs", 4);
@@ -533,7 +533,7 @@ static int atem_control_transition(instance* inst, atem_channel_ident* ident, ch
 			parameter = (uint16_t*) (buffer + sizeof(atem_command_hdr));
 			*parameter = htobe16((uint16_t) (v->normalised * 10000));
 			return atem_send(inst, buffer, 12);
-		case control_ftb:
+		case transition_ftb:
 			//TODO debounce this
 			if(v->normalised > 0.9){
 				hdr->length = htobe16(12);

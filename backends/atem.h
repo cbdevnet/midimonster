@@ -75,14 +75,14 @@ enum /*_atem_control*/ {
 	input_aux,
 
 	/*transition controls*/
-	control_cut,
-	control_auto,
-	control_tbar,
-	control_ftb,
-	control_transition_mix,
-	control_transition_dip,
-	control_transition_wipe,
-	control_transition_dve
+	transition_cut,
+	transition_auto,
+	transition_tbar,
+	transition_ftb,
+	transition_transition_mix, //TODO
+	transition_transition_dip, //TODO
+	transition_transition_wipe, //TODO
+	transition_transition_dve //TODO
 };
 
 typedef int (*atem_command_handler)(instance*, size_t, uint8_t*);
@@ -126,9 +126,9 @@ static int atem_channel_colorgen(instance* inst, atem_channel_ident* ident, char
 static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 static int atem_channel_transition(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 
-static int atem_control_transition(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 static int atem_control_input(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 static int atem_control_colorgen(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
+static int atem_control_transition(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 
 static struct {
 	char* id;

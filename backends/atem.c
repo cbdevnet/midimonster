@@ -294,6 +294,12 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 	spec += 6;
 	ident->fields.control = input_preview;
 
+	//TODO aux-switchable channels:
+	//	m/e1 preview -> 10011
+	//	m/e1 program -> 10010
+	//	m/e1 multiview -> 9001?
+	//key-switchable chnannels:
+	//	mp key data
 	if(!strncmp(spec, "black", 5)){
 		spec += 5;
 		ident->fields.subcontrol = 0;
@@ -322,6 +328,12 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 	}
 	else if(!strncmp(spec, "mp", 2)){
 		spec += 2;
+		
+		if(!strncmp(spec, "key", 3)){
+			spec += 3;
+			ident->fields.extra = 1;
+		}
+
 		ident->fields.subcontrol = strtoul(spec, &spec, 10);
 		if(!ident->fields.subcontrol){
 			LOGPF("Missing index for mediaplayer input spec %s", spec - 2);
@@ -330,14 +342,14 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 
 		//FIXME mp1 seems to be 3010, however i'm unclear on how this increments for mp2 etc
 		ident->fields.subcontrol *= 10;
-		ident->fields.subcontrol += 3000;
+		ident->fields.subcontrol += 3000 + ident->fields.extra;
+		ident->fields.extra = 0;
 	}
 	else{
 		LOGPF("Unknown input channel spec %s", spec);
 		return 1;
 	}
 
-	//TODO read keyer index from spec
 	if(*spec == '.'){
 		spec++;
 		if(!strcmp(spec, "preview")){
@@ -346,11 +358,29 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 		else if(!strcmp(spec, "program")){
 			ident->fields.control = input_program;
 		}
-		else if(!strcmp(spec, "keyfill")){
+		else if(!strncmp(spec, "keyfill", 7)){
 			ident->fields.control = input_keyfill;
+			ident->fields.extra = strtoul(spec + 7, NULL, 10);
+			if(!ident->fields.extra){
+				LOGPF("Missing or erroneous keyer ID for spec %s", spec);
+				return 1;
+			}
 		}
-		else if(!strcmp(spec, "key")){
+		else if(!strncmp(spec, "key", 3)){
 			ident->fields.control = input_key;
+			ident->fields.extra = strtoul(spec + 3, NULL, 10);
+			if(!ident->fields.extra){
+				LOGPF("Missing or erroneous keyer ID for spec %s", spec);
+				return 1;
+			}
+		}
+		else if(!strncmp(spec, "aux", 3)){
+			ident->fields.control = input_aux;
+			ident->fields.extra = strtoul(spec + 3, NULL, 10);
+			if(!ident->fields.extra){
+				LOGPF("Missing or erroneous aux ID for spec %s", spec);
+				return 1;
+			}
 		}
 		else{
 			LOGPF("Unknown input action spec %s", spec);
@@ -544,14 +574,21 @@ static int atem_control_input(instance* inst, atem_channel_ident* ident, channel
 			hdr->length = htobe16(12);
 			memcpy(hdr->command, "CKeF", 4);
 			hdr->me = ident->fields.me;
-			//TODO hdr->reserved2 = keyer;
+			hdr->reserved2 = ident->fields.extra - 1;
 			*parameter = htobe16(ident->fields.subcontrol);
 			return atem_send(inst, buffer, 12);
 		case input_key:
 			hdr->length = htobe16(12);
 			memcpy(hdr->command, "CKeC", 4);
 			hdr->me = ident->fields.me;
-			//TODO hdr->reserved2 = keyer;
+			hdr->reserved2 = ident->fields.extra - 1;
+			*parameter = htobe16(ident->fields.subcontrol);
+			return atem_send(inst, buffer, 12);
+		case input_aux:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CAuS", 4);
+			hdr->me = 1; //seems to always be the same
+			hdr->reserved2 = ident->fields.extra - 1;
 			*parameter = htobe16(ident->fields.subcontrol);
 			return atem_send(inst, buffer, 12);
 	}

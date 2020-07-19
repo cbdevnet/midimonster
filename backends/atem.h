@@ -72,6 +72,7 @@ enum /*_atem_control*/ {
 	input_program,
 	input_keyfill,
 	input_key,
+	input_aux,
 
 	/*transition controls*/
 	control_cut,

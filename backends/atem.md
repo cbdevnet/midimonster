@@ -30,10 +30,11 @@ If omitted, M/E 1 is assumed as default target.
 This subsystems deals with assigning inputs (as well as internal buses and sources) to sinks throughout
 the switcher, such as the preview and program buses as well as the keyer inputs.
 
-Channel specifications follow the syntax `input.<inputname>.<destination>`. If `<destination>` is omitted, `preview`
-is assumed as target. Commands are sent for every incoming event with a normalised value greater than `0.9`.
+Channel specifications for this subsystem follow the syntax `input.<source>.<destination>`.
+If `<destination>` is omitted, `preview` is assumed. Commands are sent to the device for every incoming
+event with a normalised value greater than `0.9`.
 
-`<input>` may be any of the following source specifiers:
+`<source>` may be any of the following source specifiers:
 
 * `black`: Black color source
 * `bars`: Test bars
@@ -123,6 +124,10 @@ control.auto > atem1.transition.auto
 control.tbar > atem1.me1.transition.tbar
 ```
 
+##### The `audio` subsystem
+
+TBD
+
 #### Known bugs / problems
 
 In the protocol, all transitions run from a value of `0` to a value of `10000`. The current T-Bar position
@@ -138,9 +143,11 @@ Either way, you are using this backend at your own discretion and risk.
 
 The protocol has been reverse engineered by using an ATEM Mini Pro with protocol version `2.30` (ATEM Switchers
 software update 8.3). Due to those circumstances, parts of this implementation may be or become wrong based on
-incomplete understanding or future changes to the protocol. Some devices may not support all implemented features,
-while some may support features that are not yet implemented.
+incomplete understanding or future changes to the protocol. Neither this backend nor the authors are in any way
+affiliated with Blackmagic Design (other than buying and really liking their products). All rights to the trademarks
+used in this document are with their respective owners.
 
+Some devices may not support all implemented features, while some may support features that are not yet implemented.
 Some features available in larger models may not be present in the device this backend was originally
 developed against. If you have access to more powerful ATEM hardware and would like to see this backend's
 protocol support extended for them, please contact the developers.

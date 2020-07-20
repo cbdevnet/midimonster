@@ -310,6 +310,21 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 		token += 4;
 		ident->fields.subcontrol = 1000;
 	}
+	else if(!strncmp(token, "multiview", 9)){
+		//FIXME bigger models seem to support more than one multiview output, but i don't know how to address those yet
+		token += 9;
+		ident->fields.subcontrol = 9001;
+	}
+	else if(!strncmp(token, "program", 7)){
+		//FIXME multi-m/e models will have multiple program/preview buses, not sure how they're adressed...
+		token += 7;
+		ident->fields.subcontrol = 10010;
+	}
+	else if(!strncmp(token, "preview", 7)){
+		//FIXME multi-m/e models will have multiple program/preview buses, not sure how they're adressed...
+		token += 7;
+		ident->fields.subcontrol = 10011;
+	}
 	else if(!strncmp(token, "color", 5)){
 		token += 5;
 		ident->fields.subcontrol = strtoul(token, &token, 10);

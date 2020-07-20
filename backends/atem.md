@@ -19,7 +19,8 @@ The `atem` backend does not take any global configuration.
 #### Channel specification
 
 ATEM switchers offer a wide array of functionality. To break these functionalities down into manageable
-logical sections and ultimately map them to MIDIMonster channels, they have been mapped to feature "subsystems".
+logical sections and ultimately map them to MIDIMonster channels, they have been segmented into feature
+"subsystems".
 
 Some of the larger models support multiple mix effects (M/Es). All MIDIMonster channels of the `atem` backend
 can be prefixed with `me<n>.` to apply to a specific M/E (where that is supported by the command).
@@ -27,11 +28,12 @@ If omitted, M/E 1 is assumed as default target.
 
 ##### The `input` subsystem
 
-This subsystems deals with assigning inputs (as well as internal buses and sources) to sinks throughout
-the switcher, such as the preview and program buses as well as the keyer inputs.
+This subsystem deals with assigning inputs (as well as internal buses and sources) to sinks throughout
+the switcher, such as the preview and program buses as well as the keyer inputs. This allows the user to
+select any source onto any of the provided buses and sinks.
 
 Channel specifications for this subsystem follow the syntax `input.<source>.<destination>`.
-If `<destination>` is omitted, `preview` is assumed. Commands are sent to the device for every incoming
+If `.<destination>` is omitted, `.preview` is assumed. Commands are sent to the device for every incoming
 event with a normalised value greater than `0.9`.
 
 `<source>` may be any of the following source specifiers:
@@ -42,6 +44,9 @@ event with a normalised value greater than `0.9`.
 * `in<n>`: External input `n`
 * `mp<n>`: Media player `n`
 * `mpkey<n>`: Media player `n` key output
+* `multiview`: Multiview (for assigning to AUX buses)
+* `program`:  Program bus (for assigning to AUX buses)
+* `preview`: Preview bus (for assigning to AUX buses)
 
 `<destination>` may be any of the following sink specifiers:
 
@@ -105,8 +110,11 @@ TBD
 
 ##### The `transition` subsystem
 
-This subsystem allows control over transitions between selected sources. Commands are sent for every incoming
-event with a normalised value greater than `0.9`, except for the T-Bar control which is a continuous value.
+This subsystem allows control over transitions between selected sources. Commands are sent out to the device
+ for every incoming event with a normalised value greater than `0.9`, except for the T-Bar control which
+is a continuous value.
+
+Specification syntax for transition channels is `transition.<control>`, where `<control>` is one of:
 
 * `auto`: Start/stop an automatic transition from preview to program
 * `cut`: Perform hard cut from preview to program

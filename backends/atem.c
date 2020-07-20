@@ -6,6 +6,7 @@
 #include "libmmbackend.h"
 
 //#include "../tests/hexdump.c"
+//TODO audio control
 
 MM_PLUGIN_API int init(){
 	backend atem = {
@@ -151,7 +152,7 @@ static int atem_handle_program(instance* inst, size_t n, uint8_t* data){
 	//still -> 00 00 0B C2
 	//black -> 00 06 00 00
 	//black -> 00 00 00 00
-	//[00 XX] [src] 
+	//[00 XX] [src]
 	//xx = 06 between non-cam sources?
 	return 0;
 }
@@ -290,8 +291,9 @@ static int atem_instance(instance* inst){
 }
 
 static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	char* token = spec;
 	//skip input.
-	spec += 6;
+	token += 6;
 	ident->fields.control = input_preview;
 
 	//TODO aux-switchable channels:
@@ -300,43 +302,43 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 	//	m/e1 multiview -> 9001?
 	//key-switchable chnannels:
 	//	mp key data
-	if(!strncmp(spec, "black", 5)){
-		spec += 5;
+	if(!strncmp(token, "black", 5)){
+		token += 5;
 		ident->fields.subcontrol = 0;
 	}
-	else if(!strncmp(spec, "bars", 4)){
-		spec += 4;
+	else if(!strncmp(token, "bars", 4)){
+		token += 4;
 		ident->fields.subcontrol = 1000;
 	}
-	else if(!strncmp(spec, "color", 5)){
-		spec += 5;
-		ident->fields.subcontrol = strtoul(spec, &spec, 10);
+	else if(!strncmp(token, "color", 5)){
+		token += 5;
+		ident->fields.subcontrol = strtoul(token, &token, 10);
 		if(!ident->fields.subcontrol){
-			LOGPF("Missing index for color generator input spec %s", spec - 5);
+			LOGPF("Missing index for color generator input spec %s", spec);
 			return 1;
 		}
 		//add input offset for color gens
 		ident->fields.subcontrol += 2000;
 	}
-	else if(!strncmp(spec, "cam", 3)){
-		spec += 3;
-		ident->fields.subcontrol = strtoul(spec, &spec, 10);
+	else if(!strncmp(token, "in", 2)){
+		token += 2;
+		ident->fields.subcontrol = strtoul(token, &token, 10);
 		if(!ident->fields.subcontrol){
-			LOGPF("Missing index for input spec %s", spec - 3);
+			LOGPF("Missing index for input spec %s", spec);
 			return 1;
 		}
 	}
-	else if(!strncmp(spec, "mp", 2)){
-		spec += 2;
-		
-		if(!strncmp(spec, "key", 3)){
-			spec += 3;
+	else if(!strncmp(token, "mp", 2)){
+		token += 2;
+
+		if(!strncmp(token, "key", 3)){
+			token += 3;
 			ident->fields.extra = 1;
 		}
 
-		ident->fields.subcontrol = strtoul(spec, &spec, 10);
+		ident->fields.subcontrol = strtoul(token, &token, 10);
 		if(!ident->fields.subcontrol){
-			LOGPF("Missing index for mediaplayer input spec %s", spec - 2);
+			LOGPF("Missing index for mediaplayer input spec %s", spec);
 			return 1;
 		}
 
@@ -350,33 +352,47 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 		return 1;
 	}
 
-	if(*spec == '.'){
-		spec++;
-		if(!strcmp(spec, "preview")){
+	if(*token == '.'){
+		token++;
+		if(!strcmp(token, "preview")){
 			ident->fields.control = input_preview;
 		}
-		else if(!strcmp(spec, "program")){
+		else if(!strcmp(token, "program")){
 			ident->fields.control = input_program;
 		}
-		else if(!strncmp(spec, "keyfill", 7)){
-			ident->fields.control = input_keyfill;
-			ident->fields.extra = strtoul(spec + 7, NULL, 10);
+		else if(!strncmp(token, "dsk", 3)){
+			token += 3;
+			ident->fields.control = input_dsk_key;
+
+			if(!strncmp(token, "fill", 4)){
+				token += 4;
+				ident->fields.control = input_dsk_fill;
+			}
+
+			ident->fields.extra = strtoul(token, NULL, 10);
 			if(!ident->fields.extra){
 				LOGPF("Missing or erroneous keyer ID for spec %s", spec);
 				return 1;
 			}
 		}
-		else if(!strncmp(spec, "key", 3)){
-			ident->fields.control = input_key;
-			ident->fields.extra = strtoul(spec + 3, NULL, 10);
+		else if(!strncmp(token, "usk", 3)){
+			token += 3;
+			ident->fields.control = input_usk_key;
+
+			if(!strncmp(token, "fill", 4)){
+				token += 4;
+				ident->fields.control = input_usk_fill;
+			}
+
+			ident->fields.extra = strtoul(token, NULL, 10);
 			if(!ident->fields.extra){
 				LOGPF("Missing or erroneous keyer ID for spec %s", spec);
 				return 1;
 			}
 		}
-		else if(!strncmp(spec, "aux", 3)){
+		else if(!strncmp(token, "aux", 3)){
 			ident->fields.control = input_aux;
-			ident->fields.extra = strtoul(spec + 3, NULL, 10);
+			ident->fields.extra = strtoul(token + 3, NULL, 10);
 			if(!ident->fields.extra){
 				LOGPF("Missing or erroneous aux ID for spec %s", spec);
 				return 1;
@@ -445,7 +461,7 @@ static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char*
 static int atem_channel_transition(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
 	//skip transition.
 	spec += 11;
-	
+
 	if(!strcmp(spec, "auto")){
 		ident->fields.control = transition_auto;
 	}
@@ -466,6 +482,11 @@ static int atem_channel_transition(instance* inst, atem_channel_ident* ident, ch
 	return 0;
 }
 
+static int atem_channel_audio(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
+	//TODO
+	return 1;
+}
+
 static channel* atem_channel(instance* inst, char* spec, uint8_t flags){
 	char* token = spec;
 	size_t n = 0;
@@ -475,11 +496,12 @@ static channel* atem_channel(instance* inst, char* spec, uint8_t flags){
 
 	if(!strncmp(token, "me", 2)){
 		ident.fields.me = strtoul(spec + 2, &token, 10);
-		if(*token != '.'){
+		if(*token != '.' || !ident.fields.me){
 			LOGPF("Failed to read M/E spec for %s", spec);
 			return NULL;
 		}
 		token++;
+		ident.fields.me--;
 	}
 
 	for(n = 0; n < atem_sentinel; n++){
@@ -570,18 +592,30 @@ static int atem_control_input(instance* inst, atem_channel_ident* ident, channel
 			hdr->me = ident->fields.me;
 			*parameter = htobe16(ident->fields.subcontrol);
 			return atem_send(inst, buffer, 12);
-		case input_keyfill:
+		case input_usk_fill:
 			hdr->length = htobe16(12);
 			memcpy(hdr->command, "CKeF", 4);
 			hdr->me = ident->fields.me;
 			hdr->reserved2 = ident->fields.extra - 1;
 			*parameter = htobe16(ident->fields.subcontrol);
 			return atem_send(inst, buffer, 12);
-		case input_key:
+		case input_usk_key:
 			hdr->length = htobe16(12);
 			memcpy(hdr->command, "CKeC", 4);
 			hdr->me = ident->fields.me;
 			hdr->reserved2 = ident->fields.extra - 1;
+			*parameter = htobe16(ident->fields.subcontrol);
+			return atem_send(inst, buffer, 12);
+		case input_dsk_fill:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CDsF", 4);
+			hdr->me = ident->fields.extra - 1;
+			*parameter = htobe16(ident->fields.subcontrol);
+			return atem_send(inst, buffer, 12);
+		case input_dsk_key:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "CDsC", 4);
+			hdr->me = ident->fields.extra - 1;
 			*parameter = htobe16(ident->fields.subcontrol);
 			return atem_send(inst, buffer, 12);
 		case input_aux:
@@ -660,7 +694,7 @@ static int atem_handle(size_t num, managed_fd* fds){
 
 	for(u = 0; u < num; u++){
 		inst = (instance*) fds[u].impl;
-		bytes = recv(fds[u].fd, &rx, sizeof(rx), 0);
+		bytes = recv(fds[u].fd, (uint8_t*) &rx, sizeof(rx), 0);
 		if(bytes < 0){
 			LOGPF("Failed to receive data for instance %s", inst->name);
 			return 1;

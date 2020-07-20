@@ -58,6 +58,7 @@ enum /*_atem_system*/ {
 	atem_colorgen,
 	atem_playout,
 	atem_transition,
+	atem_audio,
 	atem_sentinel
 };
 
@@ -70,8 +71,10 @@ enum /*_atem_control*/ {
 	/*input controls*/
 	input_preview,
 	input_program,
-	input_keyfill,
-	input_key,
+	input_usk_fill,
+	input_usk_key,
+	input_dsk_fill,
+	input_dsk_key,
 	input_aux,
 
 	/*transition controls*/
@@ -125,6 +128,7 @@ static int atem_channel_usk(instance* inst, atem_channel_ident* ident, char* spe
 static int atem_channel_colorgen(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 static int atem_channel_transition(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
+static int atem_channel_audio(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
 
 static int atem_control_input(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 static int atem_control_colorgen(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
@@ -143,6 +147,7 @@ static struct {
 	[atem_colorgen] = {"colorgen", atem_channel_colorgen, atem_control_colorgen},
 	[atem_playout] = {"playout", atem_channel_playout},
 	[atem_transition] = {"transition", atem_channel_transition, atem_control_transition},
+	[atem_audio] = {"audio", atem_channel_audio},
 	[atem_sentinel] = {NULL, NULL}
 };
 

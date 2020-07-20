@@ -116,9 +116,9 @@ install_dependencies(){
 	printf "\n"
 }
 
-ask_questions(){
+ask_questions(){	
 	# Only say if necessary
-	if [ -n "$VAR_PREFIX" ] || [ -n "$VAR_PLUGINS" ] || [ -n "$VAR_DEFAULT_CFG" ] || [ -n "$VAR_EXAMPLE_CFGS" ]; then
+	if [ -z "$VAR_PREFIX" ] || [ -z "$VAR_PLUGINS" ] || [ -z "$VAR_DEFAULT_CFG" ] || [ -z "$VAR_EXAMPLE_CFGS" ]; then
 		printf "${bold}If you don't know what you're doing, just hit enter a few times.${normal}\n\n"
 	fi
 	
@@ -147,21 +147,22 @@ ask_questions(){
 prepare_repo(){
 	printf "Cloning the repository\n"
 	git clone "https://github.com/cbdevnet/midimonster.git" "$tmp_path"
+	printf "\n"
 
 	# If not set via argument, ask whether to install development build
 	if [ -z "$NIGHTLY" ]; then
 		read -p "Do you want to install the latest development version? (y/n)? " magic
 		case "$magic" in
 			y|Y)
-				printf "OK! You´re a risky person ;D\n"
+				printf "OK! You´re a risky person ;D\n\n"
 				NIGHTLY=1
 				;;
 			n|N)
-				printf "That´s OK - installing the latest stable version for you ;-)\n"
+				printf "That´s OK - installing the latest stable version for you ;-)\n\n"
 				NIGHTLY=0
 				;;
 			*)
-				printf "${bold}Invalid input -- INSTALLING LATEST STABLE VERSION!${normal}\n"
+				printf "${bold}Invalid input -- INSTALLING LATEST STABLE VERSION!${normal}\n\n"
 				NIGHTLY=0
 				;;
 		esac
@@ -175,6 +176,7 @@ prepare_repo(){
 		printf "Checking out %s...\n" "$last_tag"
 		git checkout -f -q "$last_tag"
 	fi
+	printf "\n"
 }
 
 # Build and install the software
@@ -237,7 +239,7 @@ fi
 
 # Check if we can download the sources
 if [ "$(wget -q --spider http://github.com)" ]; then
-	printf "The installer/updater requires internet connectivity to download the midimonster sources\n"
+	printf "The installer/updater requires internet connectivity to download the midimonster sources and dependencies\n"
 	exit 1
 fi
 

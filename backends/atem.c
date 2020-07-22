@@ -296,12 +296,6 @@ static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* s
 	token += 6;
 	ident->fields.control = input_preview;
 
-	//TODO aux-switchable channels:
-	//	m/e1 preview -> 10011
-	//	m/e1 program -> 10010
-	//	m/e1 multiview -> 9001?
-	//key-switchable chnannels:
-	//	mp key data
 	if(!strncmp(token, "black", 5)){
 		token += 5;
 		ident->fields.subcontrol = 0;
@@ -754,7 +748,14 @@ static int atem_start(size_t n, instance** inst){
 }
 
 static int atem_shutdown(size_t n, instance** inst){
-	//TODO
+	size_t u = 0;
+	atem_instance_data* data = NULL;
+
+	for(u = 0; u < n; u++){
+		data = (atem_instance_data*) inst[u]->impl;
+		close(data->fd);
+	}
+
 	LOG("Backend shut down");
 	return 0;
 }

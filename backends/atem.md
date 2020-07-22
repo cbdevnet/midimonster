@@ -111,7 +111,7 @@ TBD
 ##### The `transition` subsystem
 
 This subsystem allows control over transitions between selected sources. Commands are sent out to the device
- for every incoming event with a normalised value greater than `0.9`, except for the T-Bar control which
+for every incoming event with a normalised value greater than `0.9`, except for the T-Bar control which
 is a continuous value.
 
 Specification syntax for transition channels is `transition.<control>`, where `<control>` is one of:

@@ -84,11 +84,6 @@ jobs:
       - TASK='compile'
     - os: osx
       osx_image: xcode10.2
-      compiler: gcc
-      env:
-      - TASK='compile'
-    - os: osx
-      osx_image: xcode10.2
       compiler: clang
       env:
       - TASK='sanitize'
@@ -119,7 +114,7 @@ env:
    # No colours in terminal (to reduce log file size)
    - TERM=dumb
    # Parallel make build
-   - MAKEFLAGS="-j 2"
+   - MAKEFLAGS="-j 4"
 
 cache:
   apt: true
@@ -139,10 +134,6 @@ before_install:
  - export LDFLAGS="$LDFLAGS -L/usr/local/opt/openssl@1.1/lib" 
 #Use the latest clang if we're compiling with clang
  - if [ "$TRAVIS_OS_NAME" == "linux" -a "$CC" = "clang" ]; then export CC="clang-6.0"; export CXX="clang-6.0"; fi
-#Report the compiler versions
- - $CC --version
-#OS X uses something other than $CXX variable
- - if [ "$TRAVIS_OS_NAME" == "linux" -a \( "$TASK" = "compile" -o "$TASK" = "sanitize" \) ]; then $CXX --version; fi
 # Download libraries to link with for Windows
  - if [ "$TASK" == "windows" ]; then wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip; unzip lua53.zip lua53.dll; fi
 

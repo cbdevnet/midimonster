@@ -604,15 +604,51 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
+static int sacn_start_multicast(instance* inst){
+	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
+	struct sockaddr_storage bound_name = {
+		0
+	};
+	#ifdef _WIN32
+	struct ip_mreq mcast_req = {
+		.imr_interface.s_addr = INADDR_ANY,
+	#else
+	struct ip_mreqn mcast_req = {
+		.imr_address.s_addr = INADDR_ANY,
+	#endif
+		.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni))
+	};
+	socklen_t bound_length = sizeof(bound_name);
+
+	//select the specific interface to join the mcast group on based on the bind address
+	if(getsockname(global_cfg.fd[data->fd_index].fd, (struct sockaddr*) &bound_name, &bound_length)){
+		LOGPF("Failed to read back local bind address on socket %" PRIsize_t, data->fd_index);
+		return 1;
+	}
+	else if(bound_name.ss_family != AF_INET || !((struct sockaddr_in*) &bound_name)->sin_addr.s_addr){
+		LOGPF("Socket %" PRIsize_t " not bound to a specific IPv4 address, joining multicast input group for instance %s (universe %u) on default interface", data->fd_index, inst->name, data->uni);
+	}
+	else{
+		#ifdef _WIN32
+		mcast_req.imr_interface = ((struct sockaddr_in*) &bound_name)->sin_addr;
+		#else
+		mcast_req.imr_address = ((struct sockaddr_in*) &bound_name)->sin_addr;
+		#endif
+	}
+
+	if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
+		LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst->name, mmbackend_socket_strerror(errno));
+	}
+
+	return 0;
+}
+
 static int sacn_start(size_t n, instance** inst){
 	size_t u, p;
 	int rv = 1;
 	sacn_instance_data* data = NULL;
 	sacn_instance_id id = {
 		.label = 0
-	};
-	struct ip_mreq mcast_req = {
-		.imr_interface.s_addr = INADDR_ANY
 	};
 	struct sockaddr_in* dest_v4 = NULL;
 
@@ -641,11 +677,8 @@ static int sacn_start(size_t n, instance** inst){
 			}
 		}
 
-		if(!data->unicast_input){
-			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
-			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
-				LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst[u]->name, mmbackend_socket_strerror(errno));
-			}
+		if(!data->unicast_input && sacn_start_multicast(inst[u])){
+			return 1;
 		}
 
 		if(data->xmit_prio){
@@ -667,7 +700,7 @@ static int sacn_start(size_t n, instance** inst){
 				dest_v4 = (struct sockaddr_in*) (&data->dest_addr);
 				dest_v4->sin_family = AF_INET;
 				dest_v4->sin_port = htobe16(strtoul(SACN_PORT, NULL, 10));
-				dest_v4->sin_addr = mcast_req.imr_multiaddr;
+				dest_v4->sin_addr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
 			}
 		}
 	}

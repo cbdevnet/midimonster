@@ -1,4 +1,5 @@
 #define BACKEND_NAME "sacn"
+#define DEBUG
 
 #include <string.h>
 #include <sys/types.h>
@@ -29,13 +30,15 @@ static struct /*_sacn_global_config*/ {
 	sacn_fd* fd;
 	uint64_t last_announce;
 	uint32_t next_frame;
+	uint8_t detect;
 } global_cfg = {
 	.source_name = "MIDIMonster",
 	.cid = {'M', 'I', 'D', 'I', 'M', 'o', 'n', 's', 't', 'e', 'r'},
 	.fds = 0,
 	.fd = NULL,
 	.last_announce = 0,
-	.next_frame = 0
+	.next_frame = 0,
+	.detect = 0
 };
 
 MM_PLUGIN_API int init(){
@@ -130,6 +133,16 @@ static int sacn_configure(char* option, char* value){
 			global_cfg.cid[u] = (strtoul(next, &next, 0) & 0xFF);
 		}
 	}
+	else if(!strcmp(option, "detect")){
+		global_cfg.detect = 0;
+		if(!strcmp(value, "on")){
+			global_cfg.detect = 1;
+		}
+		else if(!strcmp(value, "verbose")){
+			global_cfg.detect = 2;
+		}
+		return 0;
+	}
 	else if(!strcmp(option, "bind")){
 		mmbackend_parse_hostspec(value, &host, &port, &next);
 
@@ -138,8 +151,13 @@ static int sacn_configure(char* option, char* value){
 			return 1;
 		}
 
-		if(next && !strncmp(next, "local", 5)){
-			flags = mcast_loop;
+		//parse additional socket options
+		if(next){
+			for(next = strtok(next, " "); next; next = strtok(NULL, " ")){
+				if(!strcmp(next, "local")){
+					flags |= mcast_loop;
+				}
+			}
 		}
 
 		if(sacn_listener(host, port ? port : SACN_PORT, flags)){
@@ -401,6 +419,9 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 
 	//source filtering
 	if(inst_data->filter_enabled && memcmp(inst_data->cid_filter, frame->sender_cid, 16)){
+		if(global_cfg.detect > 1){
+			LOGPF("Discarding data for instance %s due to source filter rule", inst->name);
+		}
 		return 0;
 	}
 
@@ -418,10 +439,18 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 
 	//handle source priority (currently a 1-bit counter)
 	if(inst_data->data.last_priority > data->priority){
+		if(global_cfg.detect > 1){
+			LOGPF("Ignoring lower-priority (%d) source on %s, current source is %d", data->priority, inst->name, inst_data->data.last_priority);
+		}
 		inst_data->data.last_priority = data->priority;
 		return 0;
 	}
 	inst_data->data.last_priority = data->priority;
+
+	if(!inst_data->last_input && global_cfg.detect){
+		LOGPF("Valid data on instance %s (Universe %u): Source name %.*s, priority %d", inst->name, inst_data->uni, 64, data->source_name, data->priority);
+	}
+	inst_data->last_input = mm_timestamp();
 
 	//read data (except start code), mark changed channels
 	for(u = 1; u < be16toh(data->channels); u++){
@@ -582,6 +611,10 @@ static int sacn_handle(size_t num, managed_fd* fds){
 					inst = mm_instance_find(BACKEND_NAME, instance_id.label);
 					if(inst && sacn_process_frame(inst, frame, data)){
 						LOG("Failed to process frame");
+					}
+					else if(!inst && global_cfg.detect > 1){
+						//this will only happen with unicast input
+						LOGPF("Received data for unconfigured universe %d on descriptor %" PRIsize_t, be16toh(data->universe), ((uint64_t) fds[u].impl) & 0xFFFF);
 					}
 				}
 			}

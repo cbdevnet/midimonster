@@ -40,7 +40,7 @@ typedef struct /*_sacn_universe_model*/ {
 } sacn_universe;
 
 typedef struct /*_sacn_instance_model*/ {
-	uint32_t last_input;
+	uint64_t last_input;
 	uint16_t uni;
 	uint8_t realtime;
 	uint8_t xmit_prio;

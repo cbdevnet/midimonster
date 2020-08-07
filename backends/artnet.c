@@ -9,14 +9,19 @@
 
 #define MAX_FDS 255
 
-static uint32_t next_frame = 0;
-static uint8_t default_net = 0;
-static size_t artnet_fds = 0;
-static artnet_descriptor* artnet_fd = NULL;
+static struct {
+	uint32_t next_frame;
+	uint8_t default_net;
+	size_t fds;
+	artnet_descriptor* fd;
+	uint8_t detect;
+} global_cfg = {
+	0
+};
 
 static int artnet_listener(char* host, char* port){
 	int fd;
-	if(artnet_fds >= MAX_FDS){
+	if(global_cfg.fds >= MAX_FDS){
 		LOG("Backend descriptor limit reached");
 		return -1;
 	}
@@ -27,18 +32,19 @@ static int artnet_listener(char* host, char* port){
 	}
 
 	//store fd
-	artnet_fd = realloc(artnet_fd, (artnet_fds + 1) * sizeof(artnet_descriptor));
-	if(!artnet_fd){
+	global_cfg.fd = realloc(global_cfg.fd, (global_cfg.fds + 1) * sizeof(artnet_descriptor));
+	if(!global_cfg.fd){
 		close(fd);
+		global_cfg.fds = 0;
 		LOG("Failed to allocate memory");
 		return -1;
 	}
 
-	LOGPF("Interface %" PRIsize_t " bound to %s port %s", artnet_fds, host, port);
-	artnet_fd[artnet_fds].fd = fd;
-	artnet_fd[artnet_fds].output_instances = 0;
-	artnet_fd[artnet_fds].output_instance = NULL;
-	artnet_fds++;
+	LOGPF("Interface %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
+	global_cfg.fd[global_cfg.fds].fd = fd;
+	global_cfg.fd[global_cfg.fds].output_instances = 0;
+	global_cfg.fd[global_cfg.fds].output_instance = NULL;
+	global_cfg.fds++;
 	return 0;
 }
 
@@ -70,8 +76,8 @@ MM_PLUGIN_API int init(){
 }
 
 static uint32_t artnet_interval(){
-	if(next_frame){
-		return next_frame;
+	if(global_cfg.next_frame){
+		return global_cfg.next_frame;
 	}
 	return ARTNET_KEEPALIVE_INTERVAL;
 }
@@ -80,7 +86,7 @@ static int artnet_configure(char* option, char* value){
 	char* host = NULL, *port = NULL, *fd_opts = NULL;
 	if(!strcmp(option, "net")){
 		//configure default net
-		default_net = strtoul(value, NULL, 0);
+		global_cfg.default_net = strtoul(value, NULL, 0);
 		return 0;
 	}
 	else if(!strcmp(option, "bind")){
@@ -94,6 +100,16 @@ static int artnet_configure(char* option, char* value){
 		if(artnet_listener(host, (port ? port : ARTNET_PORT))){
 			LOGPF("Failed to bind descriptor: %s", value);
 			return 1;
+		}
+		return 0;
+	}
+	else if(!strcmp(option, "detect")){
+		global_cfg.detect = 0;
+		if(!strcmp(value, "on")){
+			global_cfg.detect = 1;
+		}
+		else if(!strcmp(value, "verbose")){
+			global_cfg.detect = 2;
 		}
 		return 0;
 	}
@@ -111,7 +127,7 @@ static int artnet_instance(instance* inst){
 		return 1;
 	}
 
-	data->net = default_net;
+	data->net = global_cfg.default_net;
 	for(u = 0; u < sizeof(data->data.channel) / sizeof(channel); u++){
 		data->data.channel[u].ident = u;
 		data->data.channel[u].instance = inst;
@@ -136,7 +152,7 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 	else if(!strcmp(option, "iface") || !strcmp(option, "interface")){
 		data->fd_index = strtoul(value, NULL, 0);
 
-		if(data->fd_index >= artnet_fds){
+		if(data->fd_index >= global_cfg.fds){
 			LOGPF("Invalid interface configured for instance %s", inst->name);
 			return 1;
 		}
@@ -223,7 +239,7 @@ static int artnet_transmit(instance* inst, artnet_output_universe* output){
 	};
 	memcpy(frame.data, data->data.out, 512);
 
-	if(sendto(artnet_fd[data->fd_index].fd, (uint8_t*) &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
+	if(sendto(global_cfg.fd[data->fd_index].fd, (uint8_t*) &frame, sizeof(frame), 0, (struct sockaddr*) &data->dest_addr, data->dest_len) < 0){
 		#ifdef _WIN32
 		if(WSAGetLastError() != WSAEWOULDBLOCK){
 		#else
@@ -234,8 +250,8 @@ static int artnet_transmit(instance* inst, artnet_output_universe* output){
 		}
 		//reschedule frame output
 		output->mark = 1;
-		if(!next_frame || next_frame > ARTNET_SYNTHESIZE_MARGIN){
-			next_frame = ARTNET_SYNTHESIZE_MARGIN;
+		if(!global_cfg.next_frame || global_cfg.next_frame > ARTNET_SYNTHESIZE_MARGIN){
+			global_cfg.next_frame = ARTNET_SYNTHESIZE_MARGIN;
 		}
 		return 0;
 	}
@@ -279,22 +295,22 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 
 	if(mark){
 		//find last frame time
-		for(u = 0; u < artnet_fd[data->fd_index].output_instances; u++){
-			if(artnet_fd[data->fd_index].output_instance[u].label == inst->ident){
+		for(u = 0; u < global_cfg.fd[data->fd_index].output_instances; u++){
+			if(global_cfg.fd[data->fd_index].output_instance[u].label == inst->ident){
 				break;
 			}
 		}
 
-		frame_delta = mm_timestamp() - artnet_fd[data->fd_index].output_instance[u].last_frame;
+		frame_delta = mm_timestamp() - global_cfg.fd[data->fd_index].output_instance[u].last_frame;
 		//check output rate limit, request next frame
 		if(frame_delta < ARTNET_FRAME_TIMEOUT){
-			artnet_fd[data->fd_index].output_instance[u].mark = 1;
-			if(!next_frame || next_frame > (ARTNET_FRAME_TIMEOUT - frame_delta)){
-				next_frame = (ARTNET_FRAME_TIMEOUT - frame_delta);
+			global_cfg.fd[data->fd_index].output_instance[u].mark = 1;
+			if(!global_cfg.next_frame || global_cfg.next_frame > (ARTNET_FRAME_TIMEOUT - frame_delta)){
+				global_cfg.next_frame = (ARTNET_FRAME_TIMEOUT - frame_delta);
 			}
 			return 0;
 		}
-		return artnet_transmit(inst, artnet_fd[data->fd_index].output_instance + u);
+		return artnet_transmit(inst, global_cfg.fd[data->fd_index].output_instance + u);
 	}
 
 	return 0;
@@ -306,6 +322,11 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 	channel* chan = NULL;
 	channel_value val;
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
+
+	if(!data->last_input && global_cfg.detect){
+		LOGPF("Valid data on instance %s (Net %d Universe %d): %d channels", inst->name, data->net, data->uni, be16toh(frame->length));
+	}
+	data->last_input = mm_timestamp();
 
 	if(be16toh(frame->length) > 512){
 		LOGPF("Invalid frame channel count: %d", be16toh(frame->length));
@@ -366,23 +387,23 @@ static int artnet_handle(size_t num, managed_fd* fds){
 	artnet_pkt* frame = (artnet_pkt*) recv_buf;
 
 	//transmit keepalive & synthesized frames
-	next_frame = 0;
-	for(u = 0; u < artnet_fds; u++){
-		for(c = 0; c < artnet_fd[u].output_instances; c++){
-			synthesize_delta = timestamp - artnet_fd[u].output_instance[c].last_frame;
-			if((artnet_fd[u].output_instance[c].mark
+	global_cfg.next_frame = 0;
+	for(u = 0; u < global_cfg.fds; u++){
+		for(c = 0; c < global_cfg.fd[u].output_instances; c++){
+			synthesize_delta = timestamp - global_cfg.fd[u].output_instance[c].last_frame;
+			if((global_cfg.fd[u].output_instance[c].mark
 						&& synthesize_delta >= ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN) //synthesize next frame
 					|| synthesize_delta >= ARTNET_KEEPALIVE_INTERVAL){ //keepalive timeout
-				inst = mm_instance_find(BACKEND_NAME, artnet_fd[u].output_instance[c].label);
+				inst = mm_instance_find(BACKEND_NAME, global_cfg.fd[u].output_instance[c].label);
 				if(inst){
-					artnet_transmit(inst, artnet_fd[u].output_instance + c);
+					artnet_transmit(inst, global_cfg.fd[u].output_instance + c);
 				}
 			}
 
 			//update next_frame
-			if(artnet_fd[u].output_instance[c].mark
-					&& (!next_frame || next_frame > ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta)){
-				next_frame = ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta;
+			if(global_cfg.fd[u].output_instance[c].mark
+					&& (!global_cfg.next_frame || global_cfg.next_frame > ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta)){
+				global_cfg.next_frame = ARTNET_FRAME_TIMEOUT + ARTNET_SYNTHESIZE_MARGIN - synthesize_delta;
 			}
 		}
 	}
@@ -399,6 +420,9 @@ static int artnet_handle(size_t num, managed_fd* fds){
 					inst = mm_instance_find(BACKEND_NAME, inst_id.label);
 					if(inst && artnet_process_frame(inst, frame)){
 						LOG("Failed to process frame");
+					}
+					else if(!inst && global_cfg.detect > 1){
+						LOGPF("Received data for unconfigured universe %d (net %d) on descriptor %" PRIsize_t, frame->universe, frame->net, (((uint64_t) fds[u].impl) & 0xFF));
 					}
 				}
 			}
@@ -429,7 +453,7 @@ static int artnet_start(size_t n, instance** inst){
 		.label = 0
 	};
 
-	if(!artnet_fds){
+	if(!global_cfg.fds){
 		LOG("Failed to start backend: no descriptors bound");
 		return 1;
 	}
@@ -452,23 +476,23 @@ static int artnet_start(size_t n, instance** inst){
 
 		//if enabled for output, add to keepalive tracking
 		if(data->dest_len){
-			artnet_fd[data->fd_index].output_instance = realloc(artnet_fd[data->fd_index].output_instance, (artnet_fd[data->fd_index].output_instances + 1) * sizeof(artnet_output_universe));
+			global_cfg.fd[data->fd_index].output_instance = realloc(global_cfg.fd[data->fd_index].output_instance, (global_cfg.fd[data->fd_index].output_instances + 1) * sizeof(artnet_output_universe));
 
-			if(!artnet_fd[data->fd_index].output_instance){
+			if(!global_cfg.fd[data->fd_index].output_instance){
 				LOG("Failed to allocate memory");
 				goto bail;
 			}
-			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances].label = id.label;
-			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances].last_frame = 0;
-			artnet_fd[data->fd_index].output_instance[artnet_fd[data->fd_index].output_instances].mark = 0;
+			global_cfg.fd[data->fd_index].output_instance[global_cfg.fd[data->fd_index].output_instances].label = id.label;
+			global_cfg.fd[data->fd_index].output_instance[global_cfg.fd[data->fd_index].output_instances].last_frame = 0;
+			global_cfg.fd[data->fd_index].output_instance[global_cfg.fd[data->fd_index].output_instances].mark = 0;
 
-			artnet_fd[data->fd_index].output_instances++;
+			global_cfg.fd[data->fd_index].output_instances++;
 		}
 	}
 
-	LOGPF("Registering %" PRIsize_t " descriptors to core", artnet_fds);
-	for(u = 0; u < artnet_fds; u++){
-		if(mm_manage_fd(artnet_fd[u].fd, BACKEND_NAME, 1, (void*) u)){
+	LOGPF("Registering %" PRIsize_t " descriptors to core", global_cfg.fds);
+	for(u = 0; u < global_cfg.fds; u++){
+		if(mm_manage_fd(global_cfg.fd[u].fd, BACKEND_NAME, 1, (void*) u)){
 			goto bail;
 		}
 	}
@@ -485,11 +509,13 @@ static int artnet_shutdown(size_t n, instance** inst){
 		free(inst[p]->impl);
 	}
 
-	for(p = 0; p < artnet_fds; p++){
-		close(artnet_fd[p].fd);
-		free(artnet_fd[p].output_instance);
+	for(p = 0; p < global_cfg.fds; p++){
+		close(global_cfg.fd[p].fd);
+		free(global_cfg.fd[p].output_instance);
 	}
-	free(artnet_fd);
+	free(global_cfg.fd);
+	global_cfg.fd = NULL;
+	global_cfg.fds = 0;
 
 	LOG("Backend shut down");
 	return 0;

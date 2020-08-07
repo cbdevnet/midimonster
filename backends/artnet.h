@@ -47,6 +47,7 @@ typedef struct /*_artnet_instance_model*/ {
 	socklen_t dest_len;
 	artnet_universe data;
 	size_t fd_index;
+	uint64_t last_input;
 } artnet_instance_data;
 
 typedef union /*_artnet_instance_id*/ {

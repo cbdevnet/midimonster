@@ -1,5 +1,4 @@
 #define BACKEND_NAME "sacn"
-#define DEBUG
 
 #include <string.h>
 #include <sys/types.h>

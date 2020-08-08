@@ -24,6 +24,7 @@ The `midimonster` module provides the following functions:
 | `timestamp()`			| `print(midimonster.timestamp())`	| Get the internal core timestamp (in milliseconds)	|
 | `interval(function, long)`	| `midimonster.interval(toggle, 100)`	| Register a function to be called periodically. Interval is specified in milliseconds (accurate to 10msec). Calling `interval` with the same function again updates the interval. Specifying the interval as `0` cancels the interval |
 | `manage(function, socket)`	| `midimonster.manage(handler, socket)`	| Register a (connected/listening) socket to the MIDIMonster core. Calls `function(socket)` when the socket is ready to read. Calling this method with `None` as the function argument unregisters the socket. A socket may only have one associated handler |
+| `channels()`			| `midimonster.channels()`		| Fetch a list of all currently known channels on the instance. Note that this function only returns useful data after the configuration has been read completely, i.e. any time after initial startup |
 | `cleanup_handler(function)`	| `midimonster.cleanup_handler(save_all)`| Register a function to be called when the instance is destroyed (on MIDIMonster shutdown). One cleanup handler can be registered per instance. Calling this function when the instance already has a cleanup handler registered replaces the handler, returning the old one. |
 
 When a channel handler executes, calling `midimonster.inputvalue()` for that exact channel returns the previous value,

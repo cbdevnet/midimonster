@@ -112,6 +112,24 @@ static int python_prepend_str(PyObject* list, char* str){
 	return 0;
 }
 
+static PyObject* mmpy_channels(PyObject* self, PyObject* args){
+	size_t u = 0;
+	PyObject* list = NULL;
+	instance* inst = *((instance**) PyModule_GetState(self));
+	python_instance_data* data = (python_instance_data*) inst->impl;
+
+	if(!last_timestamp){
+		LOG("The channels() API will not return usable results before the configuration has been read completely");
+	}
+
+	list = PyList_New(data->channels);
+	for(u = 0; u < data->channels; u++){
+		PyList_SET_ITEM(list, u, PyUnicode_FromString(data->channel[u].name));
+	}
+
+	return list;
+}
+
 static PyObject* mmpy_output(PyObject* self, PyObject* args){
 	instance* inst = *((instance**) PyModule_GetState(self));
 	python_instance_data* data = (python_instance_data*) inst->impl;
@@ -432,6 +450,7 @@ static PyObject* mmpy_init(){
 		{"timestamp", mmpy_timestamp, METH_VARARGS, "Get the core timestamp (in milliseconds)"},
 		{"manage", mmpy_manage_fd, METH_VARARGS, "(Un-)register a socket or file descriptor for notifications"},
 		{"interval", mmpy_interval, METH_VARARGS, "Register or update an interval handler"},
+		{"channels", mmpy_channels, METH_VARARGS, "List currently registered instance channels"},
 		{"cleanup_handler", mmpy_cleanup_handler, METH_VARARGS, "Register or update the instances cleanup handler"},
 		{0}
 	};

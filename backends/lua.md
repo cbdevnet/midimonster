@@ -6,8 +6,8 @@ and  manipulate events using the Lua scripting language.
 Every instance has its own interpreter state which can be loaded with custom scripts.
 
 To process incoming channel events, the MIDIMonster calls corresponding Lua functions (if they exist)
-with the value (as a Lua `number` type) as parameter. Alternatively, a designated default channel handler
-which will receive events for all incoming channels may be supplied in the configuration.
+with the normalized event value (as a Lua `number` type) as parameter. Alternatively, a designated
+default channel handler which will receive events for all incoming channels may be set in the configuration.
 
 The backend can also call Lua functions repeatedly using a timer, allowing users to implement time-based
 functionality (such as evaluating a fixed mathematical function or outputting periodic updates).
@@ -25,6 +25,7 @@ The following functions are provided within the Lua interpreter for interaction 
 | `timestamp()`			| `print(timestamp())`		| Returns the core timestamp for this iteration with millisecond resolution. This is not a performance timer, but intended for timeouting, etc |
 | `thread(function)`		| `thread(run_show)`		| Run a function as a Lua thread (see below) |
 | `sleep(number)`		| `sleep(100)`			| Suspend current thread for time specified in milliseconds |
+| `channels()`			| `chans = channels()`		| Fetch an array of all currently known channels on the instance. Note that this function only works properly after the configuration has been read completely, i.e. any time after startup |
 
 While a channel handler executes, calling `input_value` for that channel returns the previous value.
 The stored value is updated once the handler returns.

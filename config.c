@@ -7,7 +7,6 @@
 #endif
 
 #define BACKEND_NAME "core/cfg"
-#define DEBUG
 #include "midimonster.h"
 #include "config.h"
 #include "backend.h"

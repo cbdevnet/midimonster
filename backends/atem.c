@@ -272,6 +272,8 @@ static int atem_configure_instance(instance* inst, char* option, char* value){
 			LOGPF("Failed to connect to host %s", value);
 			return 1;
 		}
+
+		LOGPF("Connected instance %s to %s", inst->name, host);
 		return 0;
 	}
 

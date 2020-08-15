@@ -140,7 +140,7 @@ side must have exactly one channel.
 
 Example multi-channel mapping:
 ```
-instance-a.channel{1..5} > instance-b.{1,2,3,4,5}
+instance-a.channel{1..5} > instance-b.{a,b,c,d,e}
 ```
 
 ## Backend documentation

@@ -1,11 +1,11 @@
 ### The `visca` backend
 
-The VISCA backend provides control of compatible PTZ (Pan, Tilt, Zoom) controllable cameras
-via the network. This protocol has, with some variations, been implemented by multiple manufacturers
-in their camera equipment. There may be some specific limits on the command set depending on make
-and model of your equpipment.
+The `visca` backend provides control of compatible PTZ (Pan, Tilt, Zoom) controllable cameras
+via the network. The VISCA protocol has, with some variations, been implemented by multiple manufacturers
+in their camera equipment. There may be some specific limits on the command set depending on the make
+and model of your equipment.
 
-This backend can connect to both UDP and TCP based cameras.
+This backend can connect to both UDP and TCP based camera control interfaces.
 
 #### Global configuration
 

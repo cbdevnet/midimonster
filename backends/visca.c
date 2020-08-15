@@ -44,7 +44,7 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 		data->cam_address = strtoul(value, NULL, 10);
 		return 0;
 	}
-	if(!strcmp(option, "connect")){
+	else if(!strcmp(option, "connect")){
 		if(data->fd >= 0){
 			LOGPF("Instance %s already connected", inst->name);
 			return 1;
@@ -66,6 +66,24 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 			return 1;
 		}
 		return 0;
+	}
+	else if(!strcmp(option, "device")){
+		if(data->fd >= 0){
+			LOGPF("Instance %s already connected", inst->name);
+			return 1;
+		}
+
+		#ifdef _WIN32
+		LOGPF("Direct device connections are not possible on Windows");
+		return 1;
+		#else
+		data->fd = open(value, O_NONBLOCK);
+		if(data->fd < 0){
+			LOGPF("Failed to connect instance %s to device %s", inst->name, value);
+			return 1;
+		}
+		return 0;
+		#endif
 	}
 
 	LOGPF("Unknown instance configuration parameter %s for instance %s", option, inst->name);
@@ -109,6 +127,7 @@ static channel* ptz_channel(instance* inst, char* spec, uint8_t flags){
 		return NULL;
 	}
 
+	//store the memory to be called above the command type
 	if(ident == call){
 		ident |= (strtoul(spec + strlen(ptz_channels[call].name), NULL, 10) << 8);
 	}
@@ -118,8 +137,8 @@ static channel* ptz_channel(instance* inst, char* spec, uint8_t flags){
 
 static size_t ptz_set_pantilt(instance* inst, channel* c, channel_value* v, uint8_t* msg){
 	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
-	uint32_t* x = (uint32_t*) msg + 6;
-	uint32_t* y = (uint32_t*) msg + 10;
+	uint32_t* x = (uint32_t*) (msg + 6);
+	uint32_t* y = (uint32_t*) (msg + 10);
 	
 	if(c->ident == pan){
 		data->x = ((ptz_channels[pan].max - ptz_channels[pan].min) * v->normalised) + ptz_channels[pan].min;
@@ -144,17 +163,18 @@ static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint
 	else{
 		data->tiltspeed = ((ptz_channels[tiltspeed].max - ptz_channels[tiltspeed].min) * v->normalised) + ptz_channels[tiltspeed].min;
 	}
+
 	return 0;
 }
 
 static size_t ptz_set_zoom(instance* inst, channel* c, channel_value* v, uint8_t* msg){
-	uint32_t* position = (uint32_t*) msg + 4;
+	uint32_t* position = (uint32_t*) (msg + 4);
 	*position = htobe32(((ptz_channels[zoom].max - ptz_channels[zoom].min) * v->normalised) + ptz_channels[zoom].min);
 	return ptz_channels[zoom].bytes;
 }
 
 static size_t ptz_set_focus(instance* inst, channel* c, channel_value* v, uint8_t* msg){
-	uint32_t* position = (uint32_t*) msg + 4;
+	uint32_t* position = (uint32_t*) (msg + 4);
 	*position = htobe32(((ptz_channels[focus].max - ptz_channels[focus].min) * v->normalised) + ptz_channels[focus].min);
 	return ptz_channels[focus].bytes;
 }

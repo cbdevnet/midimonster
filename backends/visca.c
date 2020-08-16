@@ -74,7 +74,7 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 		}
 
 		#ifdef _WIN32
-		LOGPF("Direct device connections are not possible on Windows");
+		LOG("Direct device connections are not possible on Windows");
 		return 1;
 		#else
 		data->fd = open(value, O_NONBLOCK);

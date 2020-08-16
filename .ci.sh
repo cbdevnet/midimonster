@@ -78,13 +78,15 @@ elif [ "$TASK" = "sanitize" ]; then
 	# Run sanitized compile
 	ci_fold start "make_sanitize"
 	if ! make sanitize; then
-		exit "$?"
+		printf "Failed to build\n"
+		exit 1
 	fi
 	ci_fold end "make_sanitize"
 elif [ "$TASK" = "windows" ]; then
 	ci_fold start "make_windows"
 	if ! make windows; then
-		exit "$?"
+		printf "Failed to build\n"
+		exit 1
 	fi
 	make -C backends lua.dll
 	ci_fold end "make_windows"
@@ -110,7 +112,8 @@ else
 	# Otherwise compile as normal
 	ci_fold start "make"
 	if ! make full; then
-		exit "$?"
+		printf "Failed to build\n"
+		exit 1
 	fi
 	ci_fold end "make"
 	if [ "$(git describe)" == "$(git describe --abbrev=0)" ] || [ -n "$DEPLOY" ]; then

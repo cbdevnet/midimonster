@@ -9,8 +9,6 @@ access (as is available under Linux) is possible.
 
 #### Global configuration
 
-This backend does not take any global configuration.
-
 | Option	| Example value		| Default value		| Description				|
 |---------------|-----------------------|-----------------------|---------------------------------------|
 | `interval`	| `100`			| `50`			| Data polling interval in milliseconds. Lower intervals lead to higher CPU load. This value should normally not be changed. |

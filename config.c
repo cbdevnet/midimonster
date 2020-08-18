@@ -545,7 +545,7 @@ static int config_line(char* line){
 		//find separator
 		separator = strchr(line, '=');
 		if(!separator){
-			fprintf(stderr, "Not an assignment: %s\n", line);
+			fprintf(stderr, "Not an assignment (currently expecting %s configuration): %s\n", line, (parser_state == backend_cfg) ? "backend" : "instance");
 			return 1;
 		}
 

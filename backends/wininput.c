@@ -65,9 +65,13 @@ static struct {
 	//sorted in _start
 	wininput_request* request;
 	uint32_t interval;
+	uint64_t wheel, wheel_max, wheel_delta;
+	uint8_t wheel_inverted;
 } cfg = {
 	.requests = 0,
-	.interval = 50
+	.interval = 50,
+	.wheel_max = 0xFFFF,
+	.wheel_delta = 1
 };
 
 MM_PLUGIN_API int init(){
@@ -120,10 +124,38 @@ static uint32_t wininput_interval(){
 }
 
 static int wininput_configure(char* option, char* value){
+	int64_t parameter = 0;
+	char* next_token = NULL;
+
 	if(!strcmp(option, "interval")){
 		cfg.interval = strtoul(value, NULL, 0);
 		return 0;
 	}
+	else if(!strcmp(option, "wheel")){
+		parameter = strtoll(value, &next_token, 0);
+
+		cfg.wheel_max = parameter;
+		if(parameter < 0){
+			LOG("Inverting mouse wheel data");
+			cfg.wheel_max = -parameter;
+			cfg.wheel_inverted = 1;
+		}
+		else if(!parameter){
+			LOGPF("Invalid mouse wheel configuration %s", value);
+			return 1;
+		}
+
+		if(next_token && *next_token){
+			cfg.wheel = strtoul(next_token, NULL, 0);
+		}
+
+		return 0;
+	}
+	else if(!strcmp(option, "wheeldelta")){
+		cfg.wheel_delta = strtoul(value, NULL, 0);
+		return 0;
+	}
+
 
 	LOGPF("Unknown backend configuration option %s", option);
 	return 1;
@@ -195,6 +227,13 @@ static uint64_t wininput_channel_mouse(instance* inst, char* spec, uint8_t flags
 	else if(!strcmp(spec, "y")){
 		ident.fields.channel = position;
 		ident.fields.control = 1;
+	}
+	else if(!strcmp(spec, "wheel")){
+		ident.fields.channel = wheel;
+		if(flags & mmchannel_input){
+			LOG("The mouse wheel can only be used as an output channel");
+			return 0;
+		}
 	}
 	else{
 		//check the buttons
@@ -354,7 +393,7 @@ static INPUT wininput_event_mouse(uint8_t channel, uint8_t control, double value
 		ev.mi.dx = cfg.mouse_x;
 		ev.mi.dy = cfg.mouse_y;
 	}
-	if(channel == button){
+	else if(channel == button){
 		switch(control){
 			case VK_LBUTTON:
 				flags_up |= MOUSEEVENTF_LEFTUP;
@@ -382,6 +421,15 @@ static INPUT wininput_event_mouse(uint8_t channel, uint8_t control, double value
 		else{
 			ev.mi.dwFlags |= flags_up;
 		}
+	}
+	else if(channel == wheel){
+		ev.mi.dwFlags |= MOUSEEVENTF_WHEEL;
+		ev.mi.mouseData = ((value * cfg.wheel_max) - cfg.wheel) * cfg.wheel_delta;
+		if(cfg.wheel_inverted){
+			ev.mi.mouseData *= -1;
+		}
+		DBGPF("Moving wheel %d (invert %d) with delta %d: %d", (value * cfg.wheel_max) - cfg.wheel, cfg.wheel_inverted, cfg.wheel_delta, ev.mi.mouseData);
+		cfg.wheel = (value * cfg.wheel_max);
 	}
 
 	return ev;
@@ -478,6 +526,10 @@ static int wininput_handle(size_t num, managed_fd* fds){
 			if(mouse_updated == 2){
 				push_event = 1;
 			}
+		}
+		else if(cfg.request[u].ident.fields.type == mouse
+				&& cfg.request[u].ident.fields.channel == wheel){
+			//ignore wheel requests, can't read that
 		}
 		else if(cfg.request[u].ident.fields.type == keyboard
 				|| cfg.request[u].ident.fields.type == mouse){

@@ -11,6 +11,12 @@ access (as is available under Linux) is possible.
 
 This backend does not take any global configuration.
 
+| Option	| Example value		| Default value		| Description				|
+|---------------|-----------------------|-----------------------|---------------------------------------|
+| `interval`	| `100`			| `50`			| Data polling interval in milliseconds. Lower intervals lead to higher CPU load. This value should normally not be changed. |
+| `wheel`	| `4000 2000`		| `65535 0`		| Mouse wheel range and optional initial value. To invert the mouse wheel control, specify the range as a negative integer. As the mouse wheel is a relative control, we need to specify a range incoming absolute values are mapped to. This can be used control the wheel resolution and travel size. |
+| `wheeldelta`	| `20`			| `1`			| Multiplier for wheel travel		|
+
 #### Instance configuration
 
 This backend does not take any instance-specific configuration.
@@ -29,6 +35,11 @@ as well as one channel per mouse button
 * `mouse.mmb`: Middle mouse button
 * `mouse.xmb1`: Extra mouse button 1
 * `mouse.xmb2`: Extra mouse button 2
+
+The (vertical) mouse wheel can be controlled from the MIDIMonster using the `mouse.wheel` channel, but it can not be used
+as an input channel due to limitations in the Windows API. All instances share one wheel control (see the section on known
+bugs below). The mouse wheel sensitivity can be controlled by adjusting the absolute travel range, its initial value and
+a wheel delta multiplier.
 
 All keys that have an [assigned virtual keycode](https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
 are mappable as MIDIMonster channels using the syntax `key.<keyname>`, with *keyname* being one of the following specifiers:
@@ -120,3 +131,7 @@ Some antivirus applications may detect this backend as problematic because it us
 interfaces to read keyboard and mouse input as any malicious application would. While it is definitely
 possible to configure the MIDIMonster to do malicious things, the code itself does not log anything.
 You can verify this by reading the backend code yourself.
+
+Since the Windows input system merges all keyboard/mouse input data into one data stream, using multiple
+instances of this backend is not necessary or useful. It is still supported for technical reasons.
+There may be unexpected side effects when mapping the mouse wheel in multiple instances.

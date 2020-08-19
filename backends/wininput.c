@@ -149,6 +149,11 @@ static int wininput_configure(char* option, char* value){
 			cfg.wheel = strtoul(next_token, NULL, 0);
 		}
 
+		if(cfg.wheel > cfg.wheel_max){
+			LOG("Mouse wheel initial value out of range");
+			return 1;
+		}
+
 		return 0;
 	}
 	else if(!strcmp(option, "wheeldelta")){

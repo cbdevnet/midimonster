@@ -6,7 +6,14 @@
 #include "libmmbackend.h"
 
 //#include "../tests/hexdump.c"
-//TODO audio control
+/* TODO
+ *  audio control
+ *  power information output channel
+ *  assign source IDs from the data gathered by _handle_input_props
+ *  tally output with multiple m/e's?
+ *  output event deduplication
+ *  colorgen rgb conversion
+ */
 
 MM_PLUGIN_API int init(){
 	backend atem = {
@@ -66,7 +73,7 @@ static int atem_send(instance* inst, uint8_t* payload, size_t payload_len){
 		tx.hdr.length = htobe16(ATEM_HELLO | (sizeof(atem_hdr) + payload_len));
 	}
 
-	DBGPF("Sending %" PRIsize_t " bytes, ack %d seqno %d", sizeof(atem_hdr) + payload_len, be16toh(tx.hdr.ack), be16toh(tx.hdr.seqno));
+	//DBGPF("Sending %" PRIsize_t " bytes, ack %d seqno %d", sizeof(atem_hdr) + payload_len, be16toh(tx.hdr.ack), be16toh(tx.hdr.seqno));
 	if(mmbackend_send(data->fd, (uint8_t*) &tx, sizeof(atem_hdr) + payload_len)){
 		LOGPF("Failed to send on instance %s", inst->name);
 		return 1;
@@ -108,6 +115,54 @@ static int atem_handle_strings(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
 
+static int atem_handle_topology(instance* inst, size_t n, uint8_t* data){
+	if(!memcmp(data + 4, "_MeC", 4) && n >= 11){
+		LOGPF("M/E %d has %d keyers (trailer %02X %02X)", data[8], data[9], data[10], data[11]);
+	}
+	else if(!memcmp(data + 4, "_top", 4)){
+		LOGPF("Handling topology on %s", inst->name);
+		//hex_dump(data + 8, n - 8);
+	}
+	else if(!memcmp(data + 4, "_mpl", 4)){
+		LOGPF("Handling mediaplayer on %s", inst->name);
+		//hex_dump(data + 8, n - 8);
+	}
+	else if(!memcmp(data + 4, "_MvC", 4)){
+		LOGPF("Handling multiview on %s", inst->name);
+		//hex_dump(data + 8, n - 8);
+	}
+	else if(!memcmp(data + 4, "_FAC", 4)){
+		LOGPF("Handling audio config(?) on %s", inst->name);
+		//hex_dump(data + 8, n - 8);
+	}
+	else if(!memcmp(data + 4, "_FEC", 4)){
+		LOGPF("Handling equalizer config(?) on %s", inst->name);
+		//hex_dump(data + 8, n - 8);
+	}
+	else if(!memcmp(data + 4, "_MAC", 4)){
+		LOGPF("Handling macro config on %s", inst->name);
+		//hex_dump(data + 8, n - 8);
+	}
+	return 0;
+}
+
+static int atem_handle_input_props(instance* inst, size_t n, uint8_t* data){
+	uint16_t* input = (uint16_t*) (data + 8);
+
+	if(n < 36){
+		LOG("Short input property report packet");
+		return 0;
+	}
+
+	LOGPF("%s: Source %d (%.*s / %.*s), type %d, port type %d", inst->name, be16toh(*input),
+			20, data + 8 + 2,
+			4, data + 8 + 22,
+			data[8 + 26 + 6], data[8 + 26 + 5]); //port type may also be on  + 3
+	//dump only the options
+	//hex_dump(data + 8 + 26, n - 8 - 26);
+	return 0;
+}
+
 static int atem_handle_time(instance* inst, size_t n, uint8_t* data){
 	//TODO
 	//12 2D 3A 0C 00 00 00 00
@@ -116,44 +171,98 @@ static int atem_handle_time(instance* inst, size_t n, uint8_t* data){
 }
 
 static int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data){
-	//LOGPF("Handling index tally on %s", inst->name);
-	//hex_dump(data + 8, n - 8);
-	//1g 3r -> 00 04 02 00 01 00 00 47
-	//bit 0 -> active/red
-	//bit 1 -> preview/green
-	//[nsources u16] [c1 c2 c3 c4] [00 00]
+	size_t u = 0;
+	uint16_t* inputs = (uint16_t*) (data + 8);
+
+	//sanity checks
+	if(n < 8 + 2 || n < 8 + 2 + be16toh(*inputs)){
+		return 0;
+	}
+
+	//[u16 srces] [n * u8 tally] [u16 trailer]
+	//trailers observed: 00 47 (initial sync), FF FF (changed), 00 01 (??)
+	DBGPF("%s: Tally for %d inputs (trailer %02X %02X):", inst->name, be16toh(*inputs), data[n - 2], data[n - 1]);
+	for(u = 0; u < be16toh(*inputs); u++){
+		DBGPF("  Input %" PRIsize_t " Tally %d", u + 1, data[u + 8 + 2]);
+	}
+
+	//not sure why there are two tally reports, we currently only generate output from the source tally message
 	return 0;
 }
 
 static int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data){
-	//LOGPF("Handling source tally on %s", inst->name);
-	//hex_dump(data + 8, n - 8);
+	uint16_t* next_data = (uint16_t*) (data + 8);
+	uint16_t sources = be16toh(*next_data);
+	size_t u = 0;
+	atem_channel_ident ident = {
+		.fields.system = atem_input
+	};
+	channel* out = NULL;
+	channel_value value = {
+		0
+	};
+
+	if(n < 8 + 2 || n < 8 + 2 + sources * 3){
+		return 0;
+	}
+
+	//FIXME is there an m/e identifier present in this message?
+	//[u16 nsrc] [nsrc * [u16 id, u8 tally]] [u8 trailer]
+	//trailers observed: 00 (initial sync), 66 (changed), 02 (keyer on/off)
+	DBGPF("%s: Tally for %d sources (trailer %02X):", inst->name, sources, data[n - 1]);
+
+	for(u = 0; u < sources; u++){
+		DBGPF("  Source ID %d Tally %d", ident.fields.subcontrol, data[8 + 2 + u * 3 + 2]);
+		next_data = (uint16_t*) (data + 8 + 2 + u * 3);
+		ident.fields.subcontrol = be16toh(*next_data);
+		value.normalised = 0.0;
+
+		//check for program tally
+		ident.fields.control = input_program;
+		out = mm_channel(inst, ident.label, 0);
+		if(out){
+			if(data[8 + 2 + u * 3 + 2] & 1){
+				value.normalised = 1.0;
+			}
+			mm_channel_event(out, value);
+			LOGPF("Sending %f", value.normalised);
+		}
+
+		//check for preview tally
+		ident.fields.control = input_preview;
+		out = mm_channel(inst, ident.label, 0);
+		if(out){
+			if(data[8 + 2 + u * 3 + 2] & 2){
+				value.normalised = 1.0;
+			}
+			mm_channel_event(out, value);
+			LOGPF("Sending %f", value.normalised);
+		}
+
+		//check for anything else
+		if(data[8 + 2 + u * 3 + 2] & ~3){
+			LOGPF("Unknown tally flags %d present for source %d", data[8 + 2 + u * 3 + 2], ident.fields.subcontrol);
+		}
+	}
 	return 0;
 }
 
 static int atem_handle_preview(instance* inst, size_t n, uint8_t* data){
-	//LOGPF("Preview changed on %s", inst->name);
-	//1/connect -> 00 0C 00 01 00 6D 70 6C
-	//2 -> 00 06 00 02 00 FF FF FF
-	//1 -> 00 06 00 01 00 FF FF FF
-	//[in x] -> 00 06 00 xx 00 FF FF FF
-	//still -> 00 06 0B C2 00 FF FF FF
-	//black -> x=0
-	//colors?
+	uint16_t* source = (uint16_t*) (data + 8 + 2);
+	LOGPF("Preview changed on %s, source is now %d", inst->name, be16toh(*source));
+	//connect	00 0C [u16 src] 00 6D 70 6C
+	//		00 06 [u16 src] 00 FF FF FF
 	return 0;
 }
 
 static int atem_handle_program(instance* inst, size_t n, uint8_t* data){
-	//LOGPF("Program changed on %s", inst->name);
+	uint16_t* source = (uint16_t*) (data + 8 + 2);
+	uint16_t* unknown = (uint16_t*) (data + 8);
+	LOGPF("Program changed on %s, source is now %d (header %04X)", inst->name, be16toh(*source), be16toh(*unknown));
 	//hex_dump(data + 8, n - 8);
-	//1/connect -> 00 0C 00 01
-	//2 -> 00 00 00 02
-	//1 -> 00 00 00 01
-	//still -> 00 00 0B C2
-	//black -> 00 06 00 00
-	//black -> 00 00 00 00
-	//[00 XX] [src]
-	//xx = 06 between non-cam sources?
+	//connect	00 0C [u16 src]
+	//		00 00 [u16 src]
+	//between internals 00 06 [u16 src]
 	return 0;
 }
 
@@ -178,9 +287,7 @@ static int atem_handle_color(instance* inst, size_t n, uint8_t* data){
 	uint16_t* saturation = (uint16_t*) (data + 12);
 	uint16_t* luma = (uint16_t*) (data + 14);
 	LOGPF("Color change on %s colorgen %d: hue %d saturation %d luma %d", inst->name, data[8] + 1, be16toh(*hue), be16toh(*saturation), be16toh(*luma));
-	//01 04 05 FA 03 D8 02 0F
-	//01  04 06 16 03 D8 02 0F
-	//[#] 04 [hue] [sat] [lum]
+	//[#] 04 [u16 hue] [u16 sat] [u16 lum]
 	return 0;
 }
 
@@ -224,7 +331,7 @@ static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t 
 			}
 
 			if(n == sizeof(atem_command_map) / sizeof(atem_command_map[0])){
-				LOGPF("%d bytes of data for command %.*s, no handler found", be16toh(*payload_u16), 4, payload_str);
+				DBGPF("%d bytes of data for command %.*s, no handler found", be16toh(*payload_u16), 4, payload_str);
 			}
 
 			//advance to next command
@@ -238,7 +345,7 @@ static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t 
 
 	if(hdr->length & ATEM_SEQUENCE_VALID){
 		data->txhdr.ack = hdr->seqno;
-		DBGPF("Acknowledging command %d on %s", hdr->seqno, inst->name);
+		//DBGPF("Acknowledging command %d on %s", hdr->seqno, inst->name);
 		return atem_send(inst, NULL, 0);
 	}
 
@@ -717,8 +824,8 @@ static int atem_handle(size_t num, managed_fd* fds){
 			rx.hdr.session = be16toh(rx.hdr.session);
 			rx.hdr.ack = be16toh(rx.hdr.ack);
 			rx.hdr.seqno = be16toh(rx.hdr.seqno);
-			DBGPF("Received %" PRIsize_t " bytes (%u bytes indicated) for session %04X (ack %04X seqno %04X) on instance %s",
-					bytes, ATEM_LENGTH(rx.hdr.length), rx.hdr.session, rx.hdr.ack, rx.hdr.seqno, inst->name);
+			//DBGPF("Received %" PRIsize_t " bytes (%u bytes indicated) for session %04X (ack %04X seqno %04X) on instance %s",
+			//		bytes, ATEM_LENGTH(rx.hdr.length), rx.hdr.session, rx.hdr.ack, rx.hdr.seqno, inst->name);
 			atem_process(inst, &rx.hdr, rx.payload, bytes - sizeof(atem_hdr));
 		}
 		else{

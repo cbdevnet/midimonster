@@ -94,6 +94,8 @@ typedef int (*atem_channel_control)(instance*, atem_channel_ident*, channel* c, 
 
 static int atem_handle_version(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_strings(instance* inst, size_t n, uint8_t* data);
+static int atem_handle_topology(instance* inst, size_t n, uint8_t* data);
+static int atem_handle_input_props(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_time(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tally_index(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data);
@@ -107,18 +109,27 @@ static struct {
 	char command[4];
 	atem_command_handler handler;
 } atem_command_map[] = {
-	{"_ver", atem_handle_version},
-	{"_pin", atem_handle_strings},
-	{"Warn", atem_handle_strings},
-	{"Time", atem_handle_time},
+	{"_ver", atem_handle_version}, //version
+	{"_pin", atem_handle_strings}, //product id
+	{"Warn", atem_handle_strings}, //warnings
+	{"_top", atem_handle_topology}, //topology
+	{"_MeC", atem_handle_topology}, //M/E config
+	{"_mpl", atem_handle_topology}, //mediaplayer config
+	{"_MvC", atem_handle_topology}, //multiview config
+	{"_FAC", atem_handle_topology}, //audio config?
+	{"_FEC", atem_handle_topology}, //equalizer config?
+	{"_MAC", atem_handle_topology}, //macro config
+	{"Powr", atem_handle_ignore}, //power supply
+	{"Time", atem_handle_time}, //timecode?
+	{"InPr", atem_handle_input_props}, //input properties
 	{"TlIn", atem_handle_tally_index},
 	{"TlSr", atem_handle_tally_source},
 	{"PrvI", atem_handle_preview},
 	{"PrgI", atem_handle_program},
-	{"TrPs", atem_handle_tbar},
+	{"TrPs", atem_handle_tbar}, //transition position
 	{"CCdP", atem_handle_ignore}, //camera control?
 	{"MPrp", atem_handle_ignore}, //macro
-	{"ColV", atem_handle_color}
+	{"ColV", atem_handle_color} //color value
 };
 
 static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);

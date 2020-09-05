@@ -106,7 +106,19 @@ control.luma > atem1.colorgen1.luminance
 
 ##### The `playout` subsystem
 
-TBD
+This subsystem controls the various means of getting output from the switcher to appear somewhere else.
+This mainly concerns the recording and streaming functionality present on some devices.
+
+The channels of this subsystem are addressed using the syntax `playout.<control>`, where `<control>` is
+one of:
+
+* `stream`: For devices capable of live stream output, take the stream on air / off air. The channel outputs
+the current state.
+
+Example mappings:
+```
+control.onair > atem1.playout.stream
+```
 
 ##### The `transition` subsystem
 

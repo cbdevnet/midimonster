@@ -85,7 +85,10 @@ enum /*_atem_control*/ {
 	transition_transition_mix, //TODO
 	transition_transition_dip, //TODO
 	transition_transition_wipe, //TODO
-	transition_transition_dve //TODO
+	transition_transition_dve, //TODO
+
+	/*playout controls*/
+	playout_stream
 };
 
 typedef int (*atem_command_handler)(instance*, size_t, uint8_t*);
@@ -104,6 +107,8 @@ static int atem_handle_program(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_tbar(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_ignore(instance* inst, size_t n, uint8_t* data);
 static int atem_handle_color(instance* inst, size_t n, uint8_t* data);
+static int atem_handle_stream(instance* inst, size_t n, uint8_t* data);
+static int atem_handle_aux(instance* inst, size_t n, uint8_t* data);
 
 static struct {
 	char command[4];
@@ -129,7 +134,10 @@ static struct {
 	{"TrPs", atem_handle_tbar}, //transition position
 	{"CCdP", atem_handle_ignore}, //camera control?
 	{"MPrp", atem_handle_ignore}, //macro
-	{"ColV", atem_handle_color} //color value
+	{"ColV", atem_handle_color}, //color value
+	{"SRST", atem_handle_time}, //stream duration
+	{"StRS", atem_handle_stream}, //stream status
+	{"AuxS", atem_handle_aux} //aux source switch
 };
 
 static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
@@ -144,6 +152,7 @@ static int atem_channel_audio(instance* inst, atem_channel_ident* ident, char* s
 static int atem_control_input(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 static int atem_control_colorgen(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 static int atem_control_transition(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
+static int atem_control_playout(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v);
 
 static struct {
 	char* id;
@@ -156,11 +165,22 @@ static struct {
 	[atem_dsk] = {"dsk", atem_channel_dsk},
 	[atem_usk] = {"usk", atem_channel_usk},
 	[atem_colorgen] = {"colorgen", atem_channel_colorgen, atem_control_colorgen},
-	[atem_playout] = {"playout", atem_channel_playout},
+	[atem_playout] = {"playout", atem_channel_playout, atem_control_playout},
 	[atem_transition] = {"transition", atem_channel_transition, atem_control_transition},
 	[atem_audio] = {"audio", atem_channel_audio},
 	[atem_sentinel] = {NULL, NULL}
 };
+
+#define ATEM_INTERNAL_SOURCE 1
+#define ATEM_INTERNAL_SINK 2
+
+typedef struct /*_atem_bus*/ {
+	uint16_t id; //bus id
+	uint8_t type; //bus type
+	uint8_t flags; //internal flags
+	uint16_t source; //for output buses: selected source
+	uint8_t tally;
+} atem_bus;
 
 typedef struct /*_atem_instance_data*/ {
 	int fd;
@@ -169,4 +189,6 @@ typedef struct /*_atem_instance_data*/ {
 	atem_hdr txhdr;
 
 	uint8_t tbar_inversed;
+	size_t buses;
+	atem_bus* bus;
 } atem_instance_data;

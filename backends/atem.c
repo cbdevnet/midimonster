@@ -1,11 +1,11 @@
 #define BACKEND_NAME "atem"
 #include <string.h>
 
-//#define DEBUG
+#define DEBUG
 #include "atem.h"
 #include "libmmbackend.h"
 
-//#include "../tests/hexdump.c"
+#include "../tests/hexdump.c"
 /* TODO
  *  audio control
  *  power information output channel
@@ -13,6 +13,7 @@
  *  tally output with multiple m/e's?
  *  output event deduplication
  *  colorgen rgb conversion
+ *  check/simplify all atem_send payload_len parameters against the corresponding command length fields
  */
 
 MM_PLUGIN_API int init(){
@@ -121,6 +122,13 @@ static int atem_handle_topology(instance* inst, size_t n, uint8_t* data){
 	}
 	else if(!memcmp(data + 4, "_top", 4)){
 		LOGPF("Handling topology on %s", inst->name);
+		LOGPF("  %d M/Es", data[8]);
+		LOGPF("  %d Sources", data[8 + 1]);
+		LOGPF("  %d Color Generators", data[8 + 2]);
+		LOGPF("  %d AUX buses", data[8 + 3]);
+		LOGPF("  %d DSKs", data[8 + 4]);
+		LOGPF("  %d Stingers", data[8 + 5]);
+		LOGPF("  %d DVEs", data[8 + 6]);
 		//hex_dump(data + 8, n - 8);
 	}
 	else if(!memcmp(data + 4, "_mpl", 4)){
@@ -146,8 +154,10 @@ static int atem_handle_topology(instance* inst, size_t n, uint8_t* data){
 	return 0;
 }
 
-static int atem_handle_input_props(instance* inst, size_t n, uint8_t* data){
-	uint16_t* input = (uint16_t*) (data + 8);
+static int atem_handle_input_props(instance* inst, size_t n, uint8_t* payload){
+	uint16_t* input = (uint16_t*) (payload + 8);
+	atem_instance_data* data = (atem_instance_data*) inst->impl;
+	size_t u;
 
 	if(n < 36){
 		LOG("Short input property report packet");
@@ -155,15 +165,41 @@ static int atem_handle_input_props(instance* inst, size_t n, uint8_t* data){
 	}
 
 	LOGPF("%s: Source %d (%.*s / %.*s), type %d, port type %d", inst->name, be16toh(*input),
-			20, data + 8 + 2,
-			4, data + 8 + 22,
-			data[8 + 26 + 6], data[8 + 26 + 5]); //port type may also be on  + 3
+			20, payload + 8 + 2,
+			4, payload + 8 + 22,
+			payload[8 + 26 + 6], payload[8 + 26 + 5]); //port type may also be on  + 3
+
+	//try to find the source in the internal registry
+	for(u = 0; u < data->buses; u++){
+		if(data->bus[u].id == be16toh(*input)){
+			DBGPF("The announced source %d was already registered", be16toh(*input));
+			break;
+		}
+	}
+
+	//if not yet known, register it
+	if(u == data->buses){
+		DBGPF("The announced source %d is not yet registered", be16toh(*input));
+		data->bus = realloc(data->bus, (data->buses + 1) * sizeof(atem_bus));
+		if(!data->bus){
+			//FIXME this should really fail
+			LOG("Failed to allocate memory");
+			data->buses = 0;
+			return 1;
+		}
+		data->bus[data->buses].id = be16toh(*input);
+		data->bus[data->buses].type = payload[8 + 26 + 6];
+		data->buses++;
+	}
+
 	//dump only the options
 	//hex_dump(data + 8 + 26, n - 8 - 26);
 	return 0;
 }
 
 static int atem_handle_time(instance* inst, size_t n, uint8_t* data){
+	DBGPF("Time data for %.*s", 4, data + 4);
+	//hex_dump(data + 8, n - 8);
 	//TODO
 	//12 2D 3A 0C 00 00 00 00
 	//12 2D 3A 0C 00 00 00 00
@@ -212,12 +248,12 @@ static int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data){
 	DBGPF("%s: Tally for %d sources (trailer %02X):", inst->name, sources, data[n - 1]);
 
 	for(u = 0; u < sources; u++){
-		DBGPF("  Source ID %d Tally %d", ident.fields.subcontrol, data[8 + 2 + u * 3 + 2]);
 		next_data = (uint16_t*) (data + 8 + 2 + u * 3);
 		ident.fields.subcontrol = be16toh(*next_data);
-		value.normalised = 0.0;
+		DBGPF("  Source ID %d Tally %d", ident.fields.subcontrol, data[8 + 2 + u * 3 + 2]);
 
 		//check for program tally
+		value.normalised = 0.0;
 		ident.fields.control = input_program;
 		out = mm_channel(inst, ident.label, 0);
 		if(out){
@@ -225,10 +261,10 @@ static int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data){
 				value.normalised = 1.0;
 			}
 			mm_channel_event(out, value);
-			LOGPF("Sending %f", value.normalised);
 		}
 
 		//check for preview tally
+		value.normalised = 0.0;
 		ident.fields.control = input_preview;
 		out = mm_channel(inst, ident.label, 0);
 		if(out){
@@ -236,7 +272,6 @@ static int atem_handle_tally_source(instance* inst, size_t n, uint8_t* data){
 				value.normalised = 1.0;
 			}
 			mm_channel_event(out, value);
-			LOGPF("Sending %f", value.normalised);
 		}
 
 		//check for anything else
@@ -288,6 +323,18 @@ static int atem_handle_color(instance* inst, size_t n, uint8_t* data){
 	uint16_t* luma = (uint16_t*) (data + 14);
 	LOGPF("Color change on %s colorgen %d: hue %d saturation %d luma %d", inst->name, data[8] + 1, be16toh(*hue), be16toh(*saturation), be16toh(*luma));
 	//[#] 04 [u16 hue] [u16 sat] [u16 lum]
+	return 0;
+}
+
+static int atem_handle_stream(instance* inst, size_t n, uint8_t* data){
+	DBGPF("Stream status data on %s", inst->name);
+	hex_dump(data + 8, n - 8);
+	return 0;
+}
+
+static int atem_handle_aux(instance* inst, size_t n, uint8_t* data){
+	uint16_t* source = (uint16_t*) (data + 8 + 2);
+	LOGPF("AUX %d changed to source %d", data[8] + 1, be16toh(*source));
 	return 0;
 }
 
@@ -572,8 +619,18 @@ static int atem_channel_colorgen(instance* inst, atem_channel_ident* ident, char
 }
 
 static int atem_channel_playout(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
-	//TODO
-	return 1;
+	//skip playout.
+	spec += 8;
+
+	if(!strcmp(spec, "stream")){
+		ident->fields.control = playout_stream;
+	}
+	else{
+		LOGPF("Unknown playout control %s", spec);
+		return 1;
+	}
+
+	return 0;
 }
 
 static int atem_channel_transition(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags){
@@ -747,6 +804,21 @@ static int atem_control_input(instance* inst, atem_channel_ident* ident, channel
 	return 1;
 }
 
+static int atem_control_playout(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v){
+	uint8_t buffer[ATEM_PAYLOAD_MAX] = "";
+	atem_command_hdr* hdr = (atem_command_hdr*) buffer;
+
+	switch(ident->fields.control){
+		case playout_stream:
+			hdr->length = htobe16(12);
+			memcpy(hdr->command, "StrR", 4);
+			hdr->me = (v->normalised > 0.9) ? 1 : 0;
+			return atem_send(inst, buffer, 14);
+	}
+
+	return 1;
+}
+
 static int atem_control_colorgen(instance* inst, atem_channel_ident* ident, channel* c, channel_value* v){
 	uint8_t buffer[ATEM_PAYLOAD_MAX] = "";
 	atem_command_hdr* hdr = (atem_command_hdr*) buffer;
@@ -862,6 +934,8 @@ static int atem_shutdown(size_t n, instance** inst){
 
 	for(u = 0; u < n; u++){
 		data = (atem_instance_data*) inst[u]->impl;
+		free(data->bus);
+		data->buses = 0;
 		close(data->fd);
 	}
 

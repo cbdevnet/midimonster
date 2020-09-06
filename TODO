@@ -4,3 +4,4 @@ udp backends may ignore MTU
 make event collectors threadsafe to stop marshalling data...
 collect & check backend API version
 move all connection establishment to _start to be able to hot-stop/start all backends
+event deduplication in core?

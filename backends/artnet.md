@@ -39,3 +39,6 @@ net1.1+2 > net2.5+123
 A normal channel that is part of a wide channel can not be mapped individually.
 
 #### Known bugs / problems
+
+When using this backend for output with a fast event source, some events may appear to be lost due to the packet output rate limiting
+mandated by the [ArtNet specification](https://artisticlicence.com/WebSiteMaster/User%20Guides/art-net.pdf) (Section `Refresh rate`).

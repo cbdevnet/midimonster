@@ -30,6 +30,7 @@ Each instance exposes the following channels
 * `zoom`: Zoom position
 * `focus`: Focus position
 * `memory<n>`: Call memory <n> (if incoming event value is greater than 0.9)
+* `store<n>`: Store current pan/tilt/zoom setup to memory <n> (if incoming event value is greater than 0.9)
 
 Example mappings:
 

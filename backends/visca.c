@@ -7,6 +7,7 @@
 
 /* TODO
  *	VISCA server
+ *	Rate limiting
  */
 
 MM_PLUGIN_API int init(){
@@ -128,8 +129,8 @@ static channel* ptz_channel(instance* inst, char* spec, uint8_t flags){
 	}
 
 	//store the memory to be called above the command type
-	if(ident == call){
-		ident |= (strtoul(spec + strlen(ptz_channels[call].name), NULL, 10) << 8);
+	if(ident == call || ident == store){
+		ident |= (strtoul(spec + strlen(ptz_channels[ident].name), NULL, 10) << 8);
 	}
 
 	return mm_channel(inst, ident, 1);
@@ -137,20 +138,27 @@ static channel* ptz_channel(instance* inst, char* spec, uint8_t flags){
 
 static size_t ptz_set_pantilt(instance* inst, channel* c, channel_value* v, uint8_t* msg){
 	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
-	uint32_t* x = (uint32_t*) (msg + 6);
-	uint32_t* y = (uint32_t*) (msg + 10);
-	
+
 	if(c->ident == pan){
-		data->x = ((ptz_channels[pan].max - ptz_channels[pan].min) * v->normalised) + ptz_channels[pan].min;
+		data->x = ((ptz_channels[pan].max - ptz_channels[pan].min) * v->normalised) + ptz_channels[pan].min - ptz_channels[pan].offset;
 	}
 	else{
-		data->y = ((ptz_channels[tilt].max - ptz_channels[tilt].min) * v->normalised) + ptz_channels[tilt].min;
+		data->y = ((ptz_channels[tilt].max - ptz_channels[tilt].min) * v->normalised) + ptz_channels[tilt].min - ptz_channels[tilt].offset;
 	}
 
 	msg[4] = data->panspeed;
 	msg[5] = data->tiltspeed;
-	*x = htobe32(data->x);
-	*y = htobe32(data->y);
+
+	//either i'm doing this wrong or visca is just weird.
+	msg[6] = ((data->x & 0xF000) >> 12);
+	msg[7] = ((data->x & 0x0F00) >> 8);
+	msg[8] = ((data->x & 0xF0) >> 4);
+	msg[9] = (data->x & 0x0F);
+
+	msg[10] = ((data->y & 0xF000) >> 12);
+	msg[11] = ((data->y & 0x0F00) >> 8);
+	msg[12] = ((data->y & 0xF0) >> 4);
+	msg[13] = (data->y & 0x0F);
 
 	return ptz_channels[pan].bytes;
 }
@@ -158,24 +166,30 @@ static size_t ptz_set_pantilt(instance* inst, channel* c, channel_value* v, uint
 static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint8_t* msg){
 	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
 	if(c->ident == panspeed){
-		data->panspeed = ((ptz_channels[panspeed].max - ptz_channels[panspeed].min) * v->normalised) + ptz_channels[panspeed].min;
+		data->panspeed = ((ptz_channels[panspeed].max - ptz_channels[panspeed].min) * v->normalised) + ptz_channels[panspeed].min - ptz_channels[panspeed].offset;
 	}
 	else{
-		data->tiltspeed = ((ptz_channels[tiltspeed].max - ptz_channels[tiltspeed].min) * v->normalised) + ptz_channels[tiltspeed].min;
+		data->tiltspeed = ((ptz_channels[tiltspeed].max - ptz_channels[tiltspeed].min) * v->normalised) + ptz_channels[tiltspeed].min - ptz_channels[tiltspeed].offset;
 	}
 
 	return 0;
 }
 
 static size_t ptz_set_zoom(instance* inst, channel* c, channel_value* v, uint8_t* msg){
-	uint32_t* position = (uint32_t*) (msg + 4);
-	*position = htobe32(((ptz_channels[zoom].max - ptz_channels[zoom].min) * v->normalised) + ptz_channels[zoom].min);
+	uint16_t position = ((ptz_channels[zoom].max - ptz_channels[zoom].min) * v->normalised) + ptz_channels[zoom].min - ptz_channels[zoom].offset;
+	msg[4] = ((position & 0xF000) >> 12);
+	msg[5] = ((position & 0x0F00) >> 8);
+	msg[6] = ((position & 0xF0) >> 4);
+	msg[7] = (position & 0x0F);
 	return ptz_channels[zoom].bytes;
 }
 
 static size_t ptz_set_focus(instance* inst, channel* c, channel_value* v, uint8_t* msg){
-	uint32_t* position = (uint32_t*) (msg + 4);
-	*position = htobe32(((ptz_channels[focus].max - ptz_channels[focus].min) * v->normalised) + ptz_channels[focus].min);
+	uint16_t position = ((ptz_channels[focus].max - ptz_channels[focus].min) * v->normalised) + ptz_channels[focus].min - ptz_channels[focus].offset;
+	msg[4] = ((position & 0xF000) >> 12);
+	msg[5] = ((position & 0x0F00) >> 8);
+	msg[6] = ((position & 0xF0) >> 4);
+	msg[7] = (position & 0x0F);
 	return ptz_channels[focus].bytes;
 }
 
@@ -186,6 +200,15 @@ static size_t ptz_set_memory(instance* inst, channel* c, channel_value* v, uint8
 
 	msg[5] = (c->ident >> 8);
 	return ptz_channels[call].bytes;
+}
+
+static size_t ptz_set_memory_store(instance* inst, channel* c, channel_value* v, uint8_t* msg){
+	if(v->normalised < 0.9){
+		return 0;
+	}
+
+	msg[5] = (c->ident >> 8);
+	return ptz_channels[store].bytes;
 }
 
 static int ptz_set(instance* inst, size_t num, channel** c, channel_value* v){
@@ -215,12 +238,43 @@ static int ptz_set(instance* inst, size_t num, channel** c, channel_value* v){
 }
 
 static int ptz_handle(size_t num, managed_fd* fds){
-	//no events generated here
+	uint8_t recv_buf[VISCA_BUFFER_LENGTH];
+	size_t u;
+	ssize_t bytes_read;
+	instance* inst = NULL;
+
+	//read and ignore any responses for now
+	for(u = 0; u < num; u++){
+		inst = (instance*) fds[u].impl;
+		bytes_read = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
+		if(bytes_read <= 0){
+			LOGPF("Failed to receive on signaled fd for instance %s", inst->name);
+			//TODO handle failure
+		}
+		else{
+			DBGPF("Ignored %" PRIsize_t " incoming bytes for instance %s", bytes_read, inst->name);
+		}
+	}
+
 	return 0;
 }
 
 static int ptz_start(size_t n, instance** inst){
-	//no startup needed yet
+	size_t u, fds = 0;
+	ptz_instance_data* data = NULL;
+
+	for(u = 0; u < n; u++){
+		data = (ptz_instance_data*) inst[u]->impl;
+		if(data->fd >= 0){
+			if(mm_manage_fd(data->fd, BACKEND_NAME, 1, inst[u])){
+				LOGPF("Failed to register descriptor for instance %s", inst[u]->name);
+				return 1;
+			}
+			fds++;
+		}
+	}
+
+	LOGPF("Registered %" PRIsize_t " descriptors to core", fds);
 	return 0;
 }
 

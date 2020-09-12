@@ -15,8 +15,8 @@ static int ptz_shutdown(size_t n, instance** inst);
 typedef struct /*_ptz_instance_data*/ {
 	int fd;
 	uint8_t cam_address;
-	uint32_t x;
-	uint32_t y;
+	uint16_t x;
+	uint16_t y;
 	uint8_t panspeed;
 	uint8_t tiltspeed;
 } ptz_instance_data;
@@ -29,6 +29,7 @@ enum /*ptz_channels*/ {
 	zoom,
 	focus,
 	call,
+	store,
 	sentinel
 };
 
@@ -38,20 +39,23 @@ static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint
 static size_t ptz_set_zoom(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_focus(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_memory(instance* inst, channel* c, channel_value* v, uint8_t* msg);
+static size_t ptz_set_memory_store(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 
 static struct {
 	char* name;
 	size_t bytes;
 	uint8_t pattern[VISCA_BUFFER_LENGTH];
-	size_t min;
+	size_t min; //channel range = max - min
 	size_t max;
+	size_t offset; //channel value = normalised * range - offset
 	ptz_channel_set set;
 } ptz_channels[] = {
-	[pan] = {"pan", 14, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 4000, ptz_set_pantilt},
-	[tilt] = {"tilt", 14, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 4000, ptz_set_pantilt},
-	[panspeed] = {"panspeed", 0, {0}, 0x01, 0x18, ptz_set_ptspeed},
-	[tiltspeed] = {"tiltspeed", 0, {0}, 0x01, 0x14, ptz_set_ptspeed},
-	[zoom] = {"zoom", 9, {0x80, 0x01, 0x04, 0x47, 0, 0, 0, 0, 0xFF}, 0, 4000, ptz_set_zoom},
-	[focus] = {"focus", 9, {0x80, 0x01, 0x04, 0x48, 0, 0, 0, 0, 0xFF}, 0, 4000, ptz_set_focus},
-	[call] = {"memory", 7, {0x80, 0x01, 0x04, 0x3F, 0x02, 0, 0xFF}, 0, 254, ptz_set_memory}
+	[pan] = {"pan", 15, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 0x990 * 2, 0x990, ptz_set_pantilt},
+	[tilt] = {"tilt", 15, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 0x510 * 2, 0x510, ptz_set_pantilt},
+	[panspeed] = {"panspeed", 0, {0}, 0x01, 0x18, 0, ptz_set_ptspeed},
+	[tiltspeed] = {"tiltspeed", 0, {0}, 0x01, 0x14, 0, ptz_set_ptspeed},
+	[zoom] = {"zoom", 9, {0x80, 0x01, 0x04, 0x47, 0, 0, 0, 0, 0xFF}, 0, 0x4000, 0, ptz_set_zoom},
+	[focus] = {"focus", 9, {0x80, 0x01, 0x04, 0x48, 0, 0, 0, 0, 0xFF}, 0, 0x4000, 0, ptz_set_focus},
+	[call] = {"memory", 7, {0x80, 0x01, 0x04, 0x3F, 0x02, 0, 0xFF}, 0, 254, 0, ptz_set_memory},
+	[store] = {"store", 7, {0x80, 0x01, 0x04, 0x3F, 0x01, 0, 0xFF}, 0, 254, 0, ptz_set_memory_store}
 };

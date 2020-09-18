@@ -110,8 +110,7 @@ static int ptz_instance(instance* inst){
 }
 
 static channel* ptz_channel(instance* inst, char* spec, uint8_t flags){
-	uint64_t ident = pan;
-	size_t command = 0;
+	uint64_t command = 0;
 
 	if(flags & mmchannel_input){
 		LOG("This backend currently only supports output channels");
@@ -120,21 +119,23 @@ static channel* ptz_channel(instance* inst, char* spec, uint8_t flags){
 
 	for(command = 0; command < sentinel; command++){
 		if(!strncmp(spec, ptz_channels[command].name, strlen(ptz_channels[command].name))){
-			ident = command;
+			break;
 		}
 	}
 
-	if(ident == sentinel){
+	DBGPF("Matched spec %s as %s", spec, ptz_channels[command].name ? ptz_channels[command].name : "sentinel");
+
+	if(command == sentinel){
 		LOGPF("Unknown channel spec %s", spec);
 		return NULL;
 	}
 
 	//store the memory to be called above the command type
-	if(ident == call || ident == store){
-		ident |= (strtoul(spec + strlen(ptz_channels[ident].name), NULL, 10) << 8);
+	if(command == call || command == store){
+		command |= (strtoul(spec + strlen(ptz_channels[command].name), NULL, 10) << 8);
 	}
 
-	return mm_channel(inst, ident, 1);
+	return mm_channel(inst, command, 1);
 }
 
 static size_t ptz_set_pantilt(instance* inst, channel* c, channel_value* v, uint8_t* msg){

@@ -22,10 +22,12 @@ typedef struct /*_ptz_instance_data*/ {
 } ptz_instance_data;
 
 enum /*ptz_channels*/ {
-	pan = 0,
-	tilt,
-	panspeed,
+	//channels with a name that includes another channels as prefix
+	//go first so the channel matching logic works
+	panspeed = 0,
 	tiltspeed,
+	pan,
+	tilt,
 	zoom,
 	focus,
 	focus_mode,
@@ -62,10 +64,10 @@ static struct {
 	size_t offset; //channel value = normalised * range - offset
 	ptz_channel_set set;
 } ptz_channels[] = {
-	[pan] = {"pan", 15, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 0x990 * 2, 0x990, ptz_set_pantilt},
-	[tilt] = {"tilt", 15, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 0x510 * 2, 0x510, ptz_set_pantilt},
 	[panspeed] = {"panspeed", 0, {0}, 0x01, 0x18, 0, ptz_set_ptspeed},
 	[tiltspeed] = {"tiltspeed", 0, {0}, 0x01, 0x14, 0, ptz_set_ptspeed},
+	[pan] = {"pan", 15, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 0x990 * 2, 0x990, ptz_set_pantilt},
+	[tilt] = {"tilt", 15, {0x80, 0x01, 0x06, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF}, 0, 0x510 * 2, 0x510, ptz_set_pantilt},
 	[zoom] = {"zoom", 9, {0x80, 0x01, 0x04, 0x47, 0, 0, 0, 0, 0xFF}, 0, 0x4000, 0, ptz_set_zoom},
 	[focus] = {"focus", 9, {0x80, 0x01, 0x04, 0x48, 0, 0, 0, 0, 0xFF}, 0, 0x4000, 0, ptz_set_focus},
 	[focus_mode] = {"autofocus", 6, {0x80, 0x01, 0x04, 0x38, 0, 0xFF}, 0, 1, 0, ptz_set_focus_mode},

@@ -5,7 +5,8 @@ via the network. The VISCA protocol has, with some variations, been implemented 
 in their camera equipment. There may be some specific limits on the command set depending on the make
 and model of your equipment.
 
-This backend can connect to both UDP and TCP based camera control interfaces.
+This backend can connect to both UDP and TCP based camera control interfaces. On Linux, it can also control
+devices attached to a serial/RS485 adapter.
 
 #### Global configuration
 

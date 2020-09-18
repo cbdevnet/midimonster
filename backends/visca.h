@@ -28,8 +28,14 @@ enum /*ptz_channels*/ {
 	tiltspeed,
 	zoom,
 	focus,
+	focus_mode,
+	wb_red,
+	wb_blue,
+	wb_mode,
 	call,
 	store,
+	home,
+	stop,
 	sentinel
 };
 
@@ -38,8 +44,14 @@ static size_t ptz_set_pantilt(instance* inst, channel* c, channel_value* v, uint
 static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_zoom(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_focus(instance* inst, channel* c, channel_value* v, uint8_t* msg);
+static size_t ptz_set_focus_mode(instance* inst, channel* c, channel_value* v, uint8_t* msg);
+static size_t ptz_set_wb_mode(instance* inst, channel* c, channel_value* v, uint8_t* msg);
+static size_t ptz_set_wb(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_memory(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_memory_store(instance* inst, channel* c, channel_value* v, uint8_t* msg);
+
+//relative move test
+static size_t ptz_set_stop(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 
 static struct {
 	char* name;
@@ -56,6 +68,13 @@ static struct {
 	[tiltspeed] = {"tiltspeed", 0, {0}, 0x01, 0x14, 0, ptz_set_ptspeed},
 	[zoom] = {"zoom", 9, {0x80, 0x01, 0x04, 0x47, 0, 0, 0, 0, 0xFF}, 0, 0x4000, 0, ptz_set_zoom},
 	[focus] = {"focus", 9, {0x80, 0x01, 0x04, 0x48, 0, 0, 0, 0, 0xFF}, 0, 0x4000, 0, ptz_set_focus},
+	[focus_mode] = {"autofocus", 6, {0x80, 0x01, 0x04, 0x38, 0, 0xFF}, 0, 1, 0, ptz_set_focus_mode},
+	[wb_mode] = {"wb.auto", 6, {0x80, 0x01, 0x04, 0x35, 0, 0xFF}, 0, 1, 0, ptz_set_wb_mode},
+	[wb_red] = {"wb.red", 9, {0x80, 0x01, 0x04, 0x43, 0x00, 0x00, 0, 0, 0xFF}, 0, 255, 0, ptz_set_wb},
+	[wb_blue] = {"wb.blue", 9, {0x80, 0x01, 0x04, 0x44, 0x00, 0x00, 0, 0, 0xFF}, 0, 255, 0, ptz_set_wb},
 	[call] = {"memory", 7, {0x80, 0x01, 0x04, 0x3F, 0x02, 0, 0xFF}, 0, 254, 0, ptz_set_memory},
-	[store] = {"store", 7, {0x80, 0x01, 0x04, 0x3F, 0x01, 0, 0xFF}, 0, 254, 0, ptz_set_memory_store}
+	[store] = {"store", 7, {0x80, 0x01, 0x04, 0x3F, 0x01, 0, 0xFF}, 0, 254, 0, ptz_set_memory_store},
+	[home] = {"home", 5, {0x80, 0x01, 0x06, 0x04, 0xFF}, 0, 0, 0, NULL},
+	//relative move test
+	[stop] = {"stop", 9, {0x80, 0x01, 0x06, 0x01, 0, 0, 0x03, 0x03, 0xFF}, 0, 0, 0, ptz_set_stop}
 };

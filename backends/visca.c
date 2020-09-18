@@ -8,6 +8,7 @@
 /* TODO
  *	VISCA server
  *	Rate limiting
+ *	Inquiry
  */
 
 MM_PLUGIN_API int init(){
@@ -175,6 +176,13 @@ static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint
 	return 0;
 }
 
+static size_t ptz_set_stop(instance* inst, channel* c, channel_value* v, uint8_t* msg){
+	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
+	msg[4] = data->panspeed;
+	msg[5] = data->tiltspeed;
+	return ptz_channels[stop].bytes;
+}
+
 static size_t ptz_set_zoom(instance* inst, channel* c, channel_value* v, uint8_t* msg){
 	uint16_t position = ((ptz_channels[zoom].max - ptz_channels[zoom].min) * v->normalised) + ptz_channels[zoom].min - ptz_channels[zoom].offset;
 	msg[4] = ((position & 0xF000) >> 12);
@@ -191,6 +199,24 @@ static size_t ptz_set_focus(instance* inst, channel* c, channel_value* v, uint8_
 	msg[6] = ((position & 0xF0) >> 4);
 	msg[7] = (position & 0x0F);
 	return ptz_channels[focus].bytes;
+}
+
+static size_t ptz_set_focus_mode(instance* inst, channel* c, channel_value* v, uint8_t* msg){
+	msg[4] = (v->normalised > 0.9) ? 2 : 3;
+	return ptz_channels[focus_mode].bytes;
+}
+
+static size_t ptz_set_wb_mode(instance* inst, channel* c, channel_value* v, uint8_t* msg){
+	msg[4] = (v->normalised > 0.9) ? 0 : 5;
+	return ptz_channels[wb_mode].bytes;
+}
+
+static size_t ptz_set_wb(instance* inst, channel* c, channel_value* v, uint8_t* msg){
+	uint8_t command = c->ident & 0xFF;
+	uint8_t value = ((ptz_channels[command].max - ptz_channels[command].min) * v->normalised) + ptz_channels[command].min - ptz_channels[command].offset;
+	msg[6] = value >> 4;
+	msg[7] = value & 0x0F;
+	return ptz_channels[command].bytes;
 }
 
 static size_t ptz_set_memory(instance* inst, channel* c, channel_value* v, uint8_t* msg){
@@ -223,6 +249,8 @@ static int ptz_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 		if(ptz_channels[command].bytes){
 			memcpy(tx, ptz_channels[command].pattern, ptz_channels[command].bytes);
+			//if no handler function set, assume a parameterless command and send verbatim
+			bytes = ptz_channels[command].bytes;
 		}
 		tx[0] = 0x80 | (data->cam_address & 0xF);
 

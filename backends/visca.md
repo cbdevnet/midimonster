@@ -29,6 +29,10 @@ Each instance exposes the following channels
 * `tiltspeed`: Tilt speed
 * `zoom`: Zoom position
 * `focus`: Focus position
+* `autofocus`: Switch between autofocus (events > 0.9) and manual focus drive mode
+* `wb.auto`: Switch between automatic white balance mode (events > 0.9) and manual white balance mode
+* `wb.red`, `wb.blue`: Red/Blue channel white balance gain values
+* `home`: Return to home position
 * `memory<n>`: Call memory <n> (if incoming event value is greater than 0.9)
 * `store<n>`: Store current pan/tilt/zoom setup to memory <n> (if incoming event value is greater than 0.9)
 
@@ -40,12 +44,20 @@ control.tilt > visca.tilt
 control.btn1 > visca.memory1
 ```
 
+#### Compatability list
+
+| Manufacturer	| Exact model(s) tested		| Compatible models				| Result / Notes					|
+|---------------|-------------------------------|-----------------------------------------------|-------------------------------------------------------|
+| ValueHD	| VHD-V61			| Probably all ValueHD Visca-capable devices	| Everything works except for absolute focus control	|
+| PTZOptics	| 				| Probably all of their PTZ cameras		| See ValueHD						|
+
 #### Known bugs / problems
 
 Value readback / Inquiry is not yet implemented. This backend currently only does output.
 
 Some manufacturers use VISCA, but require special framing for command flow control. This may be implemented
-in the future if there is sufficient interest.
+in the future if there is sufficient interest. Some commands may not work with some manufacturer's cameras due to
+different value ranges or command ordering.
 
 Please file a ticket if you can confirm this backend working/nonworking with a new make or model
-of camera so we can add it to the compatability list!
+of camera so we can add it to the compatibility list!

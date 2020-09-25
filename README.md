@@ -22,6 +22,7 @@ Currently, the MIDIMonster supports the following protocols:
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)		|
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
 | JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)		|
+| VISCA				| Linux, Windows, OSX	| PTZ Camera control over TCP/UDP	| [`visca`](backends/visca.md)	|
 | Lua Scripting			| Linux, Windows, OSX	|				| [`lua`](backends/lua.md)		|
 | Python Scripting		| Linux, OSX		|				| [`python`](backends/python.md)	|
 | Loopback			| Linux, Windows, OSX	|				| [`loopback`](backends/loopback.md)	|

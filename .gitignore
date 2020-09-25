@@ -5,3 +5,4 @@ libmmapi.a
 *.o
 *.so
 *.dll
+__pycache__

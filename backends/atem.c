@@ -16,6 +16,8 @@
  *  check/simplify all atem_send payload_len parameters against the corresponding command length fields
  */
 
+static uint64_t alive_timestamp = 0;
+
 MM_PLUGIN_API int init(){
 	backend atem = {
 		.name = BACKEND_NAME,
@@ -82,6 +84,19 @@ static int atem_send(instance* inst, uint8_t* payload, size_t payload_len){
 	return 0;
 }
 
+static int atem_disconnect(instance* inst){
+	atem_instance_data* data = (atem_instance_data*) inst->impl;
+	free(data->bus);
+	data->bus = NULL;
+	data->buses = 0;
+	data->established = 0;
+	memset(&(data->txhdr), 0, sizeof(data->txhdr));
+	//close(data->fd);
+	//mm_manage_fd(data->fd, BACKEND_NAME, 0, NULL);
+	//data->fd = -1;
+	return 0;
+}
+
 static int atem_connect(instance* inst){
 	atem_instance_data* data = (atem_instance_data*) inst->impl;
 
@@ -95,6 +110,10 @@ static int atem_connect(instance* inst){
 		0x00, 0x00, 0x00, 0x00
 	};
 
+	//set initial timestamp to be that of the connection for timeout purposes
+	data->last_response = mm_timestamp();
+
+	DBGPF("Sending HELLO on instance %s", inst->name);
 	return atem_send(inst, hello_payload, sizeof(hello_payload));
 }
 
@@ -357,6 +376,7 @@ static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t 
 		LOGPF("Updated session on %s to %04X", inst->name, hdr->session);
 	}
 
+	data->last_response = mm_timestamp();
 	if(hdr->length & ATEM_HELLO){
 		LOGPF("Received hello from peer on instance %s", inst->name);
 		data->established = 1;
@@ -400,8 +420,7 @@ static int atem_process(instance* inst, atem_hdr* hdr, uint8_t* payload, size_t 
 }
 
 static uint32_t atem_interval(){
-	//TODO
-	return 0;
+	return ATEM_ALIVE_INTERVAL;
 }
 
 static int atem_configure(char* option, char* value){
@@ -872,8 +891,10 @@ static int atem_set(instance* inst, size_t num, channel** c, channel_value* v){
 }
 
 static int atem_handle(size_t num, managed_fd* fds){
-	size_t u;
+	size_t n, u;
+	instance** be_insts = NULL;
 	instance* inst = NULL;
+	atem_instance_data* data = NULL;
 	ssize_t bytes;
 	struct {
 		atem_hdr hdr;
@@ -904,12 +925,37 @@ static int atem_handle(size_t num, managed_fd* fds){
 			DBGPF("Received %" PRIsize_t " bytes of short message data on instance %s", bytes, inst->name);
 		}
 	}
+
+	//regularly check all instances for an active connection
+	if(mm_timestamp() - alive_timestamp > ATEM_ALIVE_INTERVAL){
+		//fetch all instances
+		if(mm_backend_instances(BACKEND_NAME, &n, &be_insts)){
+			LOG("Failed to fetch instance list");
+			return 1;
+		}
+
+		DBGPF("Running alive check on %" PRIsize_t " instances", n);
+
+		for(u = 0; u < n; u++){
+			//check if they're alive
+			data = (atem_instance_data*) be_insts[u]->impl;
+			if(mm_timestamp() - data->last_response > ATEM_ALIVE_INTERVAL){
+				//dis/reconnect if not
+				atem_disconnect(be_insts[u]);
+				atem_connect(be_insts[u]);
+			}
+		}
+
+		free(be_insts);
+		alive_timestamp = mm_timestamp();
+	}
 	return 0;
 }
 
 static int atem_start(size_t n, instance** inst){
 	size_t u;
 	atem_instance_data* data = NULL;
+	alive_timestamp = mm_timestamp();
 
 	for(u = 0; u < n; u++){
 		data = (atem_instance_data*) inst[u]->impl;
@@ -934,9 +980,9 @@ static int atem_shutdown(size_t n, instance** inst){
 
 	for(u = 0; u < n; u++){
 		data = (atem_instance_data*) inst[u]->impl;
-		free(data->bus);
-		data->buses = 0;
+		atem_disconnect(inst[u]);
 		close(data->fd);
+		data->fd = -1;
 	}
 
 	LOG("Backend shut down");

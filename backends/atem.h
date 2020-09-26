@@ -137,7 +137,8 @@ static struct {
 	{"ColV", atem_handle_color}, //color value
 	{"SRST", atem_handle_time}, //stream duration
 	{"StRS", atem_handle_stream}, //stream status
-	{"AuxS", atem_handle_aux} //aux source switch
+	{"AuxS", atem_handle_aux}, //aux source switch
+	{"SRSS", atem_handle_ignore} //stream encoder status
 };
 
 static int atem_channel_input(instance* inst, atem_channel_ident* ident, char* spec, uint8_t flags);
@@ -173,6 +174,7 @@ static struct {
 
 #define ATEM_INTERNAL_SOURCE 1
 #define ATEM_INTERNAL_SINK 2
+#define ATEM_ALIVE_INTERVAL 2000
 
 typedef struct /*_atem_bus*/ {
 	uint16_t id; //bus id
@@ -191,4 +193,6 @@ typedef struct /*_atem_instance_data*/ {
 	uint8_t tbar_inversed;
 	size_t buses;
 	atem_bus* bus;
+
+	uint64_t last_response;
 } atem_instance_data;

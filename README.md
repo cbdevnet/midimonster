@@ -122,18 +122,25 @@ The last line is a shorter way to create a bi-directional mapping.
 
 ### Multi-channel mapping
 
-To make mapping large contiguous sets of channels easier, channel names may contain
-expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers
-delimiting a range of channels. Multiple such expressions may be used in one channel
-specification, with the rightmost expression being incremented (or decremented) first for
-evaluation.
+To make mapping large contiguous sets of channels easier, channel names may contain certain
+types of expressions specifying multiple channels at once.
+
+Expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers,
+expand to a range of channels, with the expression replaced by the incrementing or decrementing
+value.
+
+Expressions of the form `{value1,value2,value3}` (with any number of values separated by commas)
+are replaced with each of the specified values in sequence.
+
+Multiple such expressions may be used in one channel specification, with the rightmost expression
+being evaluated first.
 
 Both sides of a multi-channel assignment need to have the same number of channels, or one
 side must have exactly one channel.
 
 Example multi-channel mapping:
 ```
-instance-a.channel{1..10} > instance-b.{10..1}
+instance-a.channel{1..5} > instance-b.{a,b,c,d,e}
 ```
 
 ## Backend documentation

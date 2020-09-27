@@ -94,16 +94,18 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 
 MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	size_t u, bucket = channelstore_hash(inst, ident);
+	DBGPF("\tSearching for inst %" PRIu64 " ident %" PRIu64, inst, ident);
 	for(u = 0; u < channels.n[bucket]; u++){
+		DBGPF("\tBucket %" PRIsize_t " entry %" PRIsize_t " inst %" PRIu64 " ident %" PRIu64, bucket, u, channels.entry[bucket][u]->instance, channels.entry[bucket][u]->ident);
 		if(channels.entry[bucket][u]->instance == inst
 				&& channels.entry[bucket][u]->ident == ident){
-			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing (%" PRIsize_t " search steps)\n", ident, inst->name, u);
+			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing (bucket %" PRIsize_t ", %" PRIsize_t " search steps)\n", ident, inst->name, bucket, u);
 			return channels.entry[bucket][u];
 		}
 	}
 
 	if(!create){
-		DBGPF("Requested unknown channel %" PRIu64 " on instance %s\n", ident, inst->name);
+		DBGPF("Requested unknown channel %" PRIu64 " (bucket %" PRIsize_t ") on instance %s\n", ident, bucket, inst->name);
 		return NULL;
 	}
 

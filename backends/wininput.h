@@ -22,7 +22,7 @@ enum /*wininput_control_channel*/ {
 	keypress = 0,
 	button,
 	position,
-	//wheel, /*relative*/
+	wheel,
 
 	key_unicode
 };

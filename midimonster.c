@@ -472,6 +472,7 @@ int main(int argc, char** argv){
 		return EXIT_FAILURE;
 	}
 
+	version();
 	if(platform_initialize()){
 		fprintf(stderr, "Failed to perform platform-specific initialization\n");
 		return EXIT_FAILURE;

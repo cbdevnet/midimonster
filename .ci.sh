@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# Check for Travis and use the provided fold method if detected
+if declare -f travis_fold > /dev/null; then
+	ci_fold(){
+		travis_fold "$1" "$2"
+	}
+else
+	ci_fold(){
+		printf -- "-- %s stage %s --\n" "$1" "$2"
+	}
+fi
+
+if [ -z "$OS" ]; then
+	OS="linux"
+fi
+
 if [ "$TASK" = "spellcheck" ]; then
 	result=0
 	# Create list of files to be spellchecked
@@ -61,20 +76,22 @@ elif [ "$TASK" = "codesmell" ]; then
 	exit "$result"
 elif [ "$TASK" = "sanitize" ]; then
 	# Run sanitized compile
-	travis_fold start "make_sanitize"
+	ci_fold start "make_sanitize"
 	if ! make sanitize; then
-		exit "$?"
+		printf "Failed to build\n"
+		exit 1
 	fi
-	travis_fold end "make_sanitize"
+	ci_fold end "make_sanitize"
 elif [ "$TASK" = "windows" ]; then
-	travis_fold start "make_windows"
+	ci_fold start "make_windows"
 	if ! make windows; then
-		exit "$?"
+		printf "Failed to build\n"
+		exit 1
 	fi
 	make -C backends lua.dll
-	travis_fold end "make_windows"
+	ci_fold end "make_windows"
 	if [ "$(git describe)" == "$(git describe --abbrev=0)" ] || [ -n "$DEPLOY" ]; then
-		travis_fold start "deploy_windows"
+		ci_fold start "deploy_windows"
 		mkdir ./deployment
 		mkdir ./deployment/backends
 		mkdir ./deployment/docs
@@ -89,17 +106,18 @@ elif [ "$TASK" = "windows" ]; then
 		cd ./deployment
 		zip -r "./midimonster-$(git describe)-windows.zip" "./"
 		find . ! -iname '*.zip' -delete
-		travis_fold end "deploy_windows"
+		ci_fold end "deploy_windows"
 	fi
 else
 	# Otherwise compile as normal
-	travis_fold start "make"
+	ci_fold start "make"
 	if ! make full; then
-		exit "$?"
+		printf "Failed to build\n"
+		exit 1
 	fi
-	travis_fold end "make"
+	ci_fold end "make"
 	if [ "$(git describe)" == "$(git describe --abbrev=0)" ] || [ -n "$DEPLOY" ]; then
-		travis_fold start "deploy_unix"
+		ci_fold start "deploy_unix"
 		mkdir ./deployment
 		mkdir ./deployment/backends
 		mkdir ./deployment/docs
@@ -109,8 +127,8 @@ else
 		cp ./backends/*.md ./deployment/docs/
 		cp -r ./configs ./deployment/
 		cd ./deployment
-		tar czf "midimonster-$(git describe)-$TRAVIS_OS_NAME.tgz" ./
+		tar czf "midimonster-$(git describe)-$OS.tgz" "./"
 		find . ! -iname '*.tgz' -delete
-		travis_fold end "deploy_unix"
+		ci_fold end "deploy_unix"
 	fi
 fi

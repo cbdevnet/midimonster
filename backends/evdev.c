@@ -206,6 +206,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 		else if(data->relative_axis[data->relative_axes].max == 0){
 			LOGPF("Relative axis configuration for %s.%s has invalid range", inst->name, option + 8);
 		}
+		//this does not crash on single-integer `value`s because strtoll sets `next_token` to the terminator
 		data->relative_axis[data->relative_axes].current = strtoul(next_token, NULL, 0);
 		if(data->relative_axis[data->relative_axes].code < 0){
 			LOGPF("Failed to configure relative axis extents for %s.%s", inst->name, option + 8);

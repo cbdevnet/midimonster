@@ -35,12 +35,12 @@ Channels can be specified by their sequential index (one-based).
 
 Example mapping (data from Strip 2 LED 66's green component is mapped to the blue component of LED 2 on strip 1):
 ```
-strip1.channel6 < strip2.channel200
+op1.strip1.channel6 < op1.strip2.channel200
 ```
 
 Additionally, channels may be referred to by their color component and LED index:
 ```
-strip1.blue2 < strip2.green66
+op1.strip1.blue2 < op2.strip2.green66
 ```
 
 #### Known bugs / problems

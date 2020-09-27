@@ -9,8 +9,9 @@ Art-Net™ Designed by and Copyright Artistic Licence Holdings Ltd.
 
 | Option	| Example value		| Default value 	| Description		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| `bind`	| `127.0.0.1 6454`	| none		| Binds a network address to listen for data. This option may be set multiple times, with each interface being assigned an index starting from 0 to be used with the `interface` instance configuration option. At least one interface is required for transmission. |
+| `bind`	| `127.0.0.1 6454`	| none			| Binds a network address to listen for data. This option may be set multiple times, with each interface being assigned an index starting from 0 to be used with the `interface` instance configuration option. At least one interface is required for transmission. |
 | `net`		| `0`			| `0`			| The default net to use |
+| `detect`	| `on`, `verbose`	| `off`			| Output additional information on received data packets to help with configuring complex scenarios |
 
 #### Instance configuration
 
@@ -38,3 +39,6 @@ net1.1+2 > net2.5+123
 A normal channel that is part of a wide channel can not be mapped individually.
 
 #### Known bugs / problems
+
+When using this backend for output with a fast event source, some events may appear to be lost due to the packet output rate limiting
+mandated by the [ArtNet specification](https://artisticlicence.com/WebSiteMaster/User%20Guides/art-net.pdf) (Section `Refresh rate`).

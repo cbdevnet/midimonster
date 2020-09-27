@@ -249,7 +249,7 @@ static int maweb_instance(instance* inst){
 static channel* maweb_channel(instance* inst, char* spec, uint8_t flags){
 	maweb_instance_data* data = (maweb_instance_data*) inst->impl;
 	maweb_channel_data chan = {
-		0
+		.in = -1 //this hack allows the initial data request to push events even for zero'ed channels
 	};
 	char* next_token = NULL;
 	channel* channel_ref = NULL;

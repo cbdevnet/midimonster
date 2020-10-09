@@ -19,13 +19,14 @@ The `visca` backend does not take any global configuration.
 | `id`		| `5`			| `1`			| VISCA Camera address (normally 1 for network communication	|
 | `connect`	| `10.10.10.1 5678`	| none			| Camera network address and port. Default connection is TCP, when optionally suffixed with the `udp` keyword, connection will be UDP |
 | `device`	| `/dev/ttyUSB0`	| none			| (Linux only) Device node for a serial port adapter connecting to the camera |
+| `deadzone`	| `0.1`			| `0.1`			| Amount of event value variation to be ignored for relative movement commands |
 
 #### Channel specification
 
 Each instance exposes the following channels
 
-* `pan`: Pan axis
-* `tilt`: Tilt axis
+* `pan`: Pan axis (absolute)
+* `tilt`: Tilt axis (absolute)
 * `panspeed`: Pan speed
 * `tiltspeed`: Tilt speed
 * `zoom`: Zoom position
@@ -36,6 +37,7 @@ Each instance exposes the following channels
 * `home`: Return to home position
 * `memory<n>`: Call memory <n> (if incoming event value is greater than 0.9)
 * `store<n>`: Store current pan/tilt/zoom setup to memory <n> (if incoming event value is greater than 0.9)
+* `move.left`, `move.right`, `move.up`, `move.down`: Relative movement with the currently set `panspeed` and `tiltspeed`
 
 Example mappings:
 

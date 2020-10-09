@@ -2,6 +2,7 @@
 #define DEBUG
 
 #include <string.h>
+#include <math.h>	
 #include "visca.h"
 #include "libmmbackend.h"
 
@@ -87,6 +88,10 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 		#endif
 	}
+	else if(!strcmp(option, "deadzone")){
+		data->deadzone = strtod(value, NULL);
+		return 0;
+	}
 
 	LOGPF("Unknown instance configuration parameter %s for instance %s", option, inst->name);
 	return 1;
@@ -104,6 +109,8 @@ static int ptz_instance(instance* inst){
 	//start with maximum speeds
 	data->panspeed = ptz_channels[panspeed].max;
 	data->tiltspeed = ptz_channels[tiltspeed].max;
+	//start with a bit of slack/deadzone in relative movement axes
+	data->deadzone = 0.1;
 
 	inst->impl = data;
 	return 0;
@@ -133,6 +140,32 @@ static channel* ptz_channel(instance* inst, char* spec, uint8_t flags){
 	//store the memory to be called above the command type
 	if(command == call || command == store){
 		command |= (strtoul(spec + strlen(ptz_channels[command].name), NULL, 10) << 8);
+	}
+
+	//store relative move direction
+	else if(command == relmove){
+		if(!strcmp(spec + strlen(ptz_channels[relmove].name), ".up")
+				|| !strcmp(spec + strlen(ptz_channels[relmove].name), ".y")){
+			command |= (rel_up << 8);
+		}
+		else if(!strcmp(spec + strlen(ptz_channels[relmove].name), ".left")
+				|| !strcmp(spec + strlen(ptz_channels[relmove].name), ".x")){
+			command |= (rel_left << 8);
+		}
+
+		if(!strcmp(spec + strlen(ptz_channels[relmove].name), ".down")
+				|| !strcmp(spec + strlen(ptz_channels[relmove].name), ".y")){
+			command |= (rel_down << 8);
+		}
+		else if(!strcmp(spec + strlen(ptz_channels[relmove].name), ".right")
+				|| !strcmp(spec + strlen(ptz_channels[relmove].name), ".x")){
+			command |= (rel_right << 8);
+		}
+
+		if(command >> 8 == 0){
+			LOGPF("Could not parse relative movement command %s", spec);
+			return NULL;
+		}
 	}
 
 	return mm_channel(inst, command, 1);
@@ -177,11 +210,53 @@ static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint
 	return 0;
 }
 
-static size_t ptz_set_stop(instance* inst, channel* c, channel_value* v, uint8_t* msg){
+static size_t ptz_set_relmove(instance* inst, channel* c, channel_value* v, uint8_t* msg){
 	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
+
+	uint8_t direction = c->ident >> 8;
+	double speed_factor = v->normalised;
+
+	if(direction == rel_x
+			|| direction == rel_y){
+		//select only one move event
+		direction &= (speed_factor > 0.5) ? (rel_up | rel_left) : (rel_down | rel_right);
+
+		//scale event value to full axis
+		speed_factor = fabs((speed_factor - 0.5) * 2);
+
+		//clamp to deadzone
+		speed_factor = (speed_factor < 2 * data->deadzone) ? 0 : speed_factor;
+	}
+
+	//clear modified axis
+	if(direction & rel_x){
+		data->relative_movement &= ~rel_x;
+	}
+	else{
+		data->relative_movement &= ~rel_y;
+	}
+
+	if(speed_factor){
+		data->relative_movement |= direction;
+	}
+
+	//set stored axis speed
 	msg[4] = data->panspeed;
 	msg[5] = data->tiltspeed;
-	return ptz_channels[stop].bytes;
+
+	//update motor control from movement data
+	msg[6] |= (data->relative_movement & (rel_left | rel_right)) >> 2;
+	msg[7] |= data->relative_movement & (rel_up | rel_down);
+
+	//stop motors if unset
+	msg[6] = msg[6] ? msg[6] : 3;
+	msg[7] = msg[7] ? msg[7] : 3;
+
+	DBGPF("Moving axis %d with factor %f, total movement now %02X, commanding %d / %d, %d / %d",
+			direction, speed_factor, data->relative_movement,
+			msg[6], msg[4], msg[7], msg[5]);
+
+	return ptz_channels[relmove].bytes;
 }
 
 static size_t ptz_set_zoom(instance* inst, channel* c, channel_value* v, uint8_t* msg){

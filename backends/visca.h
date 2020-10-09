@@ -12,6 +12,15 @@ static int ptz_shutdown(size_t n, instance** inst);
 
 #define VISCA_BUFFER_LENGTH 50
 
+enum /*_ptz_relmove_channel */ {
+	rel_up = 1,
+	rel_down = 2,
+	rel_left = 4,
+	rel_right = 8,
+	rel_x = 3,
+	rel_y = 12
+};
+
 typedef struct /*_ptz_instance_data*/ {
 	int fd;
 	uint8_t cam_address;
@@ -19,6 +28,8 @@ typedef struct /*_ptz_instance_data*/ {
 	uint16_t y;
 	uint8_t panspeed;
 	uint8_t tiltspeed;
+	uint8_t relative_movement;
+	double deadzone;
 } ptz_instance_data;
 
 enum /*ptz_channels*/ {
@@ -38,6 +49,7 @@ enum /*ptz_channels*/ {
 	store,
 	home,
 	stop,
+	relmove,
 	sentinel
 };
 
@@ -51,9 +63,7 @@ static size_t ptz_set_wb_mode(instance* inst, channel* c, channel_value* v, uint
 static size_t ptz_set_wb(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_memory(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 static size_t ptz_set_memory_store(instance* inst, channel* c, channel_value* v, uint8_t* msg);
-
-//relative move test
-static size_t ptz_set_stop(instance* inst, channel* c, channel_value* v, uint8_t* msg);
+static size_t ptz_set_relmove(instance* inst, channel* c, channel_value* v, uint8_t* msg);
 
 static struct {
 	char* name;
@@ -77,6 +87,6 @@ static struct {
 	[call] = {"memory", 7, {0x80, 0x01, 0x04, 0x3F, 0x02, 0, 0xFF}, 0, 254, 0, ptz_set_memory},
 	[store] = {"store", 7, {0x80, 0x01, 0x04, 0x3F, 0x01, 0, 0xFF}, 0, 254, 0, ptz_set_memory_store},
 	[home] = {"home", 5, {0x80, 0x01, 0x06, 0x04, 0xFF}, 0, 0, 0, NULL},
-	//relative move test
-	[stop] = {"stop", 9, {0x80, 0x01, 0x06, 0x01, 0, 0, 0x03, 0x03, 0xFF}, 0, 0, 0, ptz_set_stop}
+	[relmove] = {"move", 9, {0x80, 0x01, 0x06, 0x01, 0, 0, 0, 0, 0xFF}, 0, 1, 0, ptz_set_relmove},
+	[stop] = {"stop", 9, {0x80, 0x01, 0x06, 0x01, 0, 0, 0x03, 0x03, 0xFF}, 0, 0, 0, ptz_set_relmove}
 };

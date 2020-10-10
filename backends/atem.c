@@ -143,11 +143,11 @@ static int atem_handle_topology(instance* inst, size_t n, uint8_t* data){
 		LOGPF("Handling topology on %s", inst->name);
 		LOGPF("  %d M/Es", data[8]);
 		LOGPF("  %d Sources", data[8 + 1]);
-		LOGPF("  %d Color Generators", data[8 + 2]);
+		LOGPF("  %d Media Pools", data[8 + 2]);
 		LOGPF("  %d AUX buses", data[8 + 3]);
-		LOGPF("  %d DSKs", data[8 + 4]);
-		LOGPF("  %d Stingers", data[8 + 5]);
-		LOGPF("  %d DVEs", data[8 + 6]);
+		LOGPF("  %d Stingers", data[8 + 4]);
+		LOGPF("  %d DSKs", data[8 + 5]);
+		LOGPF("  %d USKs", data[8 + 6]);
 		//hex_dump(data + 8, n - 8);
 	}
 	else if(!memcmp(data + 4, "_mpl", 4)){
@@ -941,6 +941,7 @@ static int atem_handle(size_t num, managed_fd* fds){
 			data = (atem_instance_data*) be_insts[u]->impl;
 			if(mm_timestamp() - data->last_response > ATEM_ALIVE_INTERVAL){
 				//dis/reconnect if not
+				LOGPF("Connection on %s lost, trying to reconnect", be_insts[u]->name);
 				atem_disconnect(be_insts[u]);
 				atem_connect(be_insts[u]);
 			}

@@ -241,6 +241,7 @@ static size_t ptz_set_relmove(instance* inst, channel* c, channel_value* v, uint
 	}
 
 	//set stored axis speed
+	//TODO find a way to do relative axis speed via speed_factor, without overwriting a set absolute speed
 	msg[4] = data->panspeed;
 	msg[5] = data->tiltspeed;
 

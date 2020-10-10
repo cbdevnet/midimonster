@@ -4,10 +4,10 @@
 #include <errno.h>
 #include <time.h>
 #ifndef _WIN32
-#include <sys/select.h>
-#define MM_API __attribute__((visibility("default")))
+	#include <sys/select.h>
+	#define MM_API __attribute__((visibility("default")))
 #else
-#define MM_API __attribute__((dllexport))
+	#define MM_API __attribute__((dllexport))
 #endif
 #define BACKEND_NAME "core"
 #define MM_SWAP_LIMIT 20

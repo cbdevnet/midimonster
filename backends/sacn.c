@@ -385,7 +385,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	//send packet if required
 	if(mark){
-		//find output instance data
+		//find output control data for the instance
 		for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
 			if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
 				break;

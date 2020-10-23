@@ -168,6 +168,10 @@ static int artnet_configure_instance(instance* inst, char* option, char* value){
 
 		return mmbackend_parse_sockaddr(host, port ? port : ARTNET_PORT, &data->dest_addr, &data->dest_len);
 	}
+	else if(!strcmp(option, "realtime")){
+		data->realtime = strtoul(value, NULL, 10);
+		return 0;
+	}
 
 	LOGPF("Unknown instance option %s for instance %s", option, inst->name);
 	return 1;
@@ -294,21 +298,24 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	}
 
 	if(mark){
-		//find last frame time
+		//find output control data for the instance
 		for(u = 0; u < global_cfg.fd[data->fd_index].output_instances; u++){
 			if(global_cfg.fd[data->fd_index].output_instance[u].label == inst->ident){
 				break;
 			}
 		}
 
-		frame_delta = mm_timestamp() - global_cfg.fd[data->fd_index].output_instance[u].last_frame;
-		//check output rate limit, request next frame
-		if(frame_delta < ARTNET_FRAME_TIMEOUT){
-			global_cfg.fd[data->fd_index].output_instance[u].mark = 1;
-			if(!global_cfg.next_frame || global_cfg.next_frame > (ARTNET_FRAME_TIMEOUT - frame_delta)){
-				global_cfg.next_frame = (ARTNET_FRAME_TIMEOUT - frame_delta);
+		if(!data->realtime){
+			frame_delta = mm_timestamp() - global_cfg.fd[data->fd_index].output_instance[u].last_frame;
+
+			//check output rate limit, request next frame
+			if(frame_delta < ARTNET_FRAME_TIMEOUT){
+				global_cfg.fd[data->fd_index].output_instance[u].mark = 1;
+				if(!global_cfg.next_frame || global_cfg.next_frame > (ARTNET_FRAME_TIMEOUT - frame_delta)){
+					global_cfg.next_frame = (ARTNET_FRAME_TIMEOUT - frame_delta);
+				}
+				return 0;
 			}
-			return 0;
 		}
 		return artnet_transmit(inst, global_cfg.fd[data->fd_index].output_instance + u);
 	}

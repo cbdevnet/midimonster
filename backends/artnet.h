@@ -48,6 +48,7 @@ typedef struct /*_artnet_instance_model*/ {
 	artnet_universe data;
 	size_t fd_index;
 	uint64_t last_input;
+	uint8_t realtime;
 } artnet_instance_data;
 
 typedef union /*_artnet_instance_id*/ {

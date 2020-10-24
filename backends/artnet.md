@@ -21,6 +21,7 @@ Art-Net™ Designed by and Copyright Artistic Licence Holdings Ltd.
 | `universe`	| `0`			| `0`			| Universe identifier	|
 | `destination`	| `10.2.2.2`		| none			| Destination address for sent ArtNet frames. Setting this enables the universe for output |
 | `interface`	| `1`			| `0`			| The bound address to use for data input/output |
+| `realtime`	| `1`			| `0`			| Disable the recommended rate-limiting (approx. 44 packets per second) for this instance |
 
 #### Channel specification
 
@@ -42,3 +43,4 @@ A normal channel that is part of a wide channel can not be mapped individually.
 
 When using this backend for output with a fast event source, some events may appear to be lost due to the packet output rate limiting
 mandated by the [ArtNet specification](https://artisticlicence.com/WebSiteMaster/User%20Guides/art-net.pdf) (Section `Refresh rate`).
+This limit can be disabled on a per-instance basis using the `realtime` instance option.

@@ -79,9 +79,9 @@ ola.so: CPPFLAGS += -Wno-write-strings
 
 # The pkg-config name for liblua5.3 is subject to discussion. I prefer 'lua5.3' (which works on Debian and OSX),
 # but Arch requires 'lua53' which works on Debian, too, but breaks on OSX.
-lua.so: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
-lua.so: LDLIBS += $(shell pkg-config --libs lua53 || pkg-config --libs lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
-lua.dll: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
+lua.so: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || pkg-config --cflags lua || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
+lua.so: LDLIBS += $(shell pkg-config --libs lua53 || pkg-config --libs lua5.3 || pkg-config --libs lua || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
+lua.dll: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || pkg-config --cflags lua || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
 lua.dll: LDLIBS += -L../ -llua53
 
 python.so: CFLAGS += $(shell pkg-config --cflags python3 || pkg-config --cflags python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")

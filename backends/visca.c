@@ -8,8 +8,9 @@
 
 /* TODO
  *	VISCA server
- *	Rate limiting
+ *	Command output rate limiting / deduplication
  *	Inquiry
+ *	Reconnect on connection close
  */
 
 MM_PLUGIN_API int init(){

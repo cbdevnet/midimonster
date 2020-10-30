@@ -146,7 +146,13 @@ static void lua_thread_resume(size_t current_thread){
 
 	//call thread main
 	DBGPF("Resuming thread %" PRIsize_t " on %s", current_thread, thread[current_thread].instance->name);
+	//the lua_resume API has changed with lua5.4
+	#if LUA_VERSION_NUM > 503
+	int results = 0;
+	thread_status = lua_resume(thread[current_thread].thread, NULL, 0, &results);
+	#else
 	thread_status = lua_resume(thread[current_thread].thread, NULL, 0);
+	#endif
 
 	if(thread_status == LUA_YIELD){
 		DBGPF("Thread %" PRIsize_t " on %s yielded execution", current_thread, thread[current_thread].instance->name);
@@ -657,6 +663,10 @@ static int lua_start(size_t n, instance** inst){
 	lua_instance_data* data = NULL;
 	int default_handler;
 	channel_value v;
+
+	#ifdef LUA_VERSION_NUM
+	DBGPF("Lua backend built with %s (%d)", LUA_VERSION, LUA_VERSION_NUM);
+	#endif
 
 	//resolve channels to their handler functions
 	for(u = 0; u < n; u++){

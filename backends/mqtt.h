@@ -12,6 +12,8 @@ static int mqtt_shutdown(size_t n, instance** inst);
 
 #define MQTT_PORT "1883"
 #define MQTT_TLS_PORT "8883"
+#define MQTT_BUFFER_LENGTH 8192
+#define MQTT_KEEPALIVE 10 
 
 enum {
 	MSG_RESERVED = 0x00,
@@ -39,9 +41,12 @@ typedef struct /*_mqtt_instance_data*/ {
 
 	char* user;
 	char* password;
+	char* client_id;
 
 	size_t nchannels;
 	char** channel;
+
+	int fd;
 } mqtt_instance_data;
 
 //per-channel

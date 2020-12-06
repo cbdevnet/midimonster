@@ -2,9 +2,9 @@
 # Backends that can only be built on Linux
 LINUX_BACKENDS = midi.so evdev.so
 # Backends that can only be built on Windows (mostly due to the .DLL extension)
-WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll rtpmidi.dll wininput.dll visca.dll
+WINDOWS_BACKENDS = artnet.dll osc.dll loopback.dll sacn.dll maweb.dll winmidi.dll openpixelcontrol.dll rtpmidi.dll wininput.dll visca.dll mqtt.dll
 # Backends that can be built on any platform that can load .SO libraries
-BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.so visca.so
+BACKENDS = artnet.so osc.so loopback.so sacn.so lua.so maweb.so jack.so openpixelcontrol.so python.so rtpmidi.so visca.so mqtt.so
 # Backends that require huge dependencies to be installed
 OPTIONAL_BACKENDS = ola.so
 # Backends that need to be built manually (but still should be included in the clean target)
@@ -50,6 +50,10 @@ sacn.dll: LDLIBS += -lws2_32
 visca.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
 visca.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 visca.dll: LDLIBS += -lws2_32
+
+mqtt.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
+mqtt.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
+mqtt.dll: LDLIBS += -lws2_32
 
 openpixelcontrol.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
 openpixelcontrol.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)

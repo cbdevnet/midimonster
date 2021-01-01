@@ -13,7 +13,9 @@ enum /*_midi_channel_type*/ {
 	cc,
 	pressure,
 	aftertouch,
-	pitchbend
+	pitchbend,
+	rpn,
+	nrpn
 };
 
 static struct {
@@ -99,6 +101,13 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 		data->write = strdup(value);
 		return 0;
 	}
+	else if(!strcmp(option, "epn-tx")){
+		data->epn_tx_short = 0;
+		if(!strcmp(value, "short")){
+			data->epn_tx_short = 1;
+		}
+		return 0;
+	}
 
 	LOGPF("Unknown instance option %s", option);
 	return 1;
@@ -147,6 +156,14 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 		ident.fields.type = pressure;
 		channel += 8;
 	}
+	else if(!strncmp(channel, "rpn", 3)){
+		ident.fields.type = rpn;
+		channel += 3;
+	}
+	else if(!strncmp(channel, "nrpn", 4)){
+		ident.fields.type = nrpn;
+		channel += 4;
+	}
 	else if(!strncmp(channel, "pitch", 5)){
 		ident.fields.type = pitchbend;
 	}
@@ -167,9 +184,37 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 	return NULL;
 }
 
+static void midi_tx(int port, uint8_t type, uint8_t channel, uint8_t control, uint16_t value){
+	snd_seq_event_t ev;
+
+	snd_seq_ev_clear(&ev);
+	snd_seq_ev_set_source(&ev, port);
+	snd_seq_ev_set_subs(&ev);
+	snd_seq_ev_set_direct(&ev);
+
+	switch(type){
+		case note:
+			snd_seq_ev_set_noteon(&ev, channel, control, value);
+			break;
+		case cc:
+			snd_seq_ev_set_controller(&ev, channel, control, value);
+			break;
+		case pressure:
+			snd_seq_ev_set_keypress(&ev, channel, control, value);
+			break;
+		case pitchbend:
+			snd_seq_ev_set_pitchbend(&ev, channel, value);
+			break;
+		case aftertouch:
+			snd_seq_ev_set_chanpress(&ev, channel, value);
+			break;
+	}
+
+	snd_seq_event_output(sequencer, &ev);
+}
+
 static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u;
-	snd_seq_event_t ev;
 	midi_instance_data* data = (midi_instance_data*) inst->impl;
 	midi_channel_ident ident = {
 		.label = 0
@@ -178,30 +223,28 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 	for(u = 0; u < num; u++){
 		ident.label = c[u]->ident;
 
-		snd_seq_ev_clear(&ev);
-		snd_seq_ev_set_source(&ev, data->port);
-		snd_seq_ev_set_subs(&ev);
-		snd_seq_ev_set_direct(&ev);
-
 		switch(ident.fields.type){
-			case note:
-				snd_seq_ev_set_noteon(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
-				break;
-			case cc:
-				snd_seq_ev_set_controller(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
-				break;
-			case pressure:
-				snd_seq_ev_set_keypress(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
+			case rpn:
+			case nrpn:
+				//transmit parameter number
+				midi_tx(data->port, cc, ident.fields.channel, (ident.fields.type == rpn) ? 101 : 99, (ident.fields.control & 0x3F80) >> 7);
+				midi_tx(data->port, cc, ident.fields.channel, (ident.fields.type == rpn) ? 100 : 98, ident.fields.control & 0x7F);
+				//transmit parameter value
+				midi_tx(data->port, cc, ident.fields.channel, 6, (((uint16_t) (v[u].normalised * 16383.0)) & 0x3F80) >> 7);
+				midi_tx(data->port, cc, ident.fields.channel, 38, ((uint16_t) (v[u].normalised * 16383.0)) & 0x7F);
+
+				if(!data->epn_tx_short){
+					//clear active parameter
+					midi_tx(data->port, cc, ident.fields.channel, 101, 127);
+					midi_tx(data->port, cc, ident.fields.channel, 100, 127);
+				}
 				break;
 			case pitchbend:
-				snd_seq_ev_set_pitchbend(&ev, ident.fields.channel, (v[u].normalised * 16383.0) - 8192);
+				midi_tx(data->port, ident.fields.type, ident.fields.channel, ident.fields.control, (v[u].normalised * 16383.0) - 8192);
 				break;
-			case aftertouch:
-				snd_seq_ev_set_chanpress(&ev, ident.fields.channel, v[u].normalised * 127.0);
-				break;
+			default:
+				midi_tx(data->port, ident.fields.type, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
 		}
-
-		snd_seq_event_output(sequencer, &ev);
 	}
 
 	snd_seq_drain_output(sequencer);
@@ -216,6 +259,10 @@ static char* midi_type_name(uint8_t type){
 			return "note";
 		case cc:
 			return "cc";
+		case rpn:
+			return "rpn";
+		case nrpn:
+			return "nrpn";
 		case pressure:
 			return "pressure";
 		case aftertouch:
@@ -248,6 +295,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 		ident.fields.control = ev->data.note.note;
 		val.normalised = (double) ev->data.note.velocity / 127.0;
 
+		//TODO (n)rpn RX
 		switch(ev->type){
 			case SND_SEQ_EVENT_NOTEON:
 			case SND_SEQ_EVENT_NOTEOFF:

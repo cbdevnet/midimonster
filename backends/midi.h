@@ -14,14 +14,18 @@ typedef struct /*_midi_instance_data*/ {
 	int port;
 	char* read;
 	char* write;
+	uint8_t epn_tx_short;
+
+	uint16_t epn_control;
+	uint16_t epn_value;
 } midi_instance_data;
 
 typedef union {
 	struct {
-		uint8_t pad[5];
+		uint8_t pad[4];
 		uint8_t type;
 		uint8_t channel;
-		uint8_t control;
+		uint16_t control;
 	} fields;
 	uint64_t label;
 } midi_channel_ident;

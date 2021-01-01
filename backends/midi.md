@@ -15,6 +15,7 @@ The MIDI backend provides read-write access to the MIDI protocol via virtual por
 |---------------|-----------------------|-----------------------|-----------------------|
 | `read`	| `20:0`		| none			| MIDI device to connect for input |
 | `write`	| `DeviceName`		| none			| MIDI device to connect for output |
+| `epn-tx`	| `short`		| `full`		| Configures whether to clear the active parameter number after transmitting an `nrpn` or `rpn` parameter |
 
 MIDI device names may either be `client:port` portnames or prefixes of MIDI device names.
 Run `aconnect -i` to list input ports and `aconnect -o` to list output ports.
@@ -30,6 +31,8 @@ The MIDI backend supports mapping different MIDI events to MIDIMonster channels.
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
+* `rpn` - Registered parameter numbers (14bit extension)
+* `nrpn` - Non-registered parameter numbers (14bit extension)
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
@@ -40,14 +43,21 @@ MIDI channels range from `0` to `15`. Each MIDI channel consists of 128 notes (n
 additionally each have a pressure control, 128 CC's (numbered likewise), a channel pressure control (also called
 'channel aftertouch') and a pitch control which may all be mapped to individual MIDIMonster channels.
 
+Every channel also provides `rpn` and `nrpn` controls, which are implemented on top of the MIDI protocol, using
+the CC controls 101/100/99/98/38/6. Both control types have 14-bit IDs and 14-bit values.
+
 Example mappings:
 ```
 midi1.ch0.note9 > midi2.channel1.cc4
 midi1.channel15.pressure1 > midi1.channel0.note0
 midi1.ch1.aftertouch > midi2.ch2.cc0
 midi1.ch0.pitch > midi2.ch1.pitch
+midi1.ch0.nrpn900 > midi2.ch0.rpn1
 ```
 #### Known bugs / problems
+
+Extended parameter numbers (`rpn` and `nrpn` control types) can currently only be transmitted, not properly
+received as such. Support for this functionality is planned.
 
 To access MIDI data, the user running MIDIMonster needs read & write access to the ALSA sequencer.
 This can usually be done by adding this user to the `audio` system group.

@@ -31,8 +31,8 @@ The MIDI backend supports mapping different MIDI events to MIDIMonster channels.
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
-* `rpn` - Registered parameter numbers (14bit extension)
-* `nrpn` - Non-registered parameter numbers (14bit extension)
+* `rpn` - Registered parameter numbers (14-bit extension)
+* `nrpn` - Non-registered parameter numbers (14-bit extension)
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
@@ -43,7 +43,7 @@ MIDI channels range from `0` to `15`. Each MIDI channel consists of 128 notes (n
 additionally each have a pressure control, 128 CC's (numbered likewise), a channel pressure control (also called
 'channel aftertouch') and a pitch control which may all be mapped to individual MIDIMonster channels.
 
-Every channel also provides `rpn` and `nrpn` controls, which are implemented on top of the MIDI protocol, using
+Every MIDI channel also provides `rpn` and `nrpn` controls, which are implemented on top of the MIDI protocol, using
 the CC controls 101/100/99/98/38/6. Both control types have 14-bit IDs and 14-bit values.
 
 Example mappings:

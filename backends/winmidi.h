@@ -13,6 +13,7 @@ static int winmidi_shutdown(size_t n, instance** inst);
 typedef struct /*_winmidi_instance_data*/ {
 	char* read;
 	char* write;
+	uint8_t epn_tx_short;
 	HMIDIIN device_in;
 	HMIDIOUT device_out;
 } winmidi_instance_data;
@@ -23,15 +24,17 @@ enum /*_winmidi_channel_type*/ {
 	cc = 0xB0,
 	pressure = 0xA0,
 	aftertouch = 0xD0,
-	pitchbend = 0xE0
+	pitchbend = 0xE0,
+	rpn = 0xF0,
+	nrpn = 0xF1
 };
 
 typedef union {
 	struct {
-		uint8_t pad[5];
+		uint8_t pad[4];
 		uint8_t type;
 		uint8_t channel;
-		uint8_t control;
+		uint16_t control;
 	} fields;
 	uint64_t label;
 } winmidi_channel_ident;

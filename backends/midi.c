@@ -109,7 +109,7 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 		return 0;
 	}
 
-	LOGPF("Unknown instance option %s", option);
+	LOGPF("Unknown instance configuration option %s on instance %s", option, inst->name);
 	return 1;
 }
 
@@ -227,10 +227,10 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 			case rpn:
 			case nrpn:
 				//transmit parameter number
-				midi_tx(data->port, cc, ident.fields.channel, (ident.fields.type == rpn) ? 101 : 99, (ident.fields.control & 0x3F80) >> 7);
+				midi_tx(data->port, cc, ident.fields.channel, (ident.fields.type == rpn) ? 101 : 99, (ident.fields.control >> 7) & 0x7F);
 				midi_tx(data->port, cc, ident.fields.channel, (ident.fields.type == rpn) ? 100 : 98, ident.fields.control & 0x7F);
 				//transmit parameter value
-				midi_tx(data->port, cc, ident.fields.channel, 6, (((uint16_t) (v[u].normalised * 16383.0)) & 0x3F80) >> 7);
+				midi_tx(data->port, cc, ident.fields.channel, 6, (((uint16_t) (v[u].normalised * 16383.0)) >> 7) & 0x7F);
 				midi_tx(data->port, cc, ident.fields.channel, 38, ((uint16_t) (v[u].normalised * 16383.0)) & 0x7F);
 
 				if(!data->epn_tx_short){

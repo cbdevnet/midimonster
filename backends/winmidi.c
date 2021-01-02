@@ -82,12 +82,19 @@ static int winmidi_configure_instance(instance* inst, char* option, char* value)
 		data->read = strdup(value);
 		return 0;
 	}
-	if(!strcmp(option, "write")){
+	else if(!strcmp(option, "write")){
 		if(data->write){
 			LOGPF("Instance %s already connected to an output device", inst->name);
 			return 1;
 		}
 		data->write = strdup(value);
+		return 0;
+	}
+	else if(!strcmp(option, "epn-tx")){
+		data->epn_tx_short = 0;
+		if(!strcmp(value, "short")){
+			data->epn_tx_short = 1;
+		}
 		return 0;
 	}
 
@@ -148,6 +155,14 @@ static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){
 		ident.fields.type = pressure;
 		next_token += 8;
 	}
+	else if(!strncmp(next_token, "rpn", 3)){
+		ident.fields.type = rpn;
+		next_token += 3;
+	}
+	else if(!strncmp(next_token, "nrpn", 4)){
+		ident.fields.type = nrpn;
+		next_token += 4;
+	}
 	else if(!strncmp(next_token, "pitch", 5)){
 		ident.fields.type = pitchbend;
 	}
@@ -167,11 +182,7 @@ static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){
 	return NULL;
 }
 
-static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v){
-	winmidi_instance_data* data = (winmidi_instance_data*) inst->impl;
-	winmidi_channel_ident ident = {
-		.label = 0
-	};
+static void winmidi_tx(HMIDIOUT port, uint8_t type, uint8_t channel, uint8_t control, uint16_t value){
 	union {
 		struct {
 			uint8_t status;
@@ -183,6 +194,28 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	} output = {
 		.dword = 0
 	};
+
+	output.components.status = type | channel;
+	output.components.data1 = control;
+	output.components.data2 = value;
+
+	if(type == pitchbend){
+		output.components.data1 = value & 0x7F;
+		output.components.data2 = (value >> 7) & 0x7F;
+	}
+	else if(type == aftertouch){
+		output.components.data1 = value;
+		output.components.data2 = 0;
+	}
+
+	midiOutShortMsg(port, output.dword);
+}
+
+static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v){
+	winmidi_instance_data* data = (winmidi_instance_data*) inst->impl;
+	winmidi_channel_ident ident = {
+		.label = 0
+	};
 	size_t u;
 
 	if(!data->device_out){
@@ -193,20 +226,29 @@ static int winmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	for(u = 0; u < num; u++){
 		ident.label = c[u]->ident;
 
-		//build output message
-		output.components.status = ident.fields.type | ident.fields.channel;
-		output.components.data1 = ident.fields.control;
-		output.components.data2 = v[u].normalised * 127.0;
-		if(ident.fields.type == pitchbend){
-			output.components.data1 = ((int)(v[u].normalised * 16384.0)) & 0x7F;
-			output.components.data2 = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
-		}
-		else if(ident.fields.type == aftertouch){
-			output.components.data1 = v[u].normalised * 127.0;
-			output.components.data2 = 0;
-		}
+		switch(ident.fields.type){
+			case rpn:
+			case nrpn:
+				//transmit parameter number
+				winmidi_tx(data->device_out, cc, ident.fields.channel, (ident.fields.type == rpn) ? 101 : 99, (ident.fields.control >> 7) & 0x7F);
+				winmidi_tx(data->device_out, cc, ident.fields.channel, (ident.fields.type == rpn) ? 100 : 98, ident.fields.control & 0x7F);
 
-		midiOutShortMsg(data->device_out, output.dword);
+				//transmit parameter value
+				winmidi_tx(data->device_out, cc, ident.fields.channel, 6, (((uint16_t) (v[u].normalised * 16383.0)) >> 7) & 0x7F);
+				winmidi_tx(data->device_out, cc, ident.fields.channel, 38, ((uint16_t) (v[u].normalised * 16383.0)) & 0x7F);
+
+				if(!data->epn_tx_short){
+					//clear active parameter
+					winmidi_tx(data->device_out, cc, ident.fields.channel, 101, 127);
+					winmidi_tx(data->device_out, cc, ident.fields.channel, 100, 127);
+				}
+				break;
+			case pitchbend:
+				winmidi_tx(data->device_out, ident.fields.type, ident.fields.channel, ident.fields.control, v[u].normalised * 16383.0);
+				break;
+			default:
+				winmidi_tx(data->device_out, ident.fields.type, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
+		}
 	}
 
 	return 0;
@@ -218,6 +260,10 @@ static char* winmidi_type_name(uint8_t typecode){
 			return "note";
 		case cc:
 			return "cc";
+		case rpn:
+			return "rpn";
+		case nrpn:
+			return "nrpn";
 		case pressure:
 			return "pressure";
 		case aftertouch:
@@ -295,6 +341,7 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 	//callbacks may run on different threads, so we queue all events and alert the main thread via the feedback socket
 	DBGPF("Input callback on thread %ld", GetCurrentThreadId());
 
+	//TODO handle (n)rpn RX
 	switch(message){
 		case MIM_MOREDATA:
 			//processing too slow, do not immediately alert the main loop

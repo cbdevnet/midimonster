@@ -16,6 +16,7 @@ transport of control data via either JACK midi ports or control voltage (CV) inp
 |---------------|-----------------------|-----------------------|-----------------------|
 | `name`	| `Controller`		| `MIDIMonster`		| Client name for the JACK connection |
 | `server`	| `jackserver`		| `default`		| JACK server identifier to connect to |
+| `epn-tx`	| `short`		| `full`		| Configure whether to clear the active parameter number after transmitting a MIDI `nrpn` or `rpn` parameter. |
 
 Channels (corresponding to JACK ports) need to be configured with their type and, if applicable, value limits.
 To configure a port, specify it in the instance configuration using the following syntax:
@@ -65,6 +66,8 @@ The following values are recognized for `type`:
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
+* `rpn` - Registered parameter numbers (14-bit extension)
+* `nrpn` - Non-registered parameter numbers (14-bit extension)
 
 The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 
@@ -72,12 +75,16 @@ Example mappings:
 ```
 jack1.cv_in > jack1.midi_out.ch0.note3
 jack1.midi_in.ch0.pitch > jack1.cv_out
+jack2.midi_in.ch0.nrpn900 > jack1.midi_out.ch1.rpn1
 ```
 
 The MIDI subchannel syntax is intentionally kept compatible to the different MIDI backends also supported
 by the MIDIMonster
 
 #### Known bugs / problems
+
+Extended parameter numbers (`rpn` and `nrpn` control types) can currently only be transmitted, not properly
+received as such. Support for this functionality is planned.
 
 While JACK has rudimentary capabilities for transporting OSC messages, configuring and parsing such channels
 with this backend would take a great amount of dedicated syntax & code. CV ports can provide fine-grained single

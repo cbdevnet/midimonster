@@ -22,16 +22,17 @@ enum /*mmjack_midi_channel_type*/ {
 	midi_cc = 0xB0,
 	midi_pressure = 0xA0,
 	midi_aftertouch = 0xD0,
-	midi_pitchbend = 0xE0
+	midi_pitchbend = 0xE0,
+	midi_rpn = 0xF0,
+	midi_nrpn = 0xF1
 };
 
 typedef union {
 	struct {
 		uint32_t port;
-		uint8_t pad;
 		uint8_t sub_type;
 		uint8_t sub_channel;
-		uint8_t sub_control;
+		uint16_t sub_control;
 	} fields;
 	uint64_t label;
 } mmjack_channel_ident;
@@ -69,6 +70,8 @@ typedef struct /*_jack_instance_data*/ {
 	char* server_name;
 	char* client_name;
 	int fd;
+
+	uint8_t midi_epn_tx_short;
 
 	jack_client_t* client;
 	size_t ports;

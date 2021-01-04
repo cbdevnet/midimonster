@@ -56,8 +56,11 @@ midi1.ch0.nrpn900 > midi2.ch0.rpn1
 ```
 #### Known bugs / problems
 
-Extended parameter numbers (`rpn` and `nrpn` control types) can currently only be transmitted, not properly
-received as such. Support for this functionality is planned.
+Extended parameter numbers (EPNs, the `rpn` and `nrpn` control types) will also generate events on the controls (CC 101 through
+98, 38 and 6) that are used as the lower layer transport. When using EPNs, mapping those controls is probably not useful.
+
+EPN control types support only the full 14-bit transfer encoding, not the shorter variant transmitting only the 7
+high-order bits. This may be changed if there is sufficient interest in the functionality.
 
 To access MIDI data, the user running MIDIMonster needs read & write access to the ALSA sequencer.
 This can usually be done by adding this user to the `audio` system group.

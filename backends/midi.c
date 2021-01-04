@@ -273,11 +273,91 @@ static char* midi_type_name(uint8_t type){
 	return "unknown";
 }
 
+static void midi_handle_epn(instance* inst, uint8_t chan, uint16_t control, uint16_t value){
+	midi_instance_data* data = (midi_instance_data*) inst->impl;
+	midi_channel_ident ident = {
+		.label = 0
+	};
+	channel* changed = NULL;
+	channel_value val;
+	//check for 3-byte update TODO
+
+	//switching between nrpn and rpn clears all valid bits
+	if(((data->epn_status[chan] & EPN_NRPN) && (control == 101 || control == 100))
+				|| (!(data->epn_status[chan] & EPN_NRPN) && (control == 99 || control == 98))){
+		data->epn_status[chan] &= ~(EPN_NRPN | EPN_PARAMETER_LO | EPN_PARAMETER_HI);
+	}
+
+	//setting an address always invalidates the value valid bits
+	if(control >= 98 && control <= 101){
+		data->epn_status[chan] &= ~(EPN_VALUE_HI /*| EPN_VALUE_LO*/);
+	}
+
+	//parameter hi
+	if(control == 101 || control == 99){
+		data->epn_control[chan] &= 0x7F;
+		data->epn_control[chan] |= value << 7;
+		data->epn_status[chan] |= EPN_PARAMETER_HI | ((control == 99) ? EPN_NRPN : 0);
+		if(control == 101 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_HI;
+		}
+	}
+
+	//parameter lo
+	if(control == 100 || control == 98){
+		data->epn_control[chan] &= ~0x7F;
+		data->epn_control[chan] |= value & 0x7F;
+		data->epn_status[chan] |= EPN_PARAMETER_LO | ((control == 98) ? EPN_NRPN : 0);
+		if(control == 100 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_LO;
+		}
+	}
+
+	//value hi, clears low, mark as update candidate
+	if(control == 6
+			//check if parameter is set before accepting value update
+			&& ((data->epn_status[chan] & (EPN_PARAMETER_HI | EPN_PARAMETER_LO)) == (EPN_PARAMETER_HI | EPN_PARAMETER_LO))){
+		data->epn_value[chan] = value << 7;
+		data->epn_status[chan] |= EPN_VALUE_HI;
+	}
+
+	//FIXME is the update order for the value bits fixed?
+	//FIXME can there be standalone updates on CC 38?
+
+	//value lo, flush the value
+	if(control == 38
+			&& data->epn_status[chan] & EPN_VALUE_HI){
+		data->epn_value[chan] &= ~0x7F;
+		data->epn_value[chan] |= value & 0x7F;
+		//FIXME not clearing the valid bit would allow for fast low-order updates
+		data->epn_status[chan] &= ~EPN_VALUE_HI;
+
+		if(midi_config.detect){
+			LOGPF("Incoming EPN data on channel %s.ch%d.%s%d", inst->name, chan, data->epn_status[chan] & EPN_NRPN ? "nrpn" : "rpn", data->epn_control[chan]);
+		}
+
+		//find the updated channel
+		ident.fields.type = data->epn_status[chan] & EPN_NRPN ? nrpn : rpn;
+		ident.fields.channel = chan;
+		ident.fields.control = data->epn_control[chan];
+		val.normalised = (double) data->epn_value[chan] / 16383.0;
+
+		//push the new value
+		changed = mm_channel(inst, ident.label, 0);
+		if(changed){
+			mm_channel_event(changed, val);
+		}
+	}
+}
+
 static int midi_handle(size_t num, managed_fd* fds){
 	snd_seq_event_t* ev = NULL;
 	instance* inst = NULL;
+	midi_instance_data* data = NULL;
+
 	channel* changed = NULL;
 	channel_value val;
+
 	char* event_type = NULL;
 	midi_channel_ident ident = {
 		.label = 0
@@ -295,7 +375,14 @@ static int midi_handle(size_t num, managed_fd* fds){
 		ident.fields.control = ev->data.note.note;
 		val.normalised = (double) ev->data.note.velocity / 127.0;
 
-		//TODO (n)rpn RX
+		//scan for the instance before parsing incoming data, instance state is required for the EPN state machine
+		inst = mm_instance_find(BACKEND_NAME, ev->dest.port);
+		if(!inst){
+			LOG("Delivered event did not match any instance");
+			continue;
+		}
+		data = (midi_instance_data*) inst->impl;
+
 		switch(ev->type){
 			case SND_SEQ_EVENT_NOTEON:
 			case SND_SEQ_EVENT_NOTEOFF:
@@ -323,6 +410,15 @@ static int midi_handle(size_t num, managed_fd* fds){
 				ident.fields.channel = ev->data.control.channel;
 				ident.fields.control = ev->data.control.param;
 				val.normalised = (double) ev->data.control.value / 127.0;
+
+				//check for EPN CCs and update the state machine
+				if((ident.fields.control <= 101 && ident.fields.control >= 98)
+						|| ident.fields.control == 6
+						|| ident.fields.control == 38
+						//if the high-order value bits are set, forward any control to the state machine for the short update form
+						|| data->epn_status[ident.fields.channel] & EPN_VALUE_HI){
+					midi_handle_epn(inst, ident.fields.channel, ident.fields.control, ev->data.control.value);
+				}
 				break;
 			default:
 				LOG("Ignored event of unsupported type");
@@ -330,13 +426,6 @@ static int midi_handle(size_t num, managed_fd* fds){
 		}
 
 		event_type = midi_type_name(ident.fields.type);
-		inst = mm_instance_find(BACKEND_NAME, ev->dest.port);
-		if(!inst){
-			//FIXME might want to return failure
-			LOG("Delivered event did not match any instance");
-			continue;
-		}
-
 		changed = mm_channel(inst, ident.label, 0);
 		if(changed){
 			if(mm_channel_event(changed, val)){

@@ -10,14 +10,20 @@ static int midi_handle(size_t num, managed_fd* fds);
 static int midi_start(size_t n, instance** inst);
 static int midi_shutdown(size_t n, instance** inst);
 
+#define EPN_NRPN 8
+#define EPN_PARAMETER_HI 4
+#define EPN_PARAMETER_LO 2
+#define EPN_VALUE_HI 1
+
 typedef struct /*_midi_instance_data*/ {
 	int port;
 	char* read;
 	char* write;
 	uint8_t epn_tx_short;
 
-	uint16_t epn_control;
-	uint16_t epn_value;
+	uint16_t epn_control[16];
+	uint16_t epn_value[16];
+	uint8_t epn_status[16];
 } midi_instance_data;
 
 typedef union {

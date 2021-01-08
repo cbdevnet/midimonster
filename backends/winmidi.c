@@ -402,7 +402,7 @@ static void winmidi_handle_epn(instance* inst, uint8_t chan, uint16_t control, u
 		ident.fields.control = data->epn_control[chan];
 		val.normalised = (double) data->epn_value[chan] / 16383.0;
 
-		winmidi_enqueue_input(inst, ident,val);
+		winmidi_enqueue_input(inst, ident, val);
 	}
 }
 

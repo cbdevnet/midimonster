@@ -101,6 +101,68 @@ static void mmjack_process_midiout(void* buffer, size_t sample_offset, uint8_t t
 	}
 }
 
+//this state machine was copied more-or-less verbatim from the alsa midi implementation - fixes there will need to be integrated
+static void mmjack_handle_epn(mmjack_port* port, uint8_t chan, uint16_t control, uint16_t value){
+	mmjack_channel_ident ident = {
+		.label = 0
+	};
+
+	//switching between nrpn and rpn clears all valid bits
+	if(((port->epn_status[chan] & EPN_NRPN) && (control == 101 || control == 100))
+				|| (!(port->epn_status[chan] & EPN_NRPN) && (control == 99 || control == 98))){
+		port->epn_status[chan] &= ~(EPN_NRPN | EPN_PARAMETER_LO | EPN_PARAMETER_HI);
+	}
+
+	//setting an address always invalidates the value valid bits
+	if(control >= 98 && control <= 101){
+		port->epn_status[chan] &= ~EPN_VALUE_HI;
+	}
+
+	//parameter hi
+	if(control == 101 || control == 99){
+		port->epn_control[chan] &= 0x7F;
+		port->epn_control[chan] |= value << 7;
+		port->epn_status[chan] |= EPN_PARAMETER_HI | ((control == 99) ? EPN_NRPN : 0);
+		if(control == 101 && value == 127){
+			port->epn_status[chan] &= ~EPN_PARAMETER_HI;
+		}
+	}
+
+	//parameter lo
+	if(control == 100 || control == 98){
+		port->epn_control[chan] &= ~0x7F;
+		port->epn_control[chan] |= value & 0x7F;
+		port->epn_status[chan] |= EPN_PARAMETER_LO | ((control == 98) ? EPN_NRPN : 0);
+		if(control == 100 && value == 127){
+			port->epn_status[chan] &= ~EPN_PARAMETER_LO;
+		}
+	}
+
+	//value hi, clears low, mark as update candidate
+	if(control == 6
+			//check if parameter is set before accepting value update
+			&& ((port->epn_status[chan] & (EPN_PARAMETER_HI | EPN_PARAMETER_LO)) == (EPN_PARAMETER_HI | EPN_PARAMETER_LO))){
+		port->epn_value[chan] = value << 7;
+		port->epn_status[chan] |= EPN_VALUE_HI;
+	}
+
+	//value lo, flush the value
+	if(control == 38
+			&& port->epn_status[chan] & EPN_VALUE_HI){
+		port->epn_value[chan] &= ~0x7F;
+		port->epn_value[chan] |= value & 0x7F;
+		port->epn_status[chan] &= ~EPN_VALUE_HI;
+
+		//find the updated channel
+		ident.fields.sub_type = port->epn_status[chan] & EPN_NRPN ? midi_nrpn : midi_rpn;
+		ident.fields.sub_channel = chan;
+		ident.fields.sub_control = port->epn_control[chan];
+
+		//ident.fields.port set on output in mmjack_handle_midi
+		mmjack_midiqueue_append(port, ident, port->epn_value[chan]);
+	}
+}
+
 static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes, size_t* mark){
 	mmjack_instance_data* data = (mmjack_instance_data*) inst->impl;
 	void* buffer = jack_port_get_buffer(port->port, nframes);
@@ -113,7 +175,6 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 	if(port->input){
 		if(event_count){
 			DBGPF("Reading %u MIDI events from port %s", event_count, port->name);
-			//TODO (n)rpn RX
 			for(u = 0; u < event_count; u++){
 				ident.label = 0;
 				//read midi data from stream
@@ -135,6 +196,15 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 					ident.fields.sub_control = 0;
 					value = event.buffer[1];
 				}
+
+				//forward the EPN CCs to the EPN state machine
+				if(ident.fields.sub_type == midi_cc
+						&& ((ident.fields.sub_control <= 101 && ident.fields.sub_control >= 98)
+							|| ident.fields.sub_control == 6
+							|| ident.fields.sub_control == 38)){
+					mmjack_handle_epn(port, ident.fields.sub_channel, ident.fields.sub_control, value);
+				}
+
 				//append midi data
 				mmjack_midiqueue_append(port, ident, value);
 			}

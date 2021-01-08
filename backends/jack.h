@@ -16,6 +16,11 @@ static int mmjack_shutdown(size_t n, instance** inst);
 #define JACK_DEFAULT_SERVER_NAME "default"
 #define JACK_MIDIQUEUE_CHUNK 10
 
+#define EPN_NRPN 8
+#define EPN_PARAMETER_HI 4
+#define EPN_PARAMETER_LO 2
+#define EPN_VALUE_HI 1
+
 enum /*mmjack_midi_channel_type*/ {
 	midi_none = 0,
 	midi_note = 0x90,
@@ -59,9 +64,14 @@ typedef struct /*_mmjack_port_data*/ {
 	double min;
 	uint8_t mark;
 	double last;
+
 	size_t queue_len;
 	size_t queue_alloc;
 	mmjack_midiqueue* queue;
+
+	uint16_t epn_control[16];
+	uint16_t epn_value[16];
+	uint8_t epn_status[16];
 
 	pthread_mutex_t lock;
 } mmjack_port;

@@ -321,11 +321,98 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
-static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DWORD_PTR inst, DWORD param1, DWORD param2){
+static int winmidi_enqueue_input(instance* inst, winmidi_channel_ident ident, channel_value val){
+	EnterCriticalSection(&backend_config.push_events);
+	if(backend_config.events_alloc <= backend_config.events_active){
+		backend_config.event = realloc((void*) backend_config.event, (backend_config.events_alloc + 1) * sizeof(winmidi_event));
+		if(!backend_config.event){
+			LOG("Failed to allocate memory");
+			backend_config.events_alloc = 0;
+			backend_config.events_active = 0;
+			LeaveCriticalSection(&backend_config.push_events);
+			return 1;
+		}
+		backend_config.events_alloc++;
+	}
+	backend_config.event[backend_config.events_active].inst = inst;
+	backend_config.event[backend_config.events_active].channel.label = ident.label;
+	backend_config.event[backend_config.events_active].value = val;
+	backend_config.events_active++;
+	LeaveCriticalSection(&backend_config.push_events);
+	return 0;
+}
+
+//this state machine was copied more-or-less verbatim from the alsa midi implementation - fixes there will need to be integrated
+static void winmidi_handle_epn(instance* inst, uint8_t chan, uint16_t control, uint16_t value){
+	winmidi_instance_data* data = (winmidi_instance_data*) inst->impl;
 	winmidi_channel_ident ident = {
 		.label = 0
 	};
 	channel_value val;
+
+	//switching between nrpn and rpn clears all valid bits
+	if(((data->epn_status[chan] & EPN_NRPN) && (control == 101 || control == 100))
+				|| (!(data->epn_status[chan] & EPN_NRPN) && (control == 99 || control == 98))){
+		data->epn_status[chan] &= ~(EPN_NRPN | EPN_PARAMETER_LO | EPN_PARAMETER_HI);
+	}
+
+	//setting an address always invalidates the value valid bits
+	if(control >= 98 && control <= 101){
+		data->epn_status[chan] &= ~EPN_VALUE_HI;
+	}
+
+	//parameter hi
+	if(control == 101 || control == 99){
+		data->epn_control[chan] &= 0x7F;
+		data->epn_control[chan] |= value << 7;
+		data->epn_status[chan] |= EPN_PARAMETER_HI | ((control == 99) ? EPN_NRPN : 0);
+		if(control == 101 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_HI;
+		}
+	}
+
+	//parameter lo
+	if(control == 100 || control == 98){
+		data->epn_control[chan] &= ~0x7F;
+		data->epn_control[chan] |= value & 0x7F;
+		data->epn_status[chan] |= EPN_PARAMETER_LO | ((control == 98) ? EPN_NRPN : 0);
+		if(control == 100 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_LO;
+		}
+	}
+
+	//value hi, clears low, mark as update candidate
+	if(control == 6
+			//check if parameter is set before accepting value update
+			&& ((data->epn_status[chan] & (EPN_PARAMETER_HI | EPN_PARAMETER_LO)) == (EPN_PARAMETER_HI | EPN_PARAMETER_LO))){
+		data->epn_value[chan] = value << 7;
+		data->epn_status[chan] |= EPN_VALUE_HI;
+	}
+
+	//value lo, flush the value
+	if(control == 38
+			&& data->epn_status[chan] & EPN_VALUE_HI){
+		data->epn_value[chan] &= ~0x7F;
+		data->epn_value[chan] |= value & 0x7F;
+		data->epn_status[chan] &= ~EPN_VALUE_HI;
+
+		//find the updated channel
+		ident.fields.type = data->epn_status[chan] & EPN_NRPN ? nrpn : rpn;
+		ident.fields.channel = chan;
+		ident.fields.control = data->epn_control[chan];
+		val.normalised = (double) data->epn_value[chan] / 16383.0;
+
+		winmidi_enqueue_input(inst, ident,val);
+	}
+}
+
+static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DWORD_PTR inst, DWORD param1, DWORD param2){
+	winmidi_channel_ident ident = {
+		.label = 0
+	};
+	channel_value val = {
+		0
+	};
 	union {
 		struct {
 			uint8_t status;
@@ -341,7 +428,6 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 	//callbacks may run on different threads, so we queue all events and alert the main thread via the feedback socket
 	DBGPF("Input callback on thread %ld", GetCurrentThreadId());
 
-	//TODO handle (n)rpn RX
 	switch(message){
 		case MIM_MOREDATA:
 			//processing too slow, do not immediately alert the main loop
@@ -352,18 +438,22 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 			ident.fields.type = input.components.status & 0xF0;
 			ident.fields.control = input.components.data1;
 			val.normalised = (double) input.components.data2 / 127.0;
+			val.raw.u64 = input.components.data2;
 
 			if(ident.fields.type == 0x80){
 				ident.fields.type = note;
 				val.normalised = 0;
+				val.raw.u64 = 0;
 			}
 			else if(ident.fields.type == pitchbend){
 				ident.fields.control = 0;
-				val.normalised = (double)((input.components.data2 << 7) | input.components.data1) / 16384.0;
+				val.normalised = (double) ((input.components.data2 << 7) | input.components.data1) / 16383.0;
+				val.raw.u64 = input.components.data2 << 7 | input.components.data1;
 			}
 			else if(ident.fields.type == aftertouch){
 				ident.fields.control = 0;
 				val.normalised = (double) input.components.data1 / 127.0;
+				val.raw.u64 = input.components.data1;
 			}
 			break;
 		case MIM_LONGDATA:
@@ -379,26 +469,19 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 			return;
 	}
 
+	//pass changes in the (n)rpn CCs to the EPN state machine
+	if(ident.fields.type == cc
+			&& ((ident.fields.control <= 101 && ident.fields.control >= 98)
+				|| ident.fields.control == 6
+				|| ident.fields.control == 38)){
+		winmidi_handle_epn((instance*) inst, ident.fields.channel, ident.fields.control, val.raw.u64);
+	}
+
 	DBGPF("Incoming message type %d channel %d control %d value %f",
 			ident.fields.type, ident.fields.channel, ident.fields.control, val.normalised);
-
-	EnterCriticalSection(&backend_config.push_events);
-	if(backend_config.events_alloc <= backend_config.events_active){
-		backend_config.event = realloc((void*) backend_config.event, (backend_config.events_alloc + 1) * sizeof(winmidi_event));
-		if(!backend_config.event){
-			LOG("Failed to allocate memory");
-			backend_config.events_alloc = 0;
-			backend_config.events_active = 0;
-			LeaveCriticalSection(&backend_config.push_events);
-			return;
-		}
-		backend_config.events_alloc++;
+	if(winmidi_enqueue_input((instance*) inst, ident, val)){
+		LOG("Failed to enqueue incoming data");
 	}
-	backend_config.event[backend_config.events_active].inst = (instance*) inst;
-	backend_config.event[backend_config.events_active].channel.label = ident.label;
-	backend_config.event[backend_config.events_active].value = val;
-	backend_config.events_active++;
-	LeaveCriticalSection(&backend_config.push_events);
 
 	if(message != MIM_MOREDATA){
 		//alert the main loop

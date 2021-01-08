@@ -273,6 +273,7 @@ static char* midi_type_name(uint8_t type){
 	return "unknown";
 }
 
+//this state machine is used more-or-less verbatim in the winmidi and jack backends - fixes need to be applied there, too
 static void midi_handle_epn(instance* inst, uint8_t chan, uint16_t control, uint16_t value){
 	midi_instance_data* data = (midi_instance_data*) inst->impl;
 	midi_channel_ident ident = {
@@ -402,6 +403,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 				break;
 			case SND_SEQ_EVENT_PITCHBEND:
 				ident.fields.type = pitchbend;
+				ident.fields.control = 0;
 				ident.fields.channel = ev->data.control.channel;
 				val.normalised = ((double) ev->data.control.value + 8192) / 16383.0;
 				break;

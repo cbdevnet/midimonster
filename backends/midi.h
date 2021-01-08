@@ -19,8 +19,8 @@ typedef struct /*_midi_instance_data*/ {
 	int port;
 	char* read;
 	char* write;
-	uint8_t epn_tx_short;
 
+	uint8_t epn_tx_short;
 	uint16_t epn_control[16];
 	uint16_t epn_value[16];
 	uint8_t epn_status[16];

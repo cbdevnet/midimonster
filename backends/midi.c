@@ -83,7 +83,7 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 	midi_instance_data* data = (midi_instance_data*) inst->impl;
 
 	//FIXME maybe allow connecting more than one device
-	if(!strcmp(option, "read")){
+	if(!strcmp(option, "read") || !strcmp(option, "source")){
 		//connect input device
 		if(data->read){
 			LOGPF("Instance %s was already connected to an input device", inst->name);
@@ -92,7 +92,7 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 		data->read = strdup(value);
 		return 0;
 	}
-	else if(!strcmp(option, "write")){
+	else if(!strcmp(option, "write") || !strcmp(option, "target")){
 		//connect output device
 		if(data->write){
 			LOGPF("Instance %s was already connected to an output device", inst->name);

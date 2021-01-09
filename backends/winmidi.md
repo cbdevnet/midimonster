@@ -15,11 +15,11 @@ some deviations may still be present.
 
 #### Instance configuration
 
-| Option	| Example value		| Default value 	| Description		|
-|---------------|-----------------------|-----------------------|-----------------------|
-| `read`	| `2`			| none			| MIDI device to connect for input |
-| `write`	| `DeviceName`		| none			| MIDI device to connect for output |
-| `epn-tx`	| `short`		| `full`		| Configure whether to clear the active parameter number after transmitting an `nrpn` or `rpn` parameter. |
+| Option		| Example value		| Default value 	| Description		|
+|-----------------------|-----------------------|-----------------------|-----------------------|
+| `read` / `source`	| `2`			| none			| MIDI device to connect for input |
+| `write` / `target`	| `DeviceName`		| none			| MIDI device to connect for output |
+| `epn-tx`		| `short`		| `full`		| Configure whether to clear the active parameter number after transmitting an `nrpn` or `rpn` parameter. |
 
 Input/output device names may either be prefixes of MIDI device names or numeric indices corresponding
 to the listing shown at startup when using the global `list` option.

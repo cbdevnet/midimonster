@@ -11,11 +11,11 @@ The MIDI backend provides read-write access to the MIDI protocol via virtual por
 
 #### Instance configuration
 
-| Option	| Example value		| Default value 	| Description		|
-|---------------|-----------------------|-----------------------|-----------------------|
-| `read`	| `20:0`		| none			| MIDI device to connect for input |
-| `write`	| `DeviceName`		| none			| MIDI device to connect for output |
-| `epn-tx`	| `short`		| `full`		| Configures whether to clear the active parameter number after transmitting an `nrpn` or `rpn` parameter |
+| Option		| Example value		| Default value 	| Description		|
+|-----------------------|-----------------------|-----------------------|-----------------------|
+| `read` / `source`	| `20:0`		| none			| MIDI device to connect for input |
+| `write` / `target`	| `DeviceName`		| none			| MIDI device to connect for output |
+| `epn-tx`		| `short`		| `full`		| Configures whether to clear the active parameter number after transmitting an `nrpn` or `rpn` parameter |
 
 MIDI device names may either be `client:port` portnames or prefixes of MIDI device names.
 Run `aconnect -i` to list input ports and `aconnect -o` to list output ports.

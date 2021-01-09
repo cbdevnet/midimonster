@@ -74,7 +74,7 @@ static int winmidi_configure(char* option, char* value){
 
 static int winmidi_configure_instance(instance* inst, char* option, char* value){
 	winmidi_instance_data* data = (winmidi_instance_data*) inst->impl;
-	if(!strcmp(option, "read")){
+	if(!strcmp(option, "read") || !strcmp(option, "source")){
 		if(data->read){
 			LOGPF("Instance %s already connected to an input device", inst->name);
 			return 1;
@@ -82,7 +82,7 @@ static int winmidi_configure_instance(instance* inst, char* option, char* value)
 		data->read = strdup(value);
 		return 0;
 	}
-	else if(!strcmp(option, "write")){
+	else if(!strcmp(option, "write") || !strcmp(option, "target")){
 		if(data->write){
 			LOGPF("Instance %s already connected to an output device", inst->name);
 			return 1;

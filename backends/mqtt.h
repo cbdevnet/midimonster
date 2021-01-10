@@ -16,6 +16,8 @@ static int mqtt_shutdown(size_t n, instance** inst);
 #define MQTT_KEEPALIVE 10 
 #define MQTT_VERSION_DEFAULT 0x05
 
+#define MQTT5_NO_LOCAL 0x04
+
 enum {
 	MSG_RESERVED = 0x00,
 	MSG_CONNECT = 0x10,
@@ -25,7 +27,7 @@ enum {
 	MSG_PUBREC = 0x50,
 	MSG_PUBREL = 0x60,
 	MSG_PUBCOMP = 0x70,
-	MSG_SUBSCRIBE = 0x80,
+	MSG_SUBSCRIBE = 0x82,
 	MSG_SUBACK = 0x90,
 	MSG_UNSUBSCRIBE = 0xA0,
 	MSG_UNSUBACK = 0xB0,
@@ -34,6 +36,13 @@ enum {
 	MSG_DISCONNECT = 0xE0,
 	MSG_AUTH = 0xF0
 };
+
+//qos, subscribe
+typedef struct /*_mqtt_channel*/ {
+	char* topic;
+	uint16_t topic_alias;
+	uint8_t flags;
+} mqtt_channel_data;
 
 typedef struct /*_mqtt_instance_data*/ {
 	uint8_t tls;
@@ -46,14 +55,12 @@ typedef struct /*_mqtt_instance_data*/ {
 	char* client_id;
 
 	size_t nchannels;
-	char** channel;
+	mqtt_channel_data* channel;
 
 	int fd;
 	uint8_t receive_buffer[MQTT_BUFFER_LENGTH];
 	size_t receive_offset;
 
 	uint64_t last_control;
+	uint16_t packet_identifier;
 } mqtt_instance_data;
-
-//per-channel
-//qos, subscribe

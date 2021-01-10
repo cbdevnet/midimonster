@@ -169,6 +169,9 @@ static channel* winmidi_channel(instance* inst, char* spec, uint8_t flags){
 	else if(!strncmp(next_token, "aftertouch", 10)){
 		ident.fields.type = aftertouch;
 	}
+	else if(!strncmp(next_token, "program", 7)){
+		ident.fields.type = program;
+	}
 	else{
 		LOGPF("Unknown control type in %s", spec);
 		return NULL;
@@ -203,7 +206,7 @@ static void winmidi_tx(HMIDIOUT port, uint8_t type, uint8_t channel, uint8_t con
 		output.components.data1 = value & 0x7F;
 		output.components.data2 = (value >> 7) & 0x7F;
 	}
-	else if(type == aftertouch){
+	else if(type == aftertouch || type == program){
 		output.components.data1 = value;
 		output.components.data2 = 0;
 	}
@@ -270,6 +273,8 @@ static char* winmidi_type_name(uint8_t typecode){
 			return "aftertouch";
 		case pitchbend:
 			return "pitch";
+		case program:
+			return "program";
 	}
 	return "unknown";
 }
@@ -294,7 +299,8 @@ static int winmidi_handle(size_t num, managed_fd* fds){
 		if(backend_config.detect){
 			//pretty-print channel-wide events
 			if(backend_config.event[u].channel.fields.type == pitchbend
-					|| backend_config.event[u].channel.fields.type == aftertouch){
+					|| backend_config.event[u].channel.fields.type == aftertouch
+					|| backend_config.event[u].channel.fields.type == program){
 				LOGPF("Incoming data on channel %s.ch%d.%s, value %f",
 						backend_config.event[u].inst->name,
 						backend_config.event[u].channel.fields.channel,
@@ -450,7 +456,7 @@ static void CALLBACK winmidi_input_callback(HMIDIIN device, unsigned message, DW
 				val.normalised = (double) ((input.components.data2 << 7) | input.components.data1) / 16383.0;
 				val.raw.u64 = input.components.data2 << 7 | input.components.data1;
 			}
-			else if(ident.fields.type == aftertouch){
+			else if(ident.fields.type == aftertouch || ident.fields.type == program){
 				ident.fields.control = 0;
 				val.normalised = (double) input.components.data1 / 127.0;
 				val.raw.u64 = input.components.data1;

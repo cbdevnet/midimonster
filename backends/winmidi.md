@@ -33,13 +33,14 @@ The `winmidi` backend supports mapping different MIDI events as MIDIMonster chan
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
+* `program` - Channel program change messages
 * `rpn` - Registered parameter numbers (14-bit extension)
 * `nrpn` - Non-registered parameter numbers (14-bit extension)
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
 
-The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
+The `pitch`, `aftertouch` and `program` messages/events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 
 MIDI channels range from `0` to `15`. Each MIDI channel consists of 128 notes (numbered `0` through `127`), which
 additionally each have a pressure control, 128 CC's (numbered likewise), a channel pressure control (also called
@@ -55,6 +56,7 @@ midi1.channel15.pressure1 > midi1.channel0.note0
 midi1.ch1.aftertouch > midi2.ch2.cc0
 midi1.ch0.pitch > midi2.ch1.pitch
 midi2.ch0.nrpn900 > midi1.ch1.rpn1
+midi2.ch15.note1 > midi1.ch2.program
 ```
 
 #### Known bugs / problems

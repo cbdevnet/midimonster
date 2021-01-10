@@ -24,12 +24,13 @@ static int mmjack_shutdown(size_t n, instance** inst);
 enum /*mmjack_midi_channel_type*/ {
 	midi_none = 0,
 	midi_note = 0x90,
-	midi_cc = 0xB0,
 	midi_pressure = 0xA0,
+	midi_cc = 0xB0,
+	midi_program = 0xC0,
 	midi_aftertouch = 0xD0,
 	midi_pitchbend = 0xE0,
-	midi_rpn = 0xF0,
-	midi_nrpn = 0xF1
+	midi_rpn = 0xF1,
+	midi_nrpn = 0xF2
 };
 
 typedef union {

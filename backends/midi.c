@@ -14,6 +14,7 @@ enum /*_midi_channel_type*/ {
 	pressure,
 	aftertouch,
 	pitchbend,
+	program,
 	rpn,
 	nrpn
 };
@@ -167,6 +168,9 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 	else if(!strncmp(channel, "pitch", 5)){
 		ident.fields.type = pitchbend;
 	}
+	else if(!strncmp(channel, "program", 7)){
+		ident.fields.type = program;
+	}
 	else if(!strncmp(channel, "aftertouch", 10)){
 		ident.fields.type = aftertouch;
 	}
@@ -207,6 +211,9 @@ static void midi_tx(int port, uint8_t type, uint8_t channel, uint8_t control, ui
 			break;
 		case aftertouch:
 			snd_seq_ev_set_chanpress(&ev, channel, value);
+			break;
+		case program:
+			snd_seq_ev_set_pgmchange(&ev, channel, value);
 			break;
 	}
 
@@ -269,6 +276,8 @@ static char* midi_type_name(uint8_t type){
 			return "aftertouch";
 		case pitchbend:
 			return "pitch";
+		case program:
+			return "program";
 	}
 	return "unknown";
 }
@@ -399,6 +408,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 			case SND_SEQ_EVENT_CHANPRESS:
 				ident.fields.type = aftertouch;
 				ident.fields.channel = ev->data.control.channel;
+				ident.fields.control = 0;
 				val.normalised = (double) ev->data.control.value / 127.0;
 				break;
 			case SND_SEQ_EVENT_PITCHBEND:
@@ -406,6 +416,12 @@ static int midi_handle(size_t num, managed_fd* fds){
 				ident.fields.control = 0;
 				ident.fields.channel = ev->data.control.channel;
 				val.normalised = ((double) ev->data.control.value + 8192) / 16383.0;
+				break;
+			case SND_SEQ_EVENT_PGMCHANGE:
+				ident.fields.type = program;
+				ident.fields.control = 0;
+				ident.fields.channel = ev->data.control.channel;
+				val.normalised = (double) ev->data.control.value / 127.0;
 				break;
 			case SND_SEQ_EVENT_CONTROLLER:
 				ident.fields.type = cc;
@@ -437,7 +453,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 		}
 
 		if(midi_config.detect && event_type){
-			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch){
+			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch || ident.fields.type == program){
 				LOGPF("Incoming data on channel %s.ch%d.%s", inst->name, ident.fields.channel, event_type);
 			}
 			else{

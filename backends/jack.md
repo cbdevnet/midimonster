@@ -56,6 +56,9 @@ MIDI ports provide subchannels for the various MIDI controls available. Each MID
 corresponding pressure controls for each note, 128 control change (CC) controls (numbered likewise),
 one channel wide "aftertouch" control and one channel-wide pitchbend control.
 
+Every MIDI channel also provides `rpn` and `nrpn` controls, which are implemented on top of the MIDI protocol, using
+the CC controls 101/100/99/98/38/6. Both control types have 14-bit IDs and 14-bit values.
+
 A MIDI port subchannel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
 
@@ -66,16 +69,18 @@ The following values are recognized for `type`:
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
+* `program` - Channel program change messages
 * `rpn` - Registered parameter numbers (14-bit extension)
 * `nrpn` - Non-registered parameter numbers (14-bit extension)
 
-The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
+The `pitch`, `aftertouch` and `program` messages/events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 
 Example mappings:
 ```
 jack1.cv_in > jack1.midi_out.ch0.note3
 jack1.midi_in.ch0.pitch > jack1.cv_out
 jack2.midi_in.ch0.nrpn900 > jack1.midi_out.ch1.rpn1
+jack1.midi_in.ch15.note1 > jack1.midi_out.ch4.program
 ```
 
 The MIDI subchannel syntax is intentionally kept compatible to the different MIDI backends also supported

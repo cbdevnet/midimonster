@@ -79,7 +79,7 @@ static int mmjack_midiqueue_append(mmjack_port* port, mmjack_channel_ident ident
 }
 
 static void mmjack_process_midiout(void* buffer, size_t sample_offset, uint8_t type, uint8_t channel, uint8_t control, uint16_t value){
-	jack_midi_data_t* event_data = jack_midi_event_reserve(buffer, sample_offset, (type == midi_aftertouch) ? 2 : 3);
+	jack_midi_data_t* event_data = jack_midi_event_reserve(buffer, sample_offset, (type == midi_aftertouch || type == midi_program) ? 2 : 3);
 
 	if(!event_data){
 		LOG("Failed to reserve MIDI stream data");
@@ -95,7 +95,7 @@ static void mmjack_process_midiout(void* buffer, size_t sample_offset, uint8_t t
 		event_data[1] = value & 0x7F;
 		event_data[2] = (value >> 7) & 0x7F;
 	}
-	else if(type == midi_aftertouch){
+	else if(type == midi_aftertouch || type == midi_program){
 		event_data[1] = value & 0x7F;
 		event_data[2] = 0;
 	}
@@ -192,7 +192,7 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 					ident.fields.sub_control = 0;
 					value = event.buffer[1] | (event.buffer[2] << 7);
 				}
-				else if(ident.fields.sub_type == midi_aftertouch){
+				else if(ident.fields.sub_type == midi_aftertouch || ident.fields.sub_type == midi_program){
 					ident.fields.sub_control = 0;
 					value = event.buffer[1];
 				}
@@ -500,6 +500,9 @@ static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){
 	}
 	else if(!strncmp(next_token, "aftertouch", 10)){
 		ident->fields.sub_type = midi_aftertouch;
+	}
+	else if(!strncmp(next_token, "program", 7)){
+		ident->fields.sub_type = midi_program;
 	}
 	else{
 		LOGPF("Unknown MIDI control type in spec %s", spec);

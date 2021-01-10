@@ -427,6 +427,8 @@ static char* rtpmidi_type_name(uint8_t type){
 			return "aftertouch";
 		case pitchbend:
 			return "pitch";
+		case program:
+			return "program";
 	}
 	return "unknown";
 }
@@ -552,7 +554,7 @@ static int rtpmidi_peer_applecommand(instance* inst, size_t peer, uint8_t contro
 
 	memcpy(&dest_addr, &(data->peer[peer].dest), min(sizeof(dest_addr), data->peer[peer].dest_len));
 	if(control){
-	//calculate remote control port from data port
+		//calculate remote control port from data port
 		((struct sockaddr_in*) &dest_addr)->sin_port = htobe16(be16toh(((struct sockaddr_in*) &dest_addr)->sin_port) - 1);
 	}
 
@@ -715,6 +717,9 @@ static channel* rtpmidi_channel(instance* inst, char* spec, uint8_t flags){
 	else if(!strncmp(next_token, "aftertouch", 10)){
 		ident.fields.type = aftertouch;
 	}
+	else if(!strncmp(next_token, "program", 7)){
+		ident.fields.type = program;
+	}
 	else{
 		LOGPF("Unknown control type in spec %s", spec);
 		return NULL;
@@ -761,11 +766,11 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 		payload[3] = v[u].normalised * 127.0;
 
 		if(ident.fields.type == pitchbend){
-			payload[2] = ((int)(v[u].normalised * 16384.0)) & 0x7F;
-			payload[3] = (((int)(v[u].normalised * 16384.0)) >> 7) & 0x7F;
+			payload[2] = ((int)(v[u].normalised * 16383.0)) & 0x7F;
+			payload[3] = (((int)(v[u].normalised * 16383.0)) >> 7) & 0x7F;
 		}
-		//channel-wide aftertouch is only 2 bytes
-		else if(ident.fields.type == aftertouch){
+		//channel-wides aftertouch and program are only 2 bytes
+		else if(ident.fields.type == aftertouch || ident.fields.type == program){
 			payload[2] = payload[3];
 			payload -= 1;
 			offset -= 1;
@@ -996,7 +1001,7 @@ static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
 		ident.fields.channel = midi_status & 0x0F;
 
 		//single byte command
-		if(ident.fields.type == aftertouch){
+		if(ident.fields.type == aftertouch || ident.fields.type == program){
 			ident.fields.control = 0;
 			val.normalised = (double) frame[offset] / 127.0;
 			offset++;
@@ -1010,7 +1015,7 @@ static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
 
 			if(ident.fields.type == pitchbend){
 				ident.fields.control = 0;
-				val.normalised = (double)((frame[offset] << 7) | frame[offset - 1]) / 16384.0;
+				val.normalised = (double)((frame[offset] << 7) | frame[offset - 1]) / 16383.0;
 			}
 			else{
 				ident.fields.control = frame[offset - 1];
@@ -1030,7 +1035,9 @@ static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
 				ident.fields.type, ident.fields.channel, ident.fields.control, val.normalised);
 
 		if(cfg.detect){
-			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch){
+			if(ident.fields.type == pitchbend
+					|| ident.fields.type == aftertouch
+					|| ident.fields.type == program){
 				LOGPF("Incoming data on channel %s.ch%d.%s, value %f",
 						inst->name, ident.fields.channel,
 						rtpmidi_type_name(ident.fields.type), val.normalised);

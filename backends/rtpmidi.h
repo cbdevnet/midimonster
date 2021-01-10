@@ -35,8 +35,9 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 enum /*_rtpmidi_channel_type*/ {
 	none = 0,
 	note = 0x90,
-	cc = 0xB0,
 	pressure = 0xA0,
+	cc = 0xB0,
+	program = 0xC0,
 	aftertouch = 0xD0,
 	pitchbend = 0xE0
 };

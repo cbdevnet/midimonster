@@ -63,11 +63,12 @@ The `rtpmidi` backend supports mapping different MIDI events to MIDIMonster chan
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
+* `program` - Channel program change messages
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
 
-The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
+The `pitch`, `aftertouch` program messages/events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 
 MIDI channels range from `0` to `15`. Each MIDI channel consists of 128 notes (numbered `0` through `127`), which
 additionally each have a pressure control, 128 CC's (numbered likewise), a channel pressure control (also called
@@ -80,6 +81,7 @@ rmidi1.ch0.note9 > rmidi2.channel1.cc4
 rmidi1.channel15.pressure1 > rmidi1.channel0.note0
 rmidi1.ch1.aftertouch > rmidi2.ch2.cc0
 rmidi1.ch0.pitch > rmidi2.ch1.pitch
+rmidi2.ch15.note1 > rmidi2.ch2.program
 ```
 
 #### Known bugs / problems

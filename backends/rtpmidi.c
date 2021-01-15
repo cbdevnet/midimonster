@@ -429,6 +429,10 @@ static char* rtpmidi_type_name(uint8_t type){
 			return "pitch";
 		case program:
 			return "program";
+		case rpn:
+			return "rpn";
+		case nrpn:
+			return "nrpn";
 	}
 	return "unknown";
 }
@@ -579,6 +583,13 @@ static int rtpmidi_configure_instance(instance* inst, char* option, char* value)
 		LOGPF("Unknown instance mode %s for instance %s", value, inst->name);
 		return 1;
 	}
+	else if(!strcmp(option, "epn-tx")){
+		data->epn_tx_short = 0;
+		if(!strcmp(value, "short")){
+			data->epn_tx_short = 1;
+		}
+		return 0;
+	}
 	else if(!strcmp(option, "ssrc")){
 		data->ssrc = strtoul(value, NULL, 0);
 		if(!data->ssrc){
@@ -707,6 +718,14 @@ static channel* rtpmidi_channel(instance* inst, char* spec, uint8_t flags){
 		ident.fields.type = note;
 		next_token += 4;
 	}
+	else if(!strncmp(next_token, "rpn", 3)){
+		ident.fields.type = rpn;
+		next_token += 3;
+	}
+	else if(!strncmp(next_token, "nrpn", 4)){
+		ident.fields.type = nrpn;
+		next_token += 4;
+	}
 	else if(!strncmp(next_token, "pressure", 8)){
 		ident.fields.type = pressure;
 		next_token += 8;
@@ -733,6 +752,32 @@ static channel* rtpmidi_channel(instance* inst, char* spec, uint8_t flags){
 	return NULL;
 }
 
+static size_t rtpmidi_push_midi(uint8_t* payload, size_t bytes_left, uint8_t type, uint8_t channel, uint8_t control, uint16_t value){
+	//FIXME this is a bit simplistic but it works for now
+	if(bytes_left < 4){
+		return 0;
+	}
+
+	//encode timestamp
+	payload[0] = 0;
+
+	//encode midi command
+	payload[1] = type | channel;
+	payload[2] = control;
+	payload[3] = value & 0x7F;
+
+	if(type == pitchbend){
+		payload[2] = value & 0x7F;
+		payload[3] = (value >> 7) & 0x7F;
+	}
+	//channel-wides aftertouch and program are only 2 bytes
+	else if(type == aftertouch || type == program){
+		payload[2] = payload[3];
+		return 3;
+	}
+	return 4;
+}
+
 static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v){
 	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
 	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
@@ -741,6 +786,7 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	size_t offset = sizeof(rtpmidi_header) + sizeof(rtpmidi_command_header), u = 0;
 	uint8_t* payload = frame + offset;
 	rtpmidi_channel_ident ident;
+	size_t command_length = 0;
 
 	rtp_header->vpxcc = RTPMIDI_HEADER_MAGIC;
 	//some receivers seem to have problems reading rfcs and interpreting the marker bit correctly
@@ -757,27 +803,37 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	for(u = 0; u < num; u++){
 		ident.label = c[u]->ident;
 
-		//encode timestamp
-		payload[0] = 0;
+		switch(ident.fields.type){
+			case rpn:
+			case nrpn:
+				//transmit parameter number
+				command_length = rtpmidi_push_midi(payload + offset, sizeof(frame) - offset, cc, ident.fields.channel, (ident.fields.type == rpn) ? 101 : 99, (ident.fields.control >> 7) & 0x7F);
+				command_length += rtpmidi_push_midi(payload + offset + command_length, sizeof(frame) - offset, cc, ident.fields.channel, (ident.fields.type == rpn) ? 100 : 98, ident.fields.control & 0x7F);
 
-		//encode midi command
-		payload[1] = ident.fields.type | ident.fields.channel;
-		payload[2] = ident.fields.control;
-		payload[3] = v[u].normalised * 127.0;
+				//transmit parameter value
+				command_length += rtpmidi_push_midi(payload + offset + command_length, sizeof(frame) - offset, cc, ident.fields.channel, 6, (((uint16_t) (v[u].normalised * 16383.0)) >> 7) & 0x7F);
+				command_length += rtpmidi_push_midi(payload + offset + command_length, sizeof(frame) - offset, cc, ident.fields.channel, 38, ((uint16_t) (v[u].normalised * 16383.0)) & 0x7F);
 
-		if(ident.fields.type == pitchbend){
-			payload[2] = ((int)(v[u].normalised * 16383.0)) & 0x7F;
-			payload[3] = (((int)(v[u].normalised * 16383.0)) >> 7) & 0x7F;
+				if(!data->epn_tx_short){
+					//clear active parameter
+					command_length += rtpmidi_push_midi(payload + offset + command_length, sizeof(frame) - offset, cc, ident.fields.channel, 101, 127);
+					command_length += rtpmidi_push_midi(payload + offset + command_length, sizeof(frame) - offset, cc, ident.fields.channel, 100, 127);
+				}
+				break;
+			case pitchbend:
+				//TODO check whether this works
+				command_length = rtpmidi_push_midi(payload + offset, sizeof(frame) - offset, ident.fields.type, ident.fields.channel, ident.fields.control, v[u].normalised * 16383.0);
+				break;
+			default:
+				command_length = rtpmidi_push_midi(payload + offset, sizeof(frame) - offset, ident.fields.type, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
 		}
-		//channel-wides aftertouch and program are only 2 bytes
-		else if(ident.fields.type == aftertouch || ident.fields.type == program){
-			payload[2] = payload[3];
-			payload -= 1;
-			offset -= 1;
+
+		if(command_length == 0){
+			LOGPF("Transmit buffer size exceeded on %s", inst->name);
+			break;
 		}
 
-		payload += 4;
-		offset += 4;
+		offset += command_length;
 	}
 
 	//update command section length
@@ -929,6 +985,79 @@ static int rtpmidi_handle_applemidi(instance* inst, int fd, uint8_t* frame, size
 	return 0;
 }
 
+//this state machine was copied more-or-less verbatim from the alsa midi implementation - fixes there will need to be integrated
+static void rtpmidi_handle_epn(instance* inst, uint8_t chan, uint16_t control, uint16_t value){
+	rtpmidi_instance_data* data = (rtpmidi_instance_data*) inst->impl;
+	rtpmidi_channel_ident ident = {
+		.label = 0
+	};
+	channel* changed = NULL;
+	channel_value val;
+
+	//switching between nrpn and rpn clears all valid bits
+	if(((data->epn_status[chan] & EPN_NRPN) && (control == 101 || control == 100))
+				|| (!(data->epn_status[chan] & EPN_NRPN) && (control == 99 || control == 98))){
+		data->epn_status[chan] &= ~(EPN_NRPN | EPN_PARAMETER_LO | EPN_PARAMETER_HI);
+	}
+
+	//setting an address always invalidates the value valid bits
+	if(control >= 98 && control <= 101){
+		data->epn_status[chan] &= ~EPN_VALUE_HI;
+	}
+
+	//parameter hi
+	if(control == 101 || control == 99){
+		data->epn_control[chan] &= 0x7F;
+		data->epn_control[chan] |= value << 7;
+		data->epn_status[chan] |= EPN_PARAMETER_HI | ((control == 99) ? EPN_NRPN : 0);
+		if(control == 101 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_HI;
+		}
+	}
+
+	//parameter lo
+	if(control == 100 || control == 98){
+		data->epn_control[chan] &= ~0x7F;
+		data->epn_control[chan] |= value & 0x7F;
+		data->epn_status[chan] |= EPN_PARAMETER_LO | ((control == 98) ? EPN_NRPN : 0);
+		if(control == 100 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_LO;
+		}
+	}
+
+	//value hi, clears low, mark as update candidate
+	if(control == 6
+			//check if parameter is set before accepting value update
+			&& ((data->epn_status[chan] & (EPN_PARAMETER_HI | EPN_PARAMETER_LO)) == (EPN_PARAMETER_HI | EPN_PARAMETER_LO))){
+		data->epn_value[chan] = value << 7;
+		data->epn_status[chan] |= EPN_VALUE_HI;
+	}
+
+	//value lo, flush the value
+	if(control == 38
+			&& data->epn_status[chan] & EPN_VALUE_HI){
+		data->epn_value[chan] &= ~0x7F;
+		data->epn_value[chan] |= value & 0x7F;
+		data->epn_status[chan] &= ~EPN_VALUE_HI;
+
+		if(cfg.detect){
+			LOGPF("Incoming EPN data on channel %s.ch%d.%s%d", inst->name, chan, data->epn_status[chan] & EPN_NRPN ? "nrpn" : "rpn", data->epn_control[chan]);
+		}
+
+		//find the updated channel
+		ident.fields.type = data->epn_status[chan] & EPN_NRPN ? nrpn : rpn;
+		ident.fields.channel = chan;
+		ident.fields.control = data->epn_control[chan];
+		val.normalised = (double) data->epn_value[chan] / 16383.0;
+
+		//push the new value
+		changed = mm_channel(inst, ident.label, 0);
+		if(changed){
+			mm_channel_event(changed, val);
+		}
+	}
+}
+
 static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
 	uint16_t length = 0;
 	size_t offset = 1, decode_time = 0, command_bytes = 0;
@@ -1004,6 +1133,7 @@ static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
 		if(ident.fields.type == aftertouch || ident.fields.type == program){
 			ident.fields.control = 0;
 			val.normalised = (double) frame[offset] / 127.0;
+			val.raw.u64 = frame[offset];
 			offset++;
 		}
 		//two-byte command
@@ -1016,16 +1146,19 @@ static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
 			if(ident.fields.type == pitchbend){
 				ident.fields.control = 0;
 				val.normalised = (double)((frame[offset] << 7) | frame[offset - 1]) / 16383.0;
+				val.raw.u64 = (frame[offset] << 7) | frame[offset - 1];
 			}
 			else{
 				ident.fields.control = frame[offset - 1];
 				val.normalised = (double) frame[offset] / 127.0;
+				val.raw.u64 = frame[offset];
 			}
 
 			//fix-up note off events
 			if(ident.fields.type == 0x80){
 				ident.fields.type = note;
 				val.normalised = 0;
+				val.raw.u64 = 0;
 			}
 
 			offset++;
@@ -1033,6 +1166,14 @@ static int rtpmidi_parse(instance* inst, uint8_t* frame, size_t bytes){
 
 		DBGPF("Decoded command type %02X channel %d control %d value %f",
 				ident.fields.type, ident.fields.channel, ident.fields.control, val.normalised);
+
+		//forward EPN CCs to the EPN state machine
+		if(ident.fields.type == cc
+				&& ((ident.fields.control <= 101 && ident.fields.control >= 98)
+					|| ident.fields.control == 6
+					|| ident.fields.control == 38)){
+			rtpmidi_handle_epn(inst, ident.fields.channel, ident.fields.control, val.raw.u64);
+		}	
 
 		if(cfg.detect){
 			if(ident.fields.type == pitchbend

@@ -200,7 +200,7 @@ static void winmidi_tx(HMIDIOUT port, uint8_t type, uint8_t channel, uint8_t con
 
 	output.components.status = type | channel;
 	output.components.data1 = control;
-	output.components.data2 = value;
+	output.components.data2 = value & 0x7F;
 
 	if(type == pitchbend){
 		output.components.data1 = value & 0x7F;

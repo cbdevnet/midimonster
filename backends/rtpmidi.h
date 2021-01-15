@@ -32,6 +32,11 @@ static int rtpmidi_shutdown(size_t n, instance** inst);
 #define DNS_OPCODE(a) (((a) & 0x78) >> 3)
 #define DNS_RESPONSE(a) ((a) & 0x80)
 
+#define EPN_NRPN 8
+#define EPN_PARAMETER_HI 4
+#define EPN_PARAMETER_LO 2
+#define EPN_VALUE_HI 1
+
 enum /*_rtpmidi_channel_type*/ {
 	none = 0,
 	note = 0x90,
@@ -39,7 +44,9 @@ enum /*_rtpmidi_channel_type*/ {
 	cc = 0xB0,
 	program = 0xC0,
 	aftertouch = 0xD0,
-	pitchbend = 0xE0
+	pitchbend = 0xE0,
+	rpn = 0xF1,
+	nrpn = 0xF2
 };
 
 typedef enum /*_rtpmidi_instance_mode*/ {
@@ -50,10 +57,10 @@ typedef enum /*_rtpmidi_instance_mode*/ {
 
 typedef union {
 	struct {
-		uint8_t pad[5];
+		uint8_t pad[4];
 		uint8_t type;
 		uint8_t channel;
-		uint8_t control;
+		uint16_t control;
 	} fields;
 	uint64_t label;
 } rtpmidi_channel_ident;
@@ -68,7 +75,7 @@ typedef struct /*_rtpmidi_peer*/ {
 	ssize_t invite; //invite-list index for apple-mode learned peers (used to track ipv6/ipv4 overlapping invitations)
 } rtpmidi_peer;
 
-typedef struct /*_rtmidi_instance_data*/ {
+typedef struct /*_rtpmidi_instance_data*/ {
 	rtpmidi_instance_mode mode;
 
 	int fd;
@@ -79,6 +86,11 @@ typedef struct /*_rtmidi_instance_data*/ {
 	rtpmidi_peer* peer;
 	uint32_t ssrc;
 	uint16_t sequence;
+
+	uint8_t epn_tx_short;
+	uint16_t epn_control[16];
+	uint16_t epn_value[16];
+	uint8_t epn_status[16];
 
 	//apple-midi config
 	char* accept;

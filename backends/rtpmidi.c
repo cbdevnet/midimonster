@@ -783,10 +783,9 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 	uint8_t frame[RTPMIDI_PACKET_BUFFER] = "";
 	rtpmidi_header* rtp_header = (rtpmidi_header*) frame;
 	rtpmidi_command_header* command_header = (rtpmidi_command_header*) (frame + sizeof(rtpmidi_header));
-	size_t offset = sizeof(rtpmidi_header) + sizeof(rtpmidi_command_header), u = 0;
+	size_t command_length = 0, offset = sizeof(rtpmidi_header) + sizeof(rtpmidi_command_header), u = 0;
 	uint8_t* payload = frame + offset;
 	rtpmidi_channel_ident ident;
-	size_t command_length = 0;
 
 	rtp_header->vpxcc = RTPMIDI_HEADER_MAGIC;
 	//some receivers seem to have problems reading rfcs and interpreting the marker bit correctly
@@ -845,7 +844,9 @@ static int rtpmidi_set(instance* inst, size_t num, channel** c, channel_value* v
 
 	for(u = 0; u < data->peers; u++){
 		if(data->peer[u].active && data->peer[u].connected){
-			sendto(data->fd, frame, offset, 0, (struct sockaddr*) &data->peer[u].dest, data->peer[u].dest_len);
+			if(sendto(data->fd, frame, offset, 0, (struct sockaddr*) &data->peer[u].dest, data->peer[u].dest_len) <= 0){
+				LOGPF("Failed to transmit to peer: %s", mmbackend_socket_strerror(errno));
+			}
 		}
 	}
 

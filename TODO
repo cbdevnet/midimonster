@@ -10,3 +10,6 @@ move all typenames to _t
 per-channel filters
 	* invert
 	* edge detection
+
+channel discovery / enumeration
+note exit condition/reconnection details for backends

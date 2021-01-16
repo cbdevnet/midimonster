@@ -367,7 +367,9 @@ static int evdev_handle(size_t num, managed_fd* fds){
 
 		data = (evdev_instance_data*) inst->impl;
 
-		for(read_status = libevdev_next_event(data->input_ev, read_flags, &ev); read_status >= 0; read_status = libevdev_next_event(data->input_ev, read_flags, &ev)){
+		for(read_status = libevdev_next_event(data->input_ev, read_flags, &ev);
+				read_status == LIBEVDEV_READ_STATUS_SUCCESS || read_status == LIBEVDEV_READ_STATUS_SYNC;
+				read_status = libevdev_next_event(data->input_ev, read_flags, &ev)){
 			read_flags = LIBEVDEV_READ_FLAG_NORMAL;
 			if(read_status == LIBEVDEV_READ_STATUS_SYNC){
 				read_flags = LIBEVDEV_READ_FLAG_SYNC;
@@ -382,6 +384,11 @@ static int evdev_handle(size_t num, managed_fd* fds){
 			if(evdev_push_event(inst, data, ev)){
 				return 1;
 			}
+		}
+
+		if(read_status != -EAGAIN){
+			LOGPF("Failed to handle events: %s\n", strerror(-read_status));
+			return 1;
 		}
 	}
 

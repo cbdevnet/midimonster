@@ -40,7 +40,8 @@ enum {
 //qos, subscribe
 typedef struct /*_mqtt_channel*/ {
 	char* topic;
-	uint16_t topic_alias;
+	uint16_t topic_alias_sent;
+	uint16_t topic_alias_rcvd;
 	uint8_t flags;
 } mqtt_channel_data;
 

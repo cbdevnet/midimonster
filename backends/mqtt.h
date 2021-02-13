@@ -18,6 +18,15 @@ static int mqtt_shutdown(size_t n, instance** inst);
 
 #define MQTT5_NO_LOCAL 0x04
 
+enum /*_mqtt_property_storage_classes*/ {
+	STORAGE_U8,
+	STORAGE_U16,
+	STORAGE_U32,
+	STORAGE_VARINT,
+	STORAGE_PREFIXED,
+	STORAGE_PREFIXPAIR
+};
+
 enum {
 	MSG_RESERVED = 0x00,
 	MSG_CONNECT = 0x10,

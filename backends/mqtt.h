@@ -73,4 +73,6 @@ typedef struct /*_mqtt_instance_data*/ {
 
 	uint64_t last_control;
 	uint16_t packet_identifier;
+	uint16_t server_max_alias;
+	uint16_t current_alias;
 } mqtt_instance_data;

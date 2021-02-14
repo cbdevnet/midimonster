@@ -580,7 +580,7 @@ static int mqtt_maintenance(){
 
 static int mqtt_handle_publish(instance* inst, uint8_t type, uint8_t* variable_header, size_t length){
 	mqtt_instance_data* data = (mqtt_instance_data*) inst->impl;
-	char* topic = NULL, *payload = NULL;
+	char* topic = NULL, *payload = NULL, *conversion_end = NULL;
 	channel* changed = NULL;
 	channel_value val;
 	uint8_t qos = (type & 0x06) >> 1, content_utf8 = 0;
@@ -647,7 +647,11 @@ static int mqtt_handle_publish(instance* inst, uint8_t type, uint8_t* variable_h
 		//FIXME implement input mappings
 		changed = mm_channel(inst, u, 0);
 		if(changed){
-			val.normalised = strtod(payload, NULL);
+			val.normalised = clamp(strtod(payload, &conversion_end), 1.0, 0.0);
+			if(payload == conversion_end){
+				LOGPF("Failed to parse incoming data for %s.%s", inst->name, data->channel[u].topic);
+				return 0;
+			}
 			mm_channel_event(changed, val);
 		}
 	}

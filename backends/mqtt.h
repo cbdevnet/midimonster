@@ -46,12 +46,21 @@ enum {
 	MSG_AUTH = 0xF0
 };
 
-//qos, subscribe
+typedef struct /*_mqtt_value_mapping*/ {
+	double min;
+	double max;
+	double normal;
+	char* discrete;
+} mqtt_channel_value;
+
 typedef struct /*_mqtt_channel*/ {
 	char* topic;
 	uint16_t topic_alias_sent;
 	uint16_t topic_alias_rcvd;
 	uint8_t flags;
+
+	size_t values;
+	mqtt_channel_value* value;
 } mqtt_channel_data;
 
 typedef struct /*_mqtt_instance_data*/ {

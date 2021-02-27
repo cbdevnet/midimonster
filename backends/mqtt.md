@@ -30,10 +30,42 @@ The MQTT protocol places very few restrictions on the exchanged data. Thus, it i
 and output data formats accepted respectively output by the MIDIMonster.
 
 The basic format, without further channel-specific configuration, is an ASCII/UTF-8 string representing a floating
-point number between `0.0` and `1.0`. The MIDIMonster will read these and use the value as the normalised event value.
+point number between `0.0` and `1.0`. The MIDIMonster will read these and use the value as the normalized event value.
 
-Values above the maximum or below the minimum will be clamped. The MIDIMonster will not output values out of those
-bounds.
+Channels may be specified to use a different value range or even freeform discrete values by preconfiguring
+the channels in the instance configuration section. This is done by specifying options of the form
+
+```
+<channel> = range <min> <max>
+<channel> = discrete [!]<min> [!]<max> <value>
+```
+
+Example configurations:
+```
+/a/topic = range -10 10
+/another/topic = discrete !0.0 0.5 off
+/another/topic = discrete 0.5 !1.0 on
+```
+
+Note that there may be only one range configuration per topic, but there may be multiple discrete configurations.
+
+The first channel preconfiguration example will change the channel value scale to values between `-10` and `10`.
+For input channels, this sets the normalization range. The MIDIMonster will normalize the input value according to the scale.
+For output channels, this sets the output scaling factors.
+
+The second and third channel preconfigurations define two discrete values (`on` and `off`) with accompanying normalized
+values. For input channels, the normalized channel value for a discrete input will be the value marked with an exclamation mark `!`.
+For output channels, the output will be the first discrete value for which the range between `<min>` and `<max>` contains
+the normalized channel value.
+
+These examples mean
+* For `/a/topic`, when mapped as input, the input value `5.0` will generate a normalized event value of `0.75`.
+* For `/a/topic`, when mapped as output, a normalized event value `0.25` will generate an output of `-5.0`.
+* For `/another/topic`, when mapped as an input, the input value `off` will generate a normalized event value of `0.0`.
+* For `/another/topic`, when mapped as an output, a normalized event value of `0.75` will generate an output of `on`.
+
+Values above the maximum or below the minimum will be clamped. The MIDIMonster will not output values out of the
+configured bounds.
 
 #### Channel specification
 

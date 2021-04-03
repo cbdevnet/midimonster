@@ -119,7 +119,7 @@ if [ ! "${#deps[@]}" -ge "1" ]; then    # If nothing needs to get installed don'
     printf "\nAll dependencies are fulfilled!\n"    # Dependency array empty! Not running apt!
 else
     printf "\nThen following dependencies are going to be installed:\n"    # Dependency array contains items. Running apt.
-	printf "\n${deps[@]}\n" | sed 's/ /, /g'
+	printf "\n%s\n" "${deps[@]}" | sed 's/ /, /g'
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-suggests --no-install-recommends "${deps[@]}" > /dev/null || error_handler "There was an error doing dependency installation."
     printf "\nAll dependencies are installed now!\n"    # Dependency array empty! Not running apt!
 fi
@@ -133,22 +133,22 @@ ask_questions(){
 	fi
 	
 	if [ -z "$VAR_PREFIX" ]; then
-		read -e -i "$DEFAULT_PREFIX" -p "PREFIX (Install root directory): " input
+		read -r -e -i "$DEFAULT_PREFIX" -p "PREFIX (Install root directory): " input
 		VAR_PREFIX="${input:-$VAR_PREFIX}"
 	fi
 
 	if [ -z "$VAR_PLUGINS" ]; then
-		read -e -i "$VAR_PREFIX$DEFAULT_PLUGINPATH" -p "PLUGINS (Plugin directory): " input
+		read -r -e -i "$VAR_PREFIX$DEFAULT_PLUGINPATH" -p "PLUGINS (Plugin directory): " input
 		VAR_PLUGINS="${input:-$VAR_PLUGINS}"
 	fi
 
 	if [ -z "$VAR_DEFAULT_CFG" ]; then
-		read -e -i "$DEFAULT_CFGPATH" -p "Default config path: " input
+		read -r -e -i "$DEFAULT_CFGPATH" -p "Default config path: " input
 		VAR_DEFAULT_CFG="${input:-$VAR_DEFAULT_CFG}"
 	fi
 
 	if [ -z "$VAR_EXAMPLE_CFGS" ]; then
-		read -e -i "$VAR_PREFIX$DEFAULT_EXAMPLES" -p "Example config directory: " input
+		read -r -e -i "$VAR_PREFIX$DEFAULT_EXAMPLES" -p "Example config directory: " input
 		VAR_EXAMPLE_CFGS="${input:-$VAR_EXAMPLE_CFGS}"
 	fi
 }
@@ -161,7 +161,7 @@ prepare_repo(){
 
 	# If not set via argument, ask whether to install development build
 	if [ -z "$NIGHTLY" ]; then
-		read -p "Do you want to install the latest development version? (y/n)? " magic
+		read -r -p "Do you want to install the latest development version? (y/n)? " magic
 		case "$magic" in
 			y|Y)
 				printf "OK! You´re a risky person ;D\n\n"
@@ -180,7 +180,7 @@ prepare_repo(){
 
 	# Roll back to last tag if a stable version was requested
 	if [ "$NIGHTLY" != 1 ]; then
-		cd "$tmp_path"
+		cd "$tmp_path" || error_handler "Error doing cd to $tmp_path"
 		printf "Finding latest stable version...\n"
 		last_tag=$(git describe --abbrev=0)
 		printf "Checking out %s...\n" "$last_tag"
@@ -197,7 +197,7 @@ build(){
 	export DEFAULT_CFG="$VAR_DEFAULT_CFG"
 	export EXAMPLES="$VAR_EXAMPLE_CFGS"
 
-	cd "$tmp_path"
+	cd "$tmp_path" || error_handler "Error doing cd to $tmp_path"
 	make clean
 	make "$makeargs"
 	make install
@@ -266,7 +266,7 @@ if [ -f "$updater_dir/updater.conf" ] || [ "$UPDATER_FORCE" = "1" ]; then
 		printf "Forcing the updater to start...\n\n"
 	elif [ -x "$VAR_PREFIX/bin/midimonster" ]; then
 		installed_version="$(midimonster --version)"
-		if [[ "$installed_version" =~ "$latest_version" ]]; then
+		if [[ "$installed_version" =~ $latest_version ]]; then
 			printf "The installed version ${bold}$installed_version${normal} seems to be up to date\nDoing nothing\n\n"
 			exit 0
 		else

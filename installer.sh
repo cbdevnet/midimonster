@@ -222,8 +222,11 @@ install_script(){
 }
 
 error_handler(){
-	printf "\nAborting\n"
-	exit 1
+    [[ -n $1 ]] && printf "\n%s\n" "$1"
+    printf "\nAborting"
+    for i in {1..3}; do sleep 0.3s && printf "." && sleep 0.2s; done
+    printf "\n"
+    exit "1"
 }
 
 cleanup(){

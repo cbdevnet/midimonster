@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ################################################ SETUP ################################################
-deps=(
+dependencies=(
 	libasound2-dev
 	libevdev-dev
 	liblua5.3-dev
@@ -77,24 +77,24 @@ ARGS(){
 				exit 0
 			;;
 			--install-dependencies)
-				install_dependencies
+				install_dependencies "${dependencies[@]}"
 				exit 0
 			;;
 			-h|--help|*)
 				assign_defaults
-				printf "${bold}Usage:${normal} ${0} ${c_green}[OPTIONS]${normal}"
-				printf "\n\t${c_green}--prefix=${normal}${c_red}<path>${normal}\t\tSet the installation prefix.\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PREFIX"
+				printf "%sUsage: %s[OPTIONS]%s" "${bold}" "${normal} ${0} ${c_green}" "${normal}"
+				printf "\n\t%s--prefix=%s<path>%s\t\tSet the installation prefix.\t\t%sDefault:%s" "${c_green}" "${normal}${c_red}" "${normal}" "${c_mag}" "${normal} ${dim}$VAR_PREFIX${normal}"
 				printf "\n\t${c_green}--plugins=${normal}${c_red}<path>${normal}\tSet the plugin install path.\t\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_PLUGINS"
 				printf "\n\t${c_green}--defcfg=${normal}${c_red}<path>${normal}\t\tSet the default configuration path.\t${c_mag}Default:${normal} ${dim}%s${normal}" "$VAR_DEFAULT_CFG"
 				printf "\n\t${c_green}--examples=${normal}${c_red}<path>${normal}\tSet the path for example configurations.\t${c_mag}Default:${normal} ${dim}%s${normal}\n" "$VAR_EXAMPLE_CFGS"
-				printf "\n\t${c_green}--dev${normal}\t\t\tInstall nightly version."
-				printf "\n\t${c_green}-d,\t--default${normal}\tUse default values to install."
-				printf "\n\t${c_green}-fu,\t--forceupdate${normal}\tForce the updater to update without a version check."
-				printf "\n\t${c_green}--selfupdate${normal}\t\tUpdates this script to the newest version and exit."
-				printf "\n\t${c_green}--install-updater${normal}\tInstall the updater (Run with midimonster-updater) and exit."
-				printf "\n\t${c_green}--install-dependencies${normal}\tInstall dependencies and exit"
-				printf "\n\t${c_green}-h,\t--help${normal}\t\tShow this message and exit."
-				printf "\n\t${uline}${bold}${c_mag}Each argument can be overwritten by another, the last one is used!.${normal}\n"
+				printf "\n\t%s--dev%s\t\t\tInstall nightly version." "${c_green}" "${normal}"
+				printf "\n\t%s-d,\t--default%s\tUse default values to install." "${c_green}" "${normal}"
+				printf "\n\t%s-fu,\t--forceupdate%s\tForce the updater to update without a version check." "${c_green}" "${normal}"
+				printf "\n\t%s--selfupdate%s\t\tUpdates this script to the newest version and exit." "${c_green}" "${normal}"
+				printf "\n\t%s--install-updater%s\tInstall the updater (Run with midimonster-updater) and exit." "${c_green}" "${normal}"
+				printf "\n\t%s--install-dependencies%s\tInstall dependencies and exit" "${c_green}" "${normal}"
+				printf "\n\t%s-h,\t--help%s\t\tShow this message and exit." "${c_green}" "${normal}"
+				printf "\n\t%sEach argument can be overwritten by another, the last one is used!.%s\n" "${uline}${bold}${c_mag}" "${normal}"
 				rmdir "$tmp_path"
 				exit 0
 			;;
@@ -105,40 +105,50 @@ ARGS(){
 
 # Install unmatched dependencies
 install_dependencies(){
-	for dependency in ${deps[@]}; do
+	DEBIAN_FRONTEND=noninteractive apt-get update -y -qq > /dev/null || error_handler "There was an error doing apt update."
+#	unset "$deps"
+	for dependency in "$@"; do
 		if [ "$(dpkg-query -W -f='${Status}' "$dependency" 2>/dev/null | grep -c "ok installed")" -eq 0 ]; then
-			printf "Installing %s\n" "$dependency"
-			apt-get install "$dependency"
+			deps+=("$dependency")   # Add not installed dependency to the "to be installed array".
 		else
-			printf "%s already installed!\n" "$dependency"
+			printf "%s already installed!\n" "$dependency"   # If the dependency is already installed print it.
 		fi
 	done
+
+if [ ! "${#deps[@]}" -ge "1" ]; then    # If nothing needs to get installed don't start apt.
+	printf "\nAll dependencies are fulfilled!\n"    # Dependency array empty! Not running apt!
+else
+	printf "\nThen following dependencies are going to be installed:\n"    # Dependency array contains items. Running apt.
+	printf "\n%s\n" "${deps[@]}" | sed 's/ /, /g'
+	DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-suggests --no-install-recommends "${deps[@]}" > /dev/null || error_handler "There was an error doing dependency installation."
+	printf "\nAll dependencies are installed now!\n"    # Dependency array empty! Not running apt!
+fi
 	printf "\n"
 }
 
 ask_questions(){	
 	# Only say if necessary
 	if [ -z "$VAR_PREFIX" ] || [ -z "$VAR_PLUGINS" ] || [ -z "$VAR_DEFAULT_CFG" ] || [ -z "$VAR_EXAMPLE_CFGS" ]; then
-		printf "${bold}If you don't know what you're doing, just hit enter a few times.${normal}\n\n"
+		printf "%sIf you don't know what you're doing, just hit enter a few times.%s\n\n" "${bold}" "${normal}"
 	fi
 	
 	if [ -z "$VAR_PREFIX" ]; then
-		read -e -i "$DEFAULT_PREFIX" -p "PREFIX (Install root directory): " input
+		read -r -e -i "$DEFAULT_PREFIX" -p "PREFIX (Install root directory): " input
 		VAR_PREFIX="${input:-$VAR_PREFIX}"
 	fi
 
 	if [ -z "$VAR_PLUGINS" ]; then
-		read -e -i "$VAR_PREFIX$DEFAULT_PLUGINPATH" -p "PLUGINS (Plugin directory): " input
+		read -r -e -i "$VAR_PREFIX$DEFAULT_PLUGINPATH" -p "PLUGINS (Plugin directory): " input
 		VAR_PLUGINS="${input:-$VAR_PLUGINS}"
 	fi
 
 	if [ -z "$VAR_DEFAULT_CFG" ]; then
-		read -e -i "$DEFAULT_CFGPATH" -p "Default config path: " input
+		read -r -e -i "$DEFAULT_CFGPATH" -p "Default config path: " input
 		VAR_DEFAULT_CFG="${input:-$VAR_DEFAULT_CFG}"
 	fi
 
 	if [ -z "$VAR_EXAMPLE_CFGS" ]; then
-		read -e -i "$VAR_PREFIX$DEFAULT_EXAMPLES" -p "Example config directory: " input
+		read -r -e -i "$VAR_PREFIX$DEFAULT_EXAMPLES" -p "Example config directory: " input
 		VAR_EXAMPLE_CFGS="${input:-$VAR_EXAMPLE_CFGS}"
 	fi
 }
@@ -151,7 +161,7 @@ prepare_repo(){
 
 	# If not set via argument, ask whether to install development build
 	if [ -z "$NIGHTLY" ]; then
-		read -p "Do you want to install the latest development version? (y/n)? " magic
+		read -r -p "Do you want to install the latest development version? (y/n)? " magic
 		case "$magic" in
 			y|Y)
 				printf "OK! You´re a risky person ;D\n\n"
@@ -162,7 +172,7 @@ prepare_repo(){
 				NIGHTLY=0
 				;;
 			*)
-				printf "${bold}Invalid input -- INSTALLING LATEST STABLE VERSION!${normal}\n\n"
+				printf "%sInvalid input -- INSTALLING LATEST STABLE VERSION!%s\n\n" "${bold}" "${normal}"
 				NIGHTLY=0
 				;;
 		esac
@@ -170,7 +180,7 @@ prepare_repo(){
 
 	# Roll back to last tag if a stable version was requested
 	if [ "$NIGHTLY" != 1 ]; then
-		cd "$tmp_path"
+		cd "$tmp_path" || error_handler "Error doing cd to $tmp_path"
 		printf "Finding latest stable version...\n"
 		last_tag=$(git describe --abbrev=0)
 		printf "Checking out %s...\n" "$last_tag"
@@ -187,7 +197,7 @@ build(){
 	export DEFAULT_CFG="$VAR_DEFAULT_CFG"
 	export EXAMPLES="$VAR_EXAMPLE_CFGS"
 
-	cd "$tmp_path"
+	cd "$tmp_path" || error_handler "Error doing cd to $tmp_path"
 	make clean
 	make "$makeargs"
 	make install
@@ -212,8 +222,11 @@ install_script(){
 }
 
 error_handler(){
-	printf "\nAborting\n"
-	exit 1
+	[[ -n $1 ]] && printf "\n%s\n" "$1"
+	printf "\nAborting"
+	for i in {1..3}; do sleep 0.3s && printf "." && sleep 0.2s; done
+	printf "\n"
+	exit "1"
 }
 
 cleanup(){
@@ -246,6 +259,7 @@ fi
 # Check whether the updater needs to run
 if [ -f "$updater_dir/updater.conf" ] || [ "$UPDATER_FORCE" = "1" ]; then
 	if [ -f "$updater_dir/updater.conf" ]; then
+		# shellcheck source=/dev/null
 		. "$updater_dir/updater.conf"
 		# Parse arguments again to compensate overwrite from source
 		ARGS "$@"
@@ -256,11 +270,11 @@ if [ -f "$updater_dir/updater.conf" ] || [ "$UPDATER_FORCE" = "1" ]; then
 		printf "Forcing the updater to start...\n\n"
 	elif [ -x "$VAR_PREFIX/bin/midimonster" ]; then
 		installed_version="$(midimonster --version)"
-		if [[ "$installed_version" =~ "$latest_version" ]]; then
-			printf "The installed version ${bold}$installed_version${normal} seems to be up to date\nDoing nothing\n\n"
+		if [[ "$installed_version" =~ $latest_version ]]; then
+			printf "The installed version %s seems to be up to date\nDoing nothing\n\n" "${bold}$installed_version${normal}"
 			exit 0
 		else
-			printf "The installed version ${bold}$installed_version${normal} does not match the latest version ${bold}$latest_version${normal}\nMaybe you are running a development version?\n\n"
+			printf "The installed version %s does not match the latest version %s\nMaybe you are running a development version?\n\n" "${bold}$installed_version${normal}" "${bold}$latest_version${normal}"
 		fi
 	fi
 
@@ -271,7 +285,7 @@ if [ -f "$updater_dir/updater.conf" ] || [ "$UPDATER_FORCE" = "1" ]; then
 	build
 else
 	# Run installer steps
-	install_dependencies
+	install_dependencies "${dependencies[@]}"
 	prepare_repo
 	ask_questions
 	install_script

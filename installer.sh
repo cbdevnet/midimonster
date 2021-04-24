@@ -109,7 +109,7 @@ install_dependencies(){
 #	unset "$deps"
 	for dependency in "$@"; do
 		if [ "$(dpkg-query -W -f='${Status}' "$dependency" 2>/dev/null | grep -c "ok installed")" -eq 0 ]; then
-            deps+=("$dependency")   # Add not installed dependency to the "to be installed array".
+			deps+=("$dependency")   # Add not installed dependency to the "to be installed array".
 		else
 			printf "%s already installed!\n" "$dependency"   # If the dependency is already installed print it.
 		fi

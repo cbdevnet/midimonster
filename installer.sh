@@ -105,7 +105,7 @@ ARGS(){
 
 # Install unmatched dependencies
 install_dependencies(){
-    DEBIAN_FRONTEND=noninteractive apt-get update -y -qq > /dev/null || error_handler "There was an error doing apt update."
+	DEBIAN_FRONTEND=noninteractive apt-get update -y -qq > /dev/null || error_handler "There was an error doing apt update."
 #	unset "$deps"
 	for dependency in "$@"; do
 		if [ "$(dpkg-query -W -f='${Status}' "$dependency" 2>/dev/null | grep -c "ok installed")" -eq 0 ]; then
@@ -116,12 +116,12 @@ install_dependencies(){
 	done
 
 if [ ! "${#deps[@]}" -ge "1" ]; then    # If nothing needs to get installed don't start apt.
-    printf "\nAll dependencies are fulfilled!\n"    # Dependency array empty! Not running apt!
+	printf "\nAll dependencies are fulfilled!\n"    # Dependency array empty! Not running apt!
 else
-    printf "\nThen following dependencies are going to be installed:\n"    # Dependency array contains items. Running apt.
+	printf "\nThen following dependencies are going to be installed:\n"    # Dependency array contains items. Running apt.
 	printf "\n%s\n" "${deps[@]}" | sed 's/ /, /g'
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-suggests --no-install-recommends "${deps[@]}" > /dev/null || error_handler "There was an error doing dependency installation."
-    printf "\nAll dependencies are installed now!\n"    # Dependency array empty! Not running apt!
+	DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-suggests --no-install-recommends "${deps[@]}" > /dev/null || error_handler "There was an error doing dependency installation."
+	printf "\nAll dependencies are installed now!\n"    # Dependency array empty! Not running apt!
 fi
 	printf "\n"
 }
@@ -222,11 +222,11 @@ install_script(){
 }
 
 error_handler(){
-    [[ -n $1 ]] && printf "\n%s\n" "$1"
-    printf "\nAborting"
-    for i in {1..3}; do sleep 0.3s && printf "." && sleep 0.2s; done
-    printf "\n"
-    exit "1"
+	[[ -n $1 ]] && printf "\n%s\n" "$1"
+	printf "\nAborting"
+	for i in {1..3}; do sleep 0.3s && printf "." && sleep 0.2s; done
+	printf "\n"
+	exit "1"
 }
 
 cleanup(){

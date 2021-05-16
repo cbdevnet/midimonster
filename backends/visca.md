@@ -18,7 +18,7 @@ The `visca` backend does not take any global configuration.
 |---------------|-----------------------|-----------------------|---------------------------------------------------------------|
 | `id`		| `5`			| `1`			| VISCA Camera address (normally 1 for network communication	|
 | `connect`	| `10.10.10.1 5678`	| none			| Camera network address and port. Default connection is TCP, when optionally suffixed with the `udp` keyword, connection will be UDP |
-| `device`	| `/dev/ttyUSB0`	| none			| (Linux only) Device node for a serial port adapter connecting to the camera |
+| `device`	| `/dev/ttyUSB0 115200`	| none			| (Linux only) Device node for a serial port adapter connecting to the camera, optionally followed by the baudrate |
 | `deadzone`	| `0.1`			| `0.1`			| Amount of event value variation to be ignored for relative movement commands |
 
 #### Channel specification

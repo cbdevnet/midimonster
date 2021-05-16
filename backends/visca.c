@@ -2,7 +2,10 @@
 #define DEBUG
 
 #include <string.h>
-#include <math.h>	
+#include <math.h>
+#include <sys/ioctl.h>
+#include <asm/termbits.h>
+
 #include "visca.h"
 #include "libmmbackend.h"
 
@@ -81,10 +84,40 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 		LOG("Direct device connections are not possible on Windows");
 		return 1;
 		#else
-		data->fd = open(value, O_NONBLOCK);
+
+		struct termios2 device_config;
+
+		options = strchr(value, ' ');
+		if(options){
+			//terminate port name
+			*options = 0;
+			options++;
+		}
+
+		data->fd = open(value, O_RDWR | O_NONBLOCK);
 		if(data->fd < 0){
 			LOGPF("Failed to connect instance %s to device %s", inst->name, value);
 			return 1;
+		}
+		data->direct_device = 1;
+
+		//configure baudrate
+		if(options){
+			//get current port config
+			if(ioctl(data->fd, TCGETS2, &device_config)){
+				LOGPF("Failed to get port configuration data for %s: %s", value, strerror(errno));
+				return 0;
+			}
+
+			device_config.c_cflag &= ~CBAUD;
+			device_config.c_cflag |= BOTHER;
+			device_config.c_ispeed = strtoul(options, NULL, 10);
+			device_config.c_ospeed = strtoul(options, NULL, 10);
+
+			//set updated config
+			if(ioctl(data->fd, TCSETS2, &device_config)){
+				LOGPF("Failed to set port configuration data for %s: %s", value, strerror(errno));
+			}
 		}
 		return 0;
 		#endif
@@ -315,6 +348,21 @@ static size_t ptz_set_memory_store(instance* inst, channel* c, channel_value* v,
 	return ptz_channels[store].bytes;
 }
 
+static int ptz_write_serial(int fd, uint8_t* data, size_t bytes){
+	ssize_t total = 0, sent;
+
+	while(total < bytes){
+		sent = write(fd, data + total, bytes - total);
+		if(sent < 0){
+			LOGPF("Failed to write to serial port: %s", strerror(errno));
+			return 1;
+		}
+		total += sent;
+	}
+
+	return 0;
+}
+
 static int ptz_set(instance* inst, size_t num, channel** c, channel_value* v){
 	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
 	size_t n = 0, bytes = 0;
@@ -336,7 +384,10 @@ static int ptz_set(instance* inst, size_t num, channel** c, channel_value* v){
 			bytes = ptz_channels[command].set(inst, c[n], v + n, tx);
 		}
 
-		if(bytes && mmbackend_send(data->fd, tx, bytes)){
+		if(data->direct_device && bytes && ptz_write_serial(data->fd, tx, bytes)){
+			LOGPF("Failed to write %s command on instance %s", ptz_channels[command].name, inst->name);	
+		}
+		else if(!data->direct_device && bytes && mmbackend_send(data->fd, tx, bytes)){
 			LOGPF("Failed to push %s command on instance %s", ptz_channels[command].name, inst->name);
 		}
 	}

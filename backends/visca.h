@@ -30,6 +30,7 @@ typedef struct /*_ptz_instance_data*/ {
 	uint8_t tiltspeed;
 	uint8_t relative_movement;
 	double deadzone;
+	uint8_t direct_device;
 } ptz_instance_data;
 
 enum /*ptz_channels*/ {

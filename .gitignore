@@ -6,3 +6,4 @@ libmmapi.a
 *.so
 *.dll
 __pycache__
+.vscode/

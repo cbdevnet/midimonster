@@ -16,7 +16,7 @@ This functionality may require elevated privileges (such as special group member
 | Option	| Example value		| Default value | Description						|
 |---------------|-----------------------|---------------|-------------------------------------------------------|
 | `device`	| `/dev/input/event1`	| none		| `evdev` device to use as input device			|
-| `input`	| `Xbox Wireless`	| none		| Presentation name of evdev device to use as input (prefix-matched) |
+| `input`	| `Xbox Wireless`	| none		| Presentation name of evdev device to use as input (prefix-matched), can be used instead of the `device` option |
 | `output`	| `My Input Device`	| none		| Output device presentation name. Setting this option enables the instance for output	|
 | `exclusive`	| `1`			| `0`		| Prevent other processes from using the device		|
 | `id`		| `0x1 0x2 0x3`		| none		| Set output device bus identification (Vendor, Product and Version), optional |

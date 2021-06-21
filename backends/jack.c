@@ -18,8 +18,6 @@
 	#endif
 #endif
 
-//FIXME pitchbend range is somewhat oob
-
 static struct /*_mmjack_backend_cfg*/ {
 	unsigned verbosity;
 	volatile sig_atomic_t jack_shutdown;
@@ -80,13 +78,98 @@ static int mmjack_midiqueue_append(mmjack_port* port, mmjack_channel_ident ident
 	return 0;
 }
 
+static void mmjack_process_midiout(void* buffer, size_t sample_offset, uint8_t type, uint8_t channel, uint8_t control, uint16_t value){
+	jack_midi_data_t* event_data = jack_midi_event_reserve(buffer, sample_offset, (type == midi_aftertouch || type == midi_program) ? 2 : 3);
+
+	if(!event_data){
+		LOG("Failed to reserve MIDI stream data");
+		return;
+	}
+
+	//build midi event
+	event_data[0] = channel | type;
+	event_data[1] = control & 0x7F;
+	event_data[2] = value & 0x7F;
+
+	if(type == midi_pitchbend){
+		event_data[1] = value & 0x7F;
+		event_data[2] = (value >> 7) & 0x7F;
+	}
+	else if(type == midi_aftertouch || type == midi_program){
+		event_data[1] = value & 0x7F;
+		event_data[2] = 0;
+	}
+}
+
+//this state machine was copied more-or-less verbatim from the alsa midi implementation - fixes there will need to be integrated
+static void mmjack_handle_epn(mmjack_port* port, uint8_t chan, uint16_t control, uint16_t value){
+	mmjack_channel_ident ident = {
+		.label = 0
+	};
+
+	//switching between nrpn and rpn clears all valid bits
+	if(((port->epn_status[chan] & EPN_NRPN) && (control == 101 || control == 100))
+				|| (!(port->epn_status[chan] & EPN_NRPN) && (control == 99 || control == 98))){
+		port->epn_status[chan] &= ~(EPN_NRPN | EPN_PARAMETER_LO | EPN_PARAMETER_HI);
+	}
+
+	//setting an address always invalidates the value valid bits
+	if(control >= 98 && control <= 101){
+		port->epn_status[chan] &= ~EPN_VALUE_HI;
+	}
+
+	//parameter hi
+	if(control == 101 || control == 99){
+		port->epn_control[chan] &= 0x7F;
+		port->epn_control[chan] |= value << 7;
+		port->epn_status[chan] |= EPN_PARAMETER_HI | ((control == 99) ? EPN_NRPN : 0);
+		if(control == 101 && value == 127){
+			port->epn_status[chan] &= ~EPN_PARAMETER_HI;
+		}
+	}
+
+	//parameter lo
+	if(control == 100 || control == 98){
+		port->epn_control[chan] &= ~0x7F;
+		port->epn_control[chan] |= value & 0x7F;
+		port->epn_status[chan] |= EPN_PARAMETER_LO | ((control == 98) ? EPN_NRPN : 0);
+		if(control == 100 && value == 127){
+			port->epn_status[chan] &= ~EPN_PARAMETER_LO;
+		}
+	}
+
+	//value hi, clears low, mark as update candidate
+	if(control == 6
+			//check if parameter is set before accepting value update
+			&& ((port->epn_status[chan] & (EPN_PARAMETER_HI | EPN_PARAMETER_LO)) == (EPN_PARAMETER_HI | EPN_PARAMETER_LO))){
+		port->epn_value[chan] = value << 7;
+		port->epn_status[chan] |= EPN_VALUE_HI;
+	}
+
+	//value lo, flush the value
+	if(control == 38
+			&& port->epn_status[chan] & EPN_VALUE_HI){
+		port->epn_value[chan] &= ~0x7F;
+		port->epn_value[chan] |= value & 0x7F;
+		port->epn_status[chan] &= ~EPN_VALUE_HI;
+
+		//find the updated channel
+		ident.fields.sub_type = port->epn_status[chan] & EPN_NRPN ? midi_nrpn : midi_rpn;
+		ident.fields.sub_channel = chan;
+		ident.fields.sub_control = port->epn_control[chan];
+
+		//ident.fields.port set on output in mmjack_handle_midi
+		mmjack_midiqueue_append(port, ident, port->epn_value[chan]);
+	}
+}
+
 static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes, size_t* mark){
+	mmjack_instance_data* data = (mmjack_instance_data*) inst->impl;
 	void* buffer = jack_port_get_buffer(port->port, nframes);
 	jack_nframes_t event_count = jack_midi_get_event_count(buffer);
 	jack_midi_event_t event;
-	jack_midi_data_t* event_data;
 	mmjack_channel_ident ident;
-	size_t u;
+	size_t u, frame;
 	uint16_t value;
 
 	if(port->input){
@@ -109,10 +192,19 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 					ident.fields.sub_control = 0;
 					value = event.buffer[1] | (event.buffer[2] << 7);
 				}
-				else if(ident.fields.sub_type == midi_aftertouch){
+				else if(ident.fields.sub_type == midi_aftertouch || ident.fields.sub_type == midi_program){
 					ident.fields.sub_control = 0;
 					value = event.buffer[1];
 				}
+
+				//forward the EPN CCs to the EPN state machine
+				if(ident.fields.sub_type == midi_cc
+						&& ((ident.fields.sub_control <= 101 && ident.fields.sub_control >= 98)
+							|| ident.fields.sub_control == 6
+							|| ident.fields.sub_control == 38)){
+					mmjack_handle_epn(port, ident.fields.sub_channel, ident.fields.sub_control, value);
+				}
+
 				//append midi data
 				mmjack_midiqueue_append(port, ident, value);
 			}
@@ -124,30 +216,33 @@ static int mmjack_process_midi(instance* inst, mmjack_port* port, size_t nframes
 		//clear buffer
 		jack_midi_clear_buffer(buffer);
 
+		frame = 0;
 		for(u = 0; u < port->queue_len; u++){
-			//build midi event
 			ident.label = port->queue[u].ident.label;
-			event_data = jack_midi_event_reserve(buffer, u, (ident.fields.sub_type == midi_aftertouch) ? 2 : 3);
-			if(!event_data){
-				LOG("Failed to reserve MIDI stream data");
-				return 1;
-			}
-			event_data[0] = ident.fields.sub_channel | ident.fields.sub_type;
-			if(ident.fields.sub_type == midi_pitchbend){
-				event_data[1] = port->queue[u].raw & 0x7F;
-				event_data[2] = (port->queue[u].raw >> 7) & 0x7F;
-			}
-			else if(ident.fields.sub_type == midi_aftertouch){
-				event_data[1] = port->queue[u].raw & 0x7F;
+
+			if(ident.fields.sub_type == midi_rpn
+					|| ident.fields.sub_type == midi_nrpn){
+				//transmit parameter number
+				mmjack_process_midiout(buffer, frame++, midi_cc, ident.fields.sub_channel, (ident.fields.sub_type == midi_rpn) ? 101 : 99, (ident.fields.sub_control >> 7) & 0x7F);
+				mmjack_process_midiout(buffer, frame++, midi_cc, ident.fields.sub_channel, (ident.fields.sub_type == midi_rpn) ? 100 : 98, ident.fields.sub_control & 0x7F);
+
+				//transmit parameter value
+				mmjack_process_midiout(buffer, frame++, midi_cc, ident.fields.sub_channel, 6, (port->queue[u].raw >> 7) & 0x7F);
+				mmjack_process_midiout(buffer, frame++, midi_cc, ident.fields.sub_channel, 38, port->queue[u].raw & 0x7F);
+
+				if(!data->midi_epn_tx_short){
+					//clear active parameter
+					mmjack_process_midiout(buffer, frame++, midi_cc, ident.fields.sub_channel, 101, 127);
+					mmjack_process_midiout(buffer, frame++, midi_cc, ident.fields.sub_channel, 100, 127);
+				}
 			}
 			else{
-				event_data[1] = ident.fields.sub_control;
-				event_data[2] = port->queue[u].raw & 0x7F;
+				mmjack_process_midiout(buffer, frame++, ident.fields.sub_type, ident.fields.sub_channel, ident.fields.sub_control, port->queue[u].raw);
 			}
 		}
 
-		if(port->queue_len){
-			DBGPF("Wrote %" PRIsize_t " MIDI events to port %s", port->queue_len, port->name);
+		if(frame){
+			DBGPF("Wrote %" PRIsize_t " MIDI events to port %s", frame, port->name);
 		}
 		port->queue_len = 0;
 	}
@@ -305,6 +400,13 @@ static int mmjack_configure_instance(instance* inst, char* option, char* value){
 		data->server_name = strdup(value);
 		return 0;
 	}
+	else if(!strcmp(option, "epn-tx")){
+		data->midi_epn_tx_short = 0;
+		if(!strcmp(value, "short")){
+			data->midi_epn_tx_short = 1;
+		}
+		return 0;
+	}
 
 	//register new port, first check for unique name
 	for(p = 0; p < data->ports; p++){
@@ -385,11 +487,22 @@ static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){
 		ident->fields.sub_type = midi_pressure;
 		next_token += 8;
 	}
+	else if(!strncmp(next_token, "rpn", 3)){
+		ident->fields.sub_type = midi_rpn;
+		next_token += 3;
+	}
+	else if(!strncmp(next_token, "nrpn", 4)){
+		ident->fields.sub_type = midi_nrpn;
+		next_token += 4;
+	}
 	else if(!strncmp(next_token, "pitch", 5)){
 		ident->fields.sub_type = midi_pitchbend;
 	}
 	else if(!strncmp(next_token, "aftertouch", 10)){
 		ident->fields.sub_type = midi_aftertouch;
+	}
+	else if(!strncmp(next_token, "program", 7)){
+		ident->fields.sub_type = midi_program;
 	}
 	else{
 		LOGPF("Unknown MIDI control type in spec %s", spec);
@@ -399,7 +512,9 @@ static int mmjack_parse_midispec(mmjack_channel_ident* ident, char* spec){
 	ident->fields.sub_control = strtoul(next_token, NULL, 10);
 
 	if(ident->fields.sub_type == midi_none
-			|| ident->fields.sub_control > 127){
+			|| (ident->fields.sub_type != midi_nrpn
+				&& ident->fields.sub_type != midi_rpn
+				&& ident->fields.sub_control > 127)){
 		LOGPF("Invalid MIDI spec %s", spec);
 		return 1;
 	}
@@ -467,9 +582,12 @@ static int mmjack_set(instance* inst, size_t num, channel** c, channel_value* v)
 				break;
 			case port_midi:
 				value = v[u].normalised * 127.0;
-				if(ident.fields.sub_type == midi_pitchbend){
-					value = ((uint16_t)(v[u].normalised * 16384.0));
+				if(ident.fields.sub_type == midi_pitchbend
+						|| ident.fields.sub_type == midi_nrpn
+						|| ident.fields.sub_type == midi_rpn){
+					value = ((uint16_t)(v[u].normalised * 16383.0));
 				}
+
 				if(mmjack_midiqueue_append(data->port + ident.fields.port, ident, value)){
 					pthread_mutex_unlock(&data->port[ident.fields.port].lock);
 					return 1;
@@ -494,8 +612,10 @@ static void mmjack_handle_midi(instance* inst, size_t index, mmjack_port* port){
 		port->queue[u].ident.fields.port = index;
 		chan = mm_channel(inst, port->queue[u].ident.label, 0);
 		if(chan){
-			if(port->queue[u].ident.fields.sub_type == midi_pitchbend){
-				val.normalised = ((double)port->queue[u].raw) / 16384.0;
+			if(port->queue[u].ident.fields.sub_type == midi_pitchbend
+					|| port->queue[u].ident.fields.sub_type == midi_rpn
+					|| port->queue[u].ident.fields.sub_type == midi_nrpn){
+				val.normalised = ((double)port->queue[u].raw) / 16383.0;
 			}
 			else{
 				val.normalised = ((double)port->queue[u].raw) / 127.0;

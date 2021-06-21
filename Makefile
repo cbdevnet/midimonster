@@ -11,14 +11,18 @@ GITVERSION = $(shell git describe)
 CFLAGS ?= -g -Wall -Wpedantic
 #CFLAGS += -DDEBUG
 # Hide all non-API symbols for export
-CFLAGS += -fvisibility=hidden -I./
+CFLAGS += -fvisibility=hidden
+
+# Subdirectory objects need the include path
+RCCFLAGS += -I./
+CFLAGS += -I./
 
 midimonster: LDLIBS = -ldl
 # Replace version string with current git-describe if possible
 ifneq "$(GITVERSION)" ""
 midimonster: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
 midimonster.exe: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
-resource.o: RCCFLAGS += -DMIDIMONSTER_VERSION=\\\"$(GITVERSION)\\\"
+assets/resource.o: RCCFLAGS += -DMIDIMONSTER_VERSION=\\\"$(GITVERSION)\\\"
 endif
 
 # Work around strange linker passing convention differences in Linux and OSX
@@ -55,10 +59,10 @@ backends-full:
 midimonster: midimonster.c portability.h $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
 
-resource.o: midimonster.rc midimonster.ico
+assets/resource.o: assets/midimonster.rc assets/midimonster.ico
 	$(RCC) $(RCCFLAGS) $< -o $@ --output-format=coff
 
-midimonster.ico: MIDIMonster.svg
+assets/midimonster.ico: assets/MIDIMonster.svg
 	convert -density 384 $< -define icon:auto-resize $@
 
 midimonster.exe: export CC = x86_64-w64-mingw32-gcc
@@ -66,14 +70,14 @@ midimonster.exe: RCC ?= x86_64-w64-mingw32-windres
 midimonster.exe: CFLAGS += -Wno-format
 midimonster.exe: LDLIBS = -lws2_32
 midimonster.exe: LDFLAGS += -Wl,--out-implib,libmmapi.a
-midimonster.exe: midimonster.c portability.h $(OBJS) resource.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) resource.o $(LDLIBS) -o $@
+midimonster.exe: midimonster.c portability.h $(OBJS) assets/resource.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) assets/resource.o $(LDLIBS) -o $@
 
 clean:
 	$(RM) midimonster
 	$(RM) midimonster.exe
 	$(RM) libmmapi.a
-	$(RM) resource.o
+	$(RM) assets/resource.o
 	$(RM) $(OBJS)
 	$(MAKE) -C backends clean
 

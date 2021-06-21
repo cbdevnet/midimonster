@@ -12,9 +12,9 @@
 #define BACKEND_NAME "core"
 #define MM_SWAP_LIMIT 20
 #include "midimonster.h"
-#include "config.h"
-#include "backend.h"
-#include "plugin.h"
+#include "core/config.h"
+#include "core/backend.h"
+#include "core/plugin.h"
 
 /* Core-internal structures */
 typedef struct /*_event_collection*/ {

@@ -1,5 +1,5 @@
 .PHONY: all clean run sanitize backends windows full backends-full install
-OBJS = config.o backend.o plugin.o
+OBJS = core/config.o core/backend.o core/plugin.o
 
 PREFIX ?= /usr
 PLUGIN_INSTALL = $(PREFIX)/lib/midimonster
@@ -11,7 +11,7 @@ GITVERSION = $(shell git describe)
 CFLAGS ?= -g -Wall -Wpedantic
 #CFLAGS += -DDEBUG
 # Hide all non-API symbols for export
-CFLAGS += -fvisibility=hidden
+CFLAGS += -fvisibility=hidden -I./
 
 midimonster: LDLIBS = -ldl
 # Replace version string with current git-describe if possible

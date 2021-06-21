@@ -1,6 +1,6 @@
 ### The `mqtt` backend
 
-This backend provides input from and output to an message queueing telemetry transport (MQTT)
+This backend provides input from and output to a message queueing telemetry transport (MQTT)
 broker. The MQTT protocol is used in lightweight sensor/actor applications, a wide selection
 of smart home implementations and as a generic message bus in many other domains.
 
@@ -18,7 +18,7 @@ This backend does not take any global configuration.
 | `host`	| `mqtt://10.23.23.1`	| none			| Host or URI of the MQTT broker	|
 | `user`	| `midimonster`		| none			| User name for broker authentication	|
 | `password`	| `mm`			| none			| Password for broker authentication	|
-| `clientid`	| `MM-main`		| random		| MQTT client identifier (generated randomly at start) |
+| `clientid`	| `MM-main`		| random		| MQTT client identifier (generated randomly at start if unset) |
 | `protocol`	| `3.1.1`		| `5`			| MQTT protocol version (`5` or `3.1.1`) to use for the connection |
 
 The `host` option can be specified as an URI of the form `mqtt[s]://[username][:password]@host.domain[:port]`.

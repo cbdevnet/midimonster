@@ -1,7 +1,6 @@
 # The MIDIMonster
 <img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
 
-[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
 [![IRC Channel](https://static.midimonster.net/hackint-badge.svg)](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster)
 

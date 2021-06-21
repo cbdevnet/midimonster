@@ -16,6 +16,7 @@ Currently, the MIDIMonster supports the following protocols:
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)	|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)		|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)		|
+| MQTT				| Linux, Windows, OSX	| Protocol versions 5 and 3.1.1	| [`mqtt`](backends/mqtt.md)		|
 | RTP-MIDI			| Linux, Windows, OSX	| AppleMIDI sessions supported	| [`rtpmidi`](backends/rtpmidi.md)	|
 | OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
 | Input devices (Mouse, Keyboard, etc)| Linux, Windows	|				| [`evdev`](backends/evdev.md), [`wininput`](backends/wininput.md) |
@@ -160,6 +161,7 @@ special information. These documentation files are located in the `backends/` di
 * [`loopback` backend documentation](backends/loopback.md)
 * [`ola` backend documentation](backends/ola.md)
 * [`osc` backend documentation](backends/osc.md)
+* [`mqtt` backend documentation](backends/mqtt.md)
 * [`openpixelcontrol` backend documentation](backends/openpixelcontrol.md)
 * [`lua` backend documentation](backends/lua.md)
 * [`python` backend documentation](backends/python.md)

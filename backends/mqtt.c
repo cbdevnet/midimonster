@@ -1,5 +1,5 @@
 #define BACKEND_NAME "mqtt"
-#define DEBUG
+//#define DEBUG
 
 #include <string.h>
 #include <time.h>

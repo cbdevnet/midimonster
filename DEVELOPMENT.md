@@ -19,6 +19,7 @@ in spirit rather than by the letter.
 * Commit messages should be in the imperative voice ("When applied, this commit will: ").
 * The working language for this repository is english.
 * External dependencies are only acceptable when necessary and available from package repositories.
+	* Note that external dependencies make OS portability complicated
 
 ### Code style
 
@@ -43,8 +44,19 @@ in spirit rather than by the letter.
 * Avoid `atoi()`/`itoa()`, use `strto[u]l[l]()` and `snprintf()`
 * Avoid unsafe functions without explicit bounds parameters (eg. `strcat()`). 
 
+# Repository layout
+
+* Keep the root directory as clean as possible
+	* Files that are not related directly to the MIDIMonster implementation go into the `assets/` directory
+* Prefer vendor-neutral names for configuration files where necessary
+
 # Build pipeline
+
+* The primary build pipeline is `make`
 
 # Architecture
 
+* If there is significant potential for sharing functionality between backends, consider implementing it in `libmmbackend`
+
 # Debugging
+

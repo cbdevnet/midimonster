@@ -15,7 +15,7 @@ CFLAGS += -fvisibility=hidden
 
 # Subdirectory objects need the include path
 RCCFLAGS += -I./
-CFLAGS += -I./
+core/%: CFLAGS += -I./
 
 midimonster: LDLIBS = -ldl
 # Replace version string with current git-describe if possible

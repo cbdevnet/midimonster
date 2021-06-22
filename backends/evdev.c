@@ -113,12 +113,14 @@ static int evdev_attach(instance* inst, evdev_instance_data* data, char* node){
 static char* evdev_find(char* name){
 	int fd = -1;
 	struct dirent* file = NULL;
-	char file_path[PATH_MAX * 2];
+	char file_path[PATH_MAX * 2], *result = calloc(PATH_MAX * 2, sizeof(char));
 	DIR* nodes = opendir(INPUT_NODES);
-	char device_name[UINPUT_MAX_NAME_SIZE], *result = NULL;
+	char device_name[UINPUT_MAX_NAME_SIZE];
+	size_t min_distance = -1, distance = 0;
 
 	if(!nodes){
 		LOGPF("Failed to query input device nodes in %s: %s", INPUT_NODES, strerror(errno));
+		free(result);
 		return NULL;
 	}
 
@@ -141,20 +143,23 @@ static char* evdev_find(char* name){
 			close(fd);
 
 			if(!strncmp(device_name, name, strlen(name))){
-				LOGPF("Matched name %s for %s: %s", device_name, name, file_path);
-				break;
+				distance = strlen(device_name) - strlen(name);
+				LOGPF("Matched name %s as candidate (distance %" PRIsize_t ") for %s: %s", device_name, distance, name, file_path);
+				if(distance < min_distance){
+					strncpy(result, file_path, (PATH_MAX * 2) - 1);
+					min_distance = distance;
+				}
 			}
 		}
 	}
 
-	if(file){
-		result = calloc(strlen(file_path) + 1, sizeof(char));
-		if(result){
-			strncpy(result, file_path, strlen(file_path));
-		}
-	}
-
 	closedir(nodes);
+
+	if(!result[0]){
+		free(result);
+		return NULL;
+	}
+	LOGPF("Using %s for input name %s", result, name);
 	return result;
 }
 

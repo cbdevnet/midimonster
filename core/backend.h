@@ -12,6 +12,7 @@ instance* mm_instance(backend* b);
 
 /* Backend API */
 MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create);
+MM_API void mm_channel_update(channel* chan, uint64_t ident);
 MM_API instance* mm_instance_find(char* name, uint64_t ident);
 MM_API int mm_backend_instances(char* name, size_t* ninst, instance*** inst);
 MM_API int mm_backend_register(backend b);

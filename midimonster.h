@@ -227,15 +227,21 @@ MM_API int mm_backend_register(backend b);
 MM_API instance* mm_instance_find(char* backend, uint64_t ident);
 
 /*
- * Provides a pointer to a channel structure, pre-filled with the provided
- * instance reference and identifier.
+ * This function is the main interface to the core-provided channel registry.
+ * This API is just a convenience function. Creating and managing a
+ * backend-internal channel store is possible (and encouraged for performance
+ * reasons).
+ *
+ * Channels are identified by the (instance, ident) tuple within the registry.
+ *
+ * This API provides a pointer to a channel structure, pre-filled with the
+ * provided instance reference and identifier.
  * The `create` parameter is a boolean flag indicating whether a channel
  * matching the `ident` parameter should be created in the global channel store
  * if none exists yet. If the instance already registered a channel matching
  * `ident`, a pointer to the existing channel is returned.
- * This API is just a convenience function. Creating and managing a
- * backend-internal channel store is possible (and encouraged for performance
- * reasons). When returning pointers from a backend-local channel store, the
+ * 
+ * When returning pointers from a backend-local channel store, the
  * returned pointers must stay valid over the lifetime of the instance and
  * provide valid `instance` members, as they are used for callbacks.
  * For each channel with a non-NULL `impl` field registered using
@@ -243,6 +249,15 @@ MM_API instance* mm_instance_find(char* backend, uint64_t ident);
  * function (if it exists).
  */
 MM_API channel* mm_channel(instance* i, uint64_t ident, uint8_t create);
+
+/*
+ * When using the core-provided channel registry, the identification
+ * member of the structure must only be updated using this API.
+ * The tuple of (instance, ident) is used as key to the backing
+ * storage of the channel registry, thus the registry must be notified
+ * of changes.
+ */
+MM_API void mm_channel_update(channel* c, uint64_t ident);
 
 /*
  * Register (manage = 1) or unregister (manage = 0) a file descriptor to be

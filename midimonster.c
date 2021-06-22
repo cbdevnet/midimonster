@@ -346,7 +346,7 @@ static int core_process(size_t nfds, managed_fd* signaled_fds){
 	size_t u, swaps = 0;
 
 	//run backend processing, collect events
-	DBGPF("%lu backend FDs signaled\n", nfds);
+	DBGPF("%lu backend FDs signaled", nfds);
 	if(backends_handle(nfds, signaled_fds)){
 		return 1;
 	}
@@ -354,7 +354,7 @@ static int core_process(size_t nfds, managed_fd* signaled_fds){
 	//limit number of collector swaps per iteration to prevent complete deadlock
 	while(routing.events->n && swaps < MM_SWAP_LIMIT){
 		//swap primary and secondary event collectors
-		DBGPF("Swapping event collectors, %lu events in primary\n", routing.events->n);
+		DBGPF("Swapping event collectors, %lu events in primary", routing.events->n);
 		for(u = 0; u < sizeof(routing.pool) / sizeof(routing.pool[0]); u++){
 			if(routing.events != routing.pool + u){
 				secondary = routing.events;

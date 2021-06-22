@@ -1111,7 +1111,7 @@ static int maweb_start(size_t n, instance** inst){
 
 		//re-set channel identifiers
 		for(p = 0; p < data->channels; p++){
-			data->channel[p].chan->ident = p;
+			mm_channel_update(data->channel[p].chan, p);
 		}
 
 		//try to connect to any available host

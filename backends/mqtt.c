@@ -775,14 +775,15 @@ static int mqtt_handle_publish(instance* inst, uint8_t type, uint8_t* variable_h
 
 		property_offset += mqtt_pop_varint(variable_header + property_offset, length - property_offset, NULL);
 		//parse properties
-		while(property_offset < payload_offset){
+		while(property_offset < payload_offset && property_offset < length){
 			DBGPF("Property %02X at offset %" PRIsize_t " of %" PRIu32, variable_header[property_offset], property_offset, property_length);
+
 			//read payload format indicator
-			if(variable_header[property_offset] == 0x01){
+			if(variable_header[property_offset] == 0x01 && property_offset < length - 1){
 				content_utf8 = variable_header[property_offset + 1];
 			}
 			//read topic alias
-			else if(variable_header[property_offset] == 0x23){
+			else if(variable_header[property_offset] == 0x23 && property_offset < length - 2){
 				topic_alias = (variable_header[property_offset + 1] << 8) | variable_header[property_offset + 2];
 			}
 

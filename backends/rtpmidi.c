@@ -1329,13 +1329,14 @@ static int rtpmidi_mdns_detach(instance* inst){
 	}
 	offset += bytes;
 
-	//TODO length-checks here
-	frame[offset++] = strlen(inst->name);
-	memcpy(frame + offset, inst->name, strlen(inst->name));
-	offset += strlen(inst->name);
+	//calculate maximum permitted instance name length
+	bytes = min(min(strlen(inst->name), sizeof(frame) - offset - 3), 255);
+	frame[offset++] = bytes;
+	memcpy(frame + offset, inst->name, bytes);
+	offset += bytes;
 	frame[offset++] = 0xC0;
 	frame[offset++] = sizeof(dns_header);
-	rr->data = htobe16(1 + strlen(inst->name) + 2);
+	rr->data = htobe16(1 + bytes + 2);
 
 	free(name.name);
 	return rtpmidi_mdns_broadcast(frame, offset);

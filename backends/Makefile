@@ -60,7 +60,7 @@ openpixelcontrol.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 openpixelcontrol.dll: LDLIBS += -lws2_32
 
 maweb.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
-maweb.so: LDLIBS = -lssl
+maweb.so: LDLIBS = $(shell pkg-config --libs openssl || echo "-DBUILD_ERROR=\"Missing pkg-config data for openssl\"")
 maweb.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 maweb.dll: LDLIBS += -lws2_32
 maweb.dll: CFLAGS += -DMAWEB_NO_LIBSSL
@@ -88,18 +88,20 @@ lua.so: LDLIBS += $(shell pkg-config --libs lua53 || pkg-config --libs lua5.3 ||
 lua.dll: CFLAGS += $(shell pkg-config --cflags lua53 || pkg-config --cflags lua5.3 || pkg-config --cflags lua || echo "-DBUILD_ERROR=\"Missing pkg-config data for lua53\"")
 lua.dll: LDLIBS += -L../ -llua53
 
-python.so: CFLAGS += $(shell pkg-config --cflags python3 || pkg-config --cflags python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
-python.so: CFLAGS += $(shell pkg-config --libs python3 || pkg-config --libs python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
+# Python seems to ship their own little python3-config tool instead of properly maintaining their pkg-config files.
+# This one also spams a good deal of unwanted flags into CFLAGS, so we use only --includes and --libs
+python.so: CFLAGS += $(shell python3-config --includes || pkg-config --cflags python3 || pkg-config --cflags python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
+python.so: LDLIBS += $(shell python3-config --libs || pkg-config --libs python3 || pkg-config --libs python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
 
 # Generic rules on how to build .SO/.DLL's from C and CPP sources
 %.so :: %.c %.h $(BACKEND_LIB)
-	$(CC) $(CFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
 
 %.dll :: %.c %.h $(BACKEND_LIB)
 	$(CC) $(CFLAGS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
 
 %.so :: %.cpp %.h
-	$(CXX) $(CPPFLAGS) $(LDLIBS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
 
 # This is the actual first named target, and thus the default
 all: $(BACKEND_LIB) $(BACKENDS)

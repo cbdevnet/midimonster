@@ -3,8 +3,11 @@
 
 #include <string.h>
 #include <math.h>
-#include <sys/ioctl.h>
-#include <asm/termbits.h>
+
+#ifndef _WIN32
+	#include <sys/ioctl.h>
+	#include <asm/termbits.h>
+#endif
 
 #include "visca.h"
 #include "libmmbackend.h"

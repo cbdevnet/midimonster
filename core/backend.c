@@ -51,7 +51,7 @@ int backends_handle(size_t nfds, managed_fd* fds){
 
 		//handle if there is data ready or the backend has active instances for polling
 		if(n || registry.instances[u]){
-			DBGPF("Notifying backend %s of %" PRIsize_t " waiting FDs\n", registry.backends[u].name, n);
+			DBGPF("Notifying backend %s of %" PRIsize_t " waiting FDs", registry.backends[u].name, n);
 			rv |= registry.backends[u].process(n, fds);
 			if(rv){
 				fprintf(stderr, "Backend %s failed to handle input\n", registry.backends[u].name);
@@ -85,7 +85,7 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 		}
 
 		//TODO eliminate duplicates
-		DBGPF("Calling handler for instance %s with %" PRIsize_t " events\n", c[u]->instance->name, n - u);
+		DBGPF("Calling handler for instance %s with %" PRIsize_t " events", c[u]->instance->name, n - u);
 		rv |= c[u]->instance->backend->handle(c[u]->instance, n - u, c + u, v + u);
 	}
 
@@ -105,11 +105,11 @@ MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	}
 
 	if(!create){
-		DBGPF("Requested unknown channel %" PRIu64 " (bucket %" PRIsize_t ") on instance %s\n", ident, bucket, inst->name);
+		DBGPF("Requested unknown channel %" PRIu64 " (bucket %" PRIsize_t ") on instance %s", ident, bucket, inst->name);
 		return NULL;
 	}
 
-	DBGPF("Creating previously unknown channel %" PRIu64 " on instance %s, bucket %" PRIsize_t "\n", ident, inst->name, bucket);
+	DBGPF("Creating previously unknown channel %" PRIu64 " on instance %s, bucket %" PRIsize_t, ident, inst->name, bucket);
 	channels.entry[bucket] = realloc(channels.entry[bucket], (channels.n[bucket] + 1) * sizeof(channel*));
 	if(!channels.entry[bucket]){
 		fprintf(stderr, "Failed to allocate memory\n");
@@ -353,7 +353,7 @@ static void channels_free(){
 	for(u = 0; u < sizeof(channels.n) / sizeof(channels.n[0]); u++){
 		DBGPF("Cleaning up channel registry bucket %" PRIsize_t " with %" PRIsize_t " channels", u, channels.n[u]);
 		for(p = 0; p < channels.n[u]; p++){
-			DBGPF("Destroying channel %" PRIu64 " on instance %s\n", channels.entry[u][p]->ident, channels.entry[u][p]->instance->name);
+			DBGPF("Destroying channel %" PRIu64 " on instance %s", channels.entry[u][p]->ident, channels.entry[u][p]->instance->name);
 			//call the channel_free function if the backend supports it
 			if(channels.entry[u][p]->impl && channels.entry[u][p]->instance->backend->channel_free){
 				channels.entry[u][p]->instance->backend->channel_free(channels.entry[u][p]);

@@ -79,8 +79,8 @@ The `python` backend does not take any global configuration.
 
 | Option		| Example value		| Default value 	| Description					|
 |-----------------------|-----------------------|-----------------------|-----------------------------------------------|
-| `module`		| `my_handlers.py`	| none			| (Path to) Python module source file, relative to configuration file location |
-| `default-handler`	| `mu_handlers.default`	| none			| Function to be called as handler for all top-level channels (not belonging to a module) |
+| `module`		| `my_handlers`		| none			| Name of the python module to load (normally the name of a`.py` file without the extension) |
+| `default-handler`	| `my_handlers.default`	| none			| Function to be called as handler for all top-level channels (not belonging to a module) |
 
 A single instance may have multiple `module` options specified. This will make all handlers available within their
 module namespaces (see the section on channel specification).

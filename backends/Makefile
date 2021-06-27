@@ -92,7 +92,7 @@ lua.dll: LDLIBS += -L../ -llua53
 # This one also spams a good deal of unwanted flags into CFLAGS, so we use only --includes. On the other hand, the --libs
 # info from this one seems to include the actual interpreter library only on some systems, which makes it worse than useless.
 python.so: CFLAGS += $(shell python3-config --includes || pkg-config --cflags python3 || pkg-config --cflags python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
-python.so: LDLIBS += $(shell pkg-config --libs python3-embed || python3-config --libs || pkg-config --libs python || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
+python.so: LDLIBS += $(shell pkg-config --libs python3-embed || python3-config --libs || pkg-config --libs python3 || echo "-DBUILD_ERROR=\"Missing pkg-config data for python3\"")
 
 # Generic rules on how to build .SO/.DLL's from C and CPP sources
 %.so :: %.c %.h $(BACKEND_LIB)

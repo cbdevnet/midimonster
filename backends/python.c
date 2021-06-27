@@ -1,4 +1,5 @@
 #define BACKEND_NAME "python"
+//#define DEBUG
 
 #define PY_SSIZE_T_CLEAN
 #include <string.h>
@@ -34,6 +35,8 @@ MM_PLUGIN_API int init(){
 		LOG("Failed to register backend");
 		return 1;
 	}
+
+	//Py_UnbufferedStdioFlag = 1;
 	return 0;
 }
 
@@ -159,7 +162,7 @@ static PyObject* mmpy_output(PyObject* self, PyObject* args){
 			else{
 				mm_channel_event(mm_channel(inst, u, 0), val);
 			}
-			return 0;
+			break;
 		}
 	}
 
@@ -401,6 +404,7 @@ static int mmpy_exec(PyObject* module) {
 	PyObject* capsule = PyDict_GetItemString(PyThreadState_GetDict(), MMPY_INSTANCE_KEY);
 	if(capsule && inst){
 		*inst = PyCapsule_GetPointer(capsule, NULL);
+		DBGPF("Initializing extension module on instance %s", (*inst)->name);
 		return 0;
 	}
 
@@ -415,6 +419,7 @@ static int python_configure_instance(instance* inst, char* option, char* value){
 	//load python script
 	if(!strcmp(option, "module")){
 		//swap to interpreter
+		//PyThreadState_Swap(data->interpreter);
 		PyEval_RestoreThread(data->interpreter);
 		//import the module
 		module = PyImport_ImportModule(value);
@@ -491,8 +496,10 @@ static int python_instance(instance* inst){
 		Py_SetProgramName(program_name);
 		//initialize python
 		Py_InitializeEx(0);
-		//create, acquire and release the GIL
+		#if PY_MINOR_VERSION < 7
+		//in python 3.6 and earlier, this was required to set up the GIL
 		PyEval_InitThreads();
+		#endif
 		python_main = PyEval_SaveThread();
 	}
 
@@ -717,6 +724,8 @@ static int python_start(size_t n, instance** inst){
 		//release interpreter
 		PyEval_ReleaseThread(data->interpreter);
 	}
+
+	last_timestamp = mm_timestamp();
 	return 0;
 }
 

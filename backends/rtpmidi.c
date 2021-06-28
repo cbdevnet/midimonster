@@ -1299,8 +1299,10 @@ static int rtpmidi_mdns_broadcast(uint8_t* frame, size_t len){
 	};
 
 	//send to ipv4 and ipv6 mcasts
-	sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast6, sizeof(mcast6));
-	sendto(cfg.mdns4_fd, frame, len, 0, (struct sockaddr*) &mcast, sizeof(mcast));
+	if((sendto(cfg.mdns_fd, frame, len, 0, (struct sockaddr*) &mcast6, sizeof(mcast6)) != len)
+			| (sendto(cfg.mdns4_fd, frame, len, 0, (struct sockaddr*) &mcast, sizeof(mcast)) != len)){
+		LOG("Failed to transmit mDNS frame");
+	}
 	return 0;
 }
 

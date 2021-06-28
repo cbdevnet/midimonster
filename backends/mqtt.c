@@ -765,7 +765,7 @@ static int mqtt_handle_publish(instance* inst, uint8_t type, uint8_t* variable_h
 	uint16_t topic_alias = 0;
 	uint32_t property_length = 0;
 	size_t u = data->nchannels, property_offset, payload_offset, payload_length;
-	size_t topic_length = mqtt_pop_utf8(variable_header, length, &topic);
+	size_t topic_length = min(mqtt_pop_utf8(variable_header, length, &topic), length);
 
 	property_offset = payload_offset = topic_length + 2 + ((qos > 0) ? 2 : 0);
 	if(data->mqtt_version == 0x05){

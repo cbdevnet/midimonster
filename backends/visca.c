@@ -1,5 +1,5 @@
 #define BACKEND_NAME "visca"
-#define DEBUG
+//#define DEBUG
 
 #include <string.h>
 #include <math.h>
@@ -17,6 +17,8 @@
  *	Command output rate limiting / deduplication
  *	Inquiry
  *	Reconnect on connection close
+ *	Speed updates should send motor outputs
+ *
  */
 
 MM_PLUGIN_API int init(){
@@ -144,8 +146,8 @@ static int ptz_instance(instance* inst){
 	data->fd = -1;
 	data->cam_address = 1;
 	//start with maximum speeds
-	data->panspeed = ptz_channels[panspeed].max;
-	data->tiltspeed = ptz_channels[tiltspeed].max;
+	data->max_pan = ptz_channels[panspeed].max;
+	data->max_tilt = ptz_channels[tiltspeed].max;
 	//start with a bit of slack/deadzone in relative movement axes
 	data->deadzone = 0.1;
 
@@ -218,8 +220,9 @@ static size_t ptz_set_pantilt(instance* inst, channel* c, channel_value* v, uint
 		data->y = ((ptz_channels[tilt].max - ptz_channels[tilt].min) * v->normalised) + ptz_channels[tilt].min - ptz_channels[tilt].offset;
 	}
 
-	msg[4] = data->panspeed;
-	msg[5] = data->tiltspeed;
+	//absolute movements happen with maximum speed
+	msg[4] = data->max_pan;
+	msg[5] = data->max_tilt;
 
 	//either i'm doing this wrong or visca is just weird.
 	msg[6] = ((data->x & 0xF000) >> 12);
@@ -238,10 +241,10 @@ static size_t ptz_set_pantilt(instance* inst, channel* c, channel_value* v, uint
 static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint8_t* msg){
 	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
 	if(c->ident == panspeed){
-		data->panspeed = ((ptz_channels[panspeed].max - ptz_channels[panspeed].min) * v->normalised) + ptz_channels[panspeed].min - ptz_channels[panspeed].offset;
+		data->max_pan = ((ptz_channels[panspeed].max - ptz_channels[panspeed].min) * v->normalised) + ptz_channels[panspeed].min - ptz_channels[panspeed].offset;
 	}
 	else{
-		data->tiltspeed = ((ptz_channels[tiltspeed].max - ptz_channels[tiltspeed].min) * v->normalised) + ptz_channels[tiltspeed].min - ptz_channels[tiltspeed].offset;
+		data->max_tilt = ((ptz_channels[tiltspeed].max - ptz_channels[tiltspeed].min) * v->normalised) + ptz_channels[tiltspeed].min - ptz_channels[tiltspeed].offset;
 	}
 
 	return 0;
@@ -250,7 +253,7 @@ static size_t ptz_set_ptspeed(instance* inst, channel* c, channel_value* v, uint
 static size_t ptz_set_relmove(instance* inst, channel* c, channel_value* v, uint8_t* msg){
 	ptz_instance_data* data = (ptz_instance_data*) inst->impl;
 
-	uint8_t direction = c->ident >> 8;
+	uint8_t direction = c->ident >> 8, movement = data->relative_movement;
 	double speed_factor = v->normalised;
 
 	if(direction == rel_x
@@ -267,24 +270,31 @@ static size_t ptz_set_relmove(instance* inst, channel* c, channel_value* v, uint
 
 	//clear modified axis
 	if(direction & rel_x){
-		data->relative_movement &= ~rel_x;
+		movement &= ~rel_x;
+		data->factor_tilt = speed_factor;
 	}
 	else{
-		data->relative_movement &= ~rel_y;
+		movement &= ~rel_y;
+		data->factor_pan = speed_factor;
 	}
 
 	if(speed_factor){
-		data->relative_movement |= direction;
+		movement |= direction;
 	}
 
+	//only transmit if something actually changed
+	if(!movement && !data->relative_movement){
+		return 0;
+	}
+	data->relative_movement = movement;
+
 	//set stored axis speed
-	//TODO find a way to do relative axis speed via speed_factor, without overwriting a set absolute speed
-	msg[4] = data->panspeed;
-	msg[5] = data->tiltspeed;
+	msg[4] = data->max_pan * data->factor_pan;
+	msg[5] = data->max_tilt * data->factor_tilt;
 
 	//update motor control from movement data
-	msg[6] |= (data->relative_movement & (rel_left | rel_right)) >> 2;
-	msg[7] |= data->relative_movement & (rel_up | rel_down);
+	msg[6] |= (movement & (rel_left | rel_right)) >> 2;
+	msg[7] |= movement & (rel_up | rel_down);
 
 	//stop motors if unset
 	msg[6] = msg[6] ? msg[6] : 3;

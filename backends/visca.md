@@ -37,7 +37,9 @@ Each instance exposes the following channels
 * `home`: Return to home position
 * `memory<n>`: Call memory <n> (if incoming event value is greater than 0.9)
 * `store<n>`: Store current pan/tilt/zoom setup to memory <n> (if incoming event value is greater than 0.9)
-* `move.left`, `move.right`, `move.up`, `move.down`: Relative movement with the currently set `panspeed` and `tiltspeed`
+* `move.left`, `move.right`, `move.up`, `move.down`: Move relative to the current position. Set speed is multiplied by the event value.
+* `move.x`, `move.y`: Move relative to the current position along the specified axis. Set speed is multiplied by the event value scaled to the full range (ie. `0.0` to `0.5` moves in one direction, `0.5` to `1.0` in the other).
+
 
 Example mappings:
 
@@ -45,6 +47,8 @@ Example mappings:
 control.pan > visca.pan
 control.tilt > visca.tilt
 control.btn1 > visca.memory1
+control.stick_x > visca.move.x
+control.stick_y > visca.move.y
 ```
 
 #### Compatability list

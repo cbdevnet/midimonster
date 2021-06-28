@@ -17,8 +17,8 @@ enum /*_ptz_relmove_channel */ {
 	rel_down = 2,
 	rel_left = 4,
 	rel_right = 8,
-	rel_x = 3,
-	rel_y = 12
+	rel_x = rel_up | rel_down,
+	rel_y = rel_left | rel_right
 };
 
 typedef struct /*_ptz_instance_data*/ {
@@ -26,8 +26,8 @@ typedef struct /*_ptz_instance_data*/ {
 	uint8_t cam_address;
 	uint16_t x;
 	uint16_t y;
-	uint8_t panspeed;
-	uint8_t tiltspeed;
+	uint8_t max_pan, max_tilt;
+	double factor_pan, factor_tilt;
 	uint8_t relative_movement;
 	double deadzone;
 	uint8_t direct_device;

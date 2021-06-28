@@ -1,6 +1,10 @@
 #define BACKEND_NAME "python"
 //#define DEBUG
 
+#ifdef _WIN32
+	#include <direct.h>
+#endif
+
 #define PY_SSIZE_T_CLEAN
 #include <string.h>
 #include <Python.h>

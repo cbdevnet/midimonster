@@ -3,6 +3,10 @@
 #define LOGPF(format, ...) fprintf(stderr, "libmmbe\t" format "\n", __VA_ARGS__)
 #define LOG(message) fprintf(stderr, "libmmbe\t%s\n", (message))
 
+#ifndef _WIN32
+	#define closesocket close
+#endif
+
 int mmbackend_strdup(char** dest, char* src){
 	if(*dest){
 		free(*dest);
@@ -186,14 +190,14 @@ int mmbackend_socket(char* host, char* port, int socktype, uint8_t listener, uin
 		if(listener){
 			status = bind(fd, addr_it->ai_addr, addr_it->ai_addrlen);
 			if(status < 0){
-				close(fd);
+				closesocket(fd);
 				continue;
 			}
 		}
 		else{
 			status = connect(fd, addr_it->ai_addr, addr_it->ai_addrlen);
 			if(status < 0){
-				close(fd);
+				closesocket(fd);
 				continue;
 			}
 		}

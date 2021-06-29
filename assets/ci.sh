@@ -1,134 +1,313 @@
 #!/bin/bash
+# shellcheck disable=SC2001,SC2181
 
-# Check for Travis and use the provided fold method if detected
-if declare -f travis_fold > /dev/null; then
-	ci_fold(){
-		travis_fold "$1" "$2"
-	}
+################################################ SETUP ################################################
+dep_build_core=(
+    libasound2-dev
+    libevdev-dev
+    liblua5.3-dev
+    libola-dev
+    libjack-jackd2-dev
+    python3-dev
+    libssl-dev
+	build-essential
+	pkg-config
+	git
+)
+
+dep_build_win=(
+    mingw-w64
+)
+
+dep_build_debian=(
+	git-buildpackage
+	debhelper
+)
+
+exitcode="0"
+
+############################################## FUNCTIONS ##############################################
+
+ARGS(){
+	for i in "$@"; do
+		case "$i" in
+			--target=*|-t=*)
+				TARGETS="${i#*=}"
+			;;
+			--deploy)
+				deploy="1"
+			;;
+			--deps)
+				install_deps="1"
+			;;
+			-v|--verbose)
+				verbose="1"
+			;;
+			-af|--allow-failure)
+				allow_failure="1"
+			;;
+			-h|--help|*)
+				print_help
+				exit "0"
+			;;
+		esac
+		shift
+	done
+	[[ -z $TARGETS ]] && print_help && printf "\nNo target specified!\n" && exit "1"	# If no target(s) are specified exit.
+}
+
+print_help() {
+	printf "Usage: %s [OPTIONS]\n\n" "$0"
+	printf -- "-t=<argument>, <argument>\t--target=<argument>, <argument>\n\n"
+	printf -- "--deploy\tPackage release/nightly versions to the ./deployment/\$target directory.\n"
+	printf -- "--deps\t\tCheck and install all dependencies needed for the specified target without the need to manualy run the dependency install targets/s.\n"
+	printf -- "-af, --allow-failure\tAlways exit with code 0.\n"
+	printf -- "-v, --verbose\tEnables detailed log output.\n\n"
+	printf "Valid test targets are: \t\"check-spelling\" - \"1\", \"check-codespelling\" - \"2\", \"analyze-complexity\" - \"3\", \"analyze-shellscript\" - \"4\", \"stats\" - \"5\".\n"
+	printf "Valid build targets are: \t\"build-linux\" - \"10\", \"build-windows\" - \"11\", \"build-debian\" - \"12\".\n"
+	printf "Valid dependency install targets are: \t\"deps-linux\", \"deps-windows\", \"deps-debian\", \"deps-osx\" \"deps-tests\", \"deps-all\".\n\n"
+}
+
+install_dependencies(){
+    start_apt update -y -qq > /dev/null || error_handler "There was an error doing apt update."
+	for dependency in "$@"; do
+		if [ "$(dpkg-query -W -f='${Status}' "$dependency" 2>/dev/null | grep -c "ok installed")" -eq 0 ]; then
+            deps+=("$dependency")   # Add not installed dependency to the "to be installed array".
+		else
+			[[ -n $verbose ]] && printf "%s already installed!\n" "$dependency"   # If the dependency is already installed print it.
+		fi
+	done
+
+if [ ! "${#deps[@]}" -ge "1" ]; then    # If nothing needs to get installed don't start apt.
+    [[ -n $verbose ]] && echo "All dependencies are fulfilled."    # Dependency array empty! Not running apt!
 else
-	ci_fold(){
-		printf -- "-- %s stage %s --\n" "$1" "$2"
-	}
+    [[ -z $verbose ]] && echo "Starting dependency installation."
+    [[ -n $verbose ]] && echo "Then following dependencies are going to be installed:"    # Dependency array contains items. Running apt.
+	[[ -n $verbose ]] && echo "${deps[@]}" | sed 's/ /, /g'
+    start_apt install -y -qq --no-install-suggests --no-install-recommends "${deps[@]}" > /dev/null || error_handler "There was an error doing dependency installation!"
 fi
+	[[ -n $verbose ]] && printf "\n"
+}
 
-if [ -z "$OS" ]; then
-	OS="linux"
-fi
+start_apt(){
+    i="0"
+	if command -v fuser &> /dev/null; then
+		while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+			[ "$i" -eq "0" ] && printf "\nWaiting for other software managers to finish"
+			[ "$i" -le "16" ] && printf "." # Print a max of 16 dots if waiting.
+			((i=i+1))
+			sleep "1s"
+		done
+		[ "$i" -ge "1" ] && printf "ready!\n"
+	fi
+	DEBIAN_FRONTEND=noninteractive apt-get "$@"
+}
 
-if [ "$TASK" = "spellcheck" ]; then
-	result=0
-	# Create list of files to be spellchecked
-	spellcheck_files=$(find . -type f | grep -v ".git/")
+# Build targets and corresponding deployment.
 
-	# Run spellintian to find spelling errors
-	sl_results=$(xargs spellintian 2>&1 <<< "$spellcheck_files")
+build-linux(){
+	[[ -n $install_deps ]] && install_dependencies "${dep_build_core[@]}"
+	make full
+}
 
+build-linux-deploy(){
+	#printf "\nLinux Deployment started..\n"
+	mkdir -p ./deployment/linux/backends
+	mkdir -p ./deployment/linux/docs
+	cp ./midimonster ./deployment/linux/
+	cp ./backends/*.so ./deployment/linux/backends/
+	cp ./monster.cfg ./deployment/linux/monster.cfg
+	cp ./backends/*.md ./deployment/linux/docs/
+	cp -r ./configs ./deployment/linux/
+	cd ./deployment/linux || error_handler "Error doing cd to ./deployment"
+	filename="midimonster-$(git describe)-$OS.tgz"
+	touch "$filename" && tar --exclude=*.tgz -czf "$filename" "./"
+	find . ! -iname "*.zip" ! -iname "*.tgz" -delete
+}
+
+build-windows(){
+	[[ -n $install_deps ]] && install_dependencies "${dep_build_core[@]}" "${dep_build_win[@]}"
+	make windows
+}
+
+build-windows-deploy(){
+	#printf "\nWindows Deployment started..\n"
+	mkdir -p ./deployment/windows/backends
+	mkdir -p ./deployment/windows/docs
+	strip midimonster.exe backends/*.dll	# Strip the Windows binaries as they become huge quickly.
+	cp ./midimonster.exe ./deployment/windows/
+	cp ./backends/*.dll ./deployment/windows/backends/
+	cp ./backends/*.dll.disabled ./deployment/windows/backends/
+	cp ./monster.cfg ./deployment/windows/monster.cfg
+	cp ./backends/*.md ./deployment/windows/docs/
+	cp -r ./configs ./deployment/windows/
+	cd ./deployment/windows || error_handler "Error doing cd to ./deployment/windows"
+	zip -r "./midimonster-$(git describe)-windows.zip" "./"
+	find . ! -iname "*.zip" ! -iname "*.tgz" -delete
+}
+
+build-debian(){
+	[[ -n $install_deps ]] && install_dependencies "${dep_build_core[@]}" "${dep_build_debian[@]}"
+	git checkout debian/master
+	gbp buildpackage
+}
+
+build-debian-deploy(){
+	#printf "\nDebian Package Deployment started..\n"
+	mkdir -p ./deployment/debian/
+	cp ./*.deb ./deployment/debian/
+}
+
+# Tests
+
+ckeck-spelling(){		# Check spelling.
+	[[ -n $install_deps ]] && install_dependencies "lintian"
+	spellcheck_files=$(find . -type f | grep -v ".git/")	# Create list of files to be spellchecked.
+	sl_results=$(xargs spellintian 2>&1 <<< "$spellcheck_files")	# Run spellintian to find spelling errors
 	sl_errors=$(wc -l <<< "$sl_results")
-	sl_errors_dups=$((grep "\(duplicate word\)" | wc -l) <<< "$sl_results")
-	sl_errors_nodups=$((grep -v "\(duplicate word\)" | wc -l) <<< "$sl_results")
+	sl_errors_dups=$( (grep -c "\(duplicate word\)") <<< "$sl_results")
+	sl_errors_nodups=$( (grep -cv "\(duplicate word\)") <<< "$sl_results")
 
-	if [ "$sl_errors" -ne 0 ]; then
+	if [ "$sl_errors" -gt "1" ]; then
 		printf "Spellintian found %s errors (%s spelling, %s duplicate words):\n\n" "$sl_errors" "$sl_errors_nodups" "$sl_errors_dups"
 		printf "%s\n\n" "$sl_results"
-		result=1
+		exitcode=1
 	else
 		printf "Spellintian reports no errors\n"
 	fi
+}
 
-	# Run codespell to find some more
+check-codespelling(){	# Check code for common misspellings.
+	[[ -n $install_deps ]] && install_dependencies "codespell"
+	spellcheck_files=$(find . -type f | grep -v ".git/")	# Create list of files to be spellchecked.
 	cs_results=$(xargs codespell --quiet 2 <<< "$spellcheck_files" 2>&1)
 	cs_errors=$(wc -l <<< "$cs_results")
-	if [ "$cs_errors" -ne 0 ]; then
+	if [ "$cs_errors" -gt "1" ]; then
 		printf "Codespell found %s errors:\n\n" "$cs_errors"
 		printf "%s\n\n" "$cs_results"
-		result=1
+		exitcode=1
 	else
 		printf "Codespell reports no errors\n"
 	fi
-	exit "$result"
-elif [ "$TASK" = "codesmell" ]; then
-	result=0
+}
 
-	if [ -z "$(which lizard)" ]; then
+analyze-complexity(){	# code complexity analyser.
+	[[ -n $install_deps ]] && install_dependencies "python3" "python3-pip"
+	if [ -z "$(which ~/.local/bin/lizard)" ]; then
 		printf "Installing lizard...\n"
-		pip3 install lizard
+		pip3 install lizard >/dev/null
 	fi
+	printf "Running lizard for code complexity analysis\n"
+	~/.local/bin/lizard ./
+	if [ "$?" -ne "0" ]; then
+		exitcode=1
+	fi
+}
 
-	# Run shellcheck for all shell scripts
-	printf "Running shellcheck...\n"
+analyze-shellscript(){	# Shellscript analysis tool.
+	[[ -n $install_deps ]] && install_dependencies "shellcheck"
+	printf "Running shellcheck:\n"
 	shell_files="$(find . -type f -iname \*.sh)"
 	xargs shellcheck -Cnever -s bash <<< "$shell_files"
 	if [ "$?" -ne "0" ]; then
-		result=1
+		exitcode=1
 	fi
+}
 
-	# Run cloc for some stats
-	printf "Code statistics:\n\n"
+stats(){				# Code statistics.
+	[[ -n $install_deps ]] && install_dependencies "cloc"
+	printf "Code statistics:\n"
 	cloc ./
+}
 
-	# Run lizard for the project
-	printf "Running lizard for code complexity analysis\n"
-	lizard ./
-	if [ "$?" -ne "0" ]; then
-		result=1
-	fi
+target_queue(){
+	printf "\n"
+	IFS=',|.' read -ra Queue <<< "$TARGETS"
+	for i in "${Queue[@]}"; do
+		case "$i" in
+			check-spelling|1)
+				ckeck-spelling
+			;;
+			check-codespelling|2)
+				check-codespelling
+			;;
+			analyze-complexity|3)
+				analyze-complexity
+			;;
+			analyze-shellscript|4)
+				analyze-shellscript
+			;;
+			stats|5)
+				stats
+			;;
+			build-linux|10)
+				OS="linux"
+				build-linux
+				[[ -n $deploy ]] && build-linux-deploy	# Deploy build artifacts if the deploy flag is set.
+			;;
+			build-windows|build-win|11)
+				build-windows
+				[[ -n $deploy ]] && build-windows-deploy	# Deploy build artifacts if the deploy flag is set.
+			;;
+			build-debian|build-deb|12)
+				build-debian
+				[[ -n $deploy ]] && build-debian-deploy	# Deploy build artifacts if the deploy flag is set.
+			;;
+			build-osx|13)
+				OS="osx"
+				printf "\nNot implemented yet!\n"
+				#build-linux
+				#[[ -n $deploy ]] && build-linux-deploy		# Deploy build artifacts if the deploy flag is set.
+			;;
+			deps-linux)
+				# Target to install all needed dependencies for linux builds.
+				install_dependencies "${dep_build_core[@]}"
+			;;
+			deps-windows|deps-win)
+				# Target to install all needed dependencies for windows builds.
+				install_dependencies "${dep_build_core[@]}" "${dep_build_win[@]}"
+			;;
+			deps-debian|deps-deb)
+				# Target to install all needed dependencies for debian packaging.
+				install_dependencies "${dep_build_core[@]}" "${dep_build_debian[@]}"
+			;;
+			deps-osx)
+				# Target to install all needed dependencies for osx.
+				printf "\nNot implemented yet!\n"
+			;;
+			deps-tests)
+				install_dependencies "lintian" "codespell" "python3" "python3-pip" "shellcheck" "cloc"
+				# Install lizard if not found.
+				if [ -z "$(which ~/.local/bin/lizard)" ]; then
+					pip3 install lizard >/dev/null
+				fi
+			;;
+			deps-all)
+				# Target to install all needed dependencies for this ci script.
+				install_dependencies "${dep_build_core[@]}" "${dep_build_win[@]}" "${dep_build_debian[@]}" "lintian" "codespell" "python3" "python3-pip" "shellcheck" "cloc"
+			;;
+			*)
+				printf "Target '%s' not valid!\n" "$i"
+			;;
+		esac
+		printf "\n"
+	done
+}
 
-	exit "$result"
-elif [ "$TASK" = "sanitize" ]; then
-	# Run sanitized compile
-	ci_fold start "make_sanitize"
-	if ! make sanitize; then
-		printf "Failed to build\n"
-		exit 1
-	fi
-	ci_fold end "make_sanitize"
-elif [ "$TASK" = "windows" ]; then
-	ci_fold start "make_windows"
-	if ! make windows; then
-		printf "Failed to build\n"
-		exit 1
-	fi
-	make -C backends lua.dll
-	ci_fold end "make_windows"
-	if [ "$(git describe)" == "$(git describe --abbrev=0)" ] || [ -n "$DEPLOY" ]; then
-		ci_fold start "deploy_windows"
-		mkdir ./deployment
-		mkdir ./deployment/backends
-		mkdir ./deployment/docs
-		# Strip the Windows binaries as they become huge quickly
-		strip midimonster.exe backends/*.dll
-		cp ./midimonster.exe ./deployment/
-		cp ./backends/*.dll ./deployment/backends/
-		cp ./backends/*.dll.disabled ./deployment/backends/
-		cp ./monster.cfg ./deployment/monster.cfg
-		cp ./backends/*.md ./deployment/docs/
-		cp -r ./configs ./deployment/
-		cd ./deployment
-		zip -r "./midimonster-$(git describe)-windows.zip" "./"
-		find . ! -iname '*.zip' -delete
-		ci_fold end "deploy_windows"
-	fi
-else
-	# Otherwise compile as normal
-	ci_fold start "make"
-	if ! make full; then
-		printf "Failed to build\n"
-		exit 1
-	fi
-	ci_fold end "make"
-	if [ "$(git describe)" == "$(git describe --abbrev=0)" ] || [ -n "$DEPLOY" ]; then
-		ci_fold start "deploy_unix"
-		mkdir ./deployment
-		mkdir ./deployment/backends
-		mkdir ./deployment/docs
-		cp ./midimonster ./deployment/
-		cp ./backends/*.so ./deployment/backends/
-		cp ./monster.cfg ./deployment/monster.cfg
-		cp ./backends/*.md ./deployment/docs/
-		cp -r ./configs ./deployment/
-		cd ./deployment
-		tar czf "midimonster-$(git describe)-$OS.tgz" "./"
-		find . ! -iname '*.tgz' -delete
-		ci_fold end "deploy_unix"
-	fi
-fi
+error_handler(){
+	[[ -n $1 ]] && printf "\n%s\n" "$1"
+	printf "\nAborting"
+	for i in {1..3}; do sleep 0.3s && printf "." && sleep 0.2s; done
+	printf "\n"
+	exit "1"
+}
+
+################################################ Main #################################################
+trap error_handler SIGINT SIGTERM
+
+ARGS "$@"	# Parse arguments.
+target_queue	# Start requestet targets.
+
+# Allow failure handler.
+[[ -z $allow_failure ]] && exit "$exitcode"
+exit "0"

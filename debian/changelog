@@ -1,3 +1,20 @@
+midimonster (0.6-1) unstable; urgency=medium
+
+  * New backend: VISCA (PTZ Cameras)
+  * New backend: MQTT
+  * Configuration now supports list-type multichannel specification
+  * The maweb backend will try the next host if login fails
+  * The ArtNet and sACN backends have gained `detect` options
+  * The programming backends have gained functions for channel introspection
+  * New example configurations
+  * Optionally disable ArtNet rate limiting
+  * Update lua backend to 5.4 API changes
+  * The MIDI backends now support extended parameter numbers (RPN/NRPN)
+  * The MIDI backends now support the program change control
+  * evdev will now properly perform prefix-matching
+
+ -- cbdev <cbdev@cbcdn.com>  Wed, 30 Jun 2021 03:04:04 +0200
+
 midimonster (0.5-1) unstable; urgency=medium
 
   * New RTP MIDI backend
@@ -11,7 +28,7 @@ midimonster (0.5-1) unstable; urgency=medium
   * OSC bundle reception
   * maweb now supports fallback connections
 
- -- Fabian "cbdev" Stumpf <cb@cbcdn.com>  Mon, 27 Apr 2020 22:51:20 +0200
+ -- cbdev <cb@cbcdn.com>  Wed, 30 Jun 2021 03:03:41 +0200
 
 midimonster (0.4-1) unstable; urgency=medium
 

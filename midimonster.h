@@ -7,7 +7,7 @@
 
 /* Core version unless set by the build process */
 #ifndef MIDIMONSTER_VERSION
-	#define MIDIMONSTER_VERSION "v0.6-dist"
+	#define MIDIMONSTER_VERSION "v0.7-dist"
 #endif
 
 /* Set backend name if unset */

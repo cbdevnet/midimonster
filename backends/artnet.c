@@ -429,7 +429,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 						LOG("Failed to process frame");
 					}
 					else if(!inst && global_cfg.detect > 1){
-						LOGPF("Received data for unconfigured universe %d (net %d) on descriptor %" PRIsize_t, frame->universe, frame->net, (((uint64_t) fds[u].impl) & 0xFF));
+						LOGPF("Received data for unconfigured universe %d (net %d) on descriptor %" PRIu64, frame->universe, frame->net, (((uint64_t) fds[u].impl) & 0xFF));
 					}
 				}
 			}

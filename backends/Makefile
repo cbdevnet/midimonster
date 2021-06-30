@@ -60,7 +60,10 @@ openpixelcontrol.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 openpixelcontrol.dll: LDLIBS += -lws2_32
 
 maweb.so: ADDITIONAL_OBJS += $(BACKEND_LIB)
-maweb.so: LDLIBS = $(shell pkg-config --libs openssl || echo "-DBUILD_ERROR=\"Missing pkg-config data for openssl\"")
+# On OSX, the system provides libressl but no pkg-config data.
+# Brew provides OpenSSL v1.1, but with a mangled path and no clear way to find it
+# Give up and just default to -lcrypto for the time being...
+maweb.so: LDLIBS = $(shell pkg-config --libs openssl || echo "-lcrypto")
 maweb.dll: ADDITIONAL_OBJS += $(BACKEND_LIB)
 maweb.dll: LDLIBS += -lws2_32
 maweb.dll: CFLAGS += -DMAWEB_NO_LIBSSL

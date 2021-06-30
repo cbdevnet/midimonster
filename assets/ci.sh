@@ -3,20 +3,28 @@
 
 ################################################ SETUP ################################################
 dep_build_core=(
-    libasound2-dev
-    libevdev-dev
-    liblua5.3-dev
-    libola-dev
-    libjack-jackd2-dev
-    python3-dev
-    libssl-dev
+	libasound2-dev
+	libevdev-dev
+	liblua5.3-dev
+	libola-dev
+	libjack-jackd2-dev
+	python3-dev
+	libssl-dev
 	build-essential
 	pkg-config
 	git
 )
 
+dep_build_osx=(
+	ola
+	lua
+	openssl@1.1
+	jack
+	python3
+)
+
 dep_build_win=(
-    mingw-w64
+	mingw-w64
 )
 
 dep_build_debian=(
@@ -68,29 +76,29 @@ print_help() {
 	printf "Valid dependency install targets are: \t\"deps-linux\", \"deps-windows\", \"deps-debian\", \"deps-osx\" \"deps-tests\", \"deps-all\".\n\n"
 }
 
-install_dependencies(){
-    start_apt update -y -qq > /dev/null || error_handler "There was an error doing apt update."
+deps_apt(){
+	start_apt update -y -qq > /dev/null || error_handler "There was an error doing apt update."
 	for dependency in "$@"; do
 		if [ "$(dpkg-query -W -f='${Status}' "$dependency" 2>/dev/null | grep -c "ok installed")" -eq 0 ]; then
-            deps+=("$dependency")   # Add not installed dependency to the "to be installed array".
+			deps+=("$dependency")   # Add not installed dependency to the "to be installed array".
 		else
 			[[ -n $verbose ]] && printf "%s already installed!\n" "$dependency"   # If the dependency is already installed print it.
 		fi
 	done
 
-if [ ! "${#deps[@]}" -ge "1" ]; then    # If nothing needs to get installed don't start apt.
-    [[ -n $verbose ]] && echo "All dependencies are fulfilled."    # Dependency array empty! Not running apt!
-else
-    [[ -z $verbose ]] && echo "Starting dependency installation."
-    [[ -n $verbose ]] && echo "Then following dependencies are going to be installed:"    # Dependency array contains items. Running apt.
-	[[ -n $verbose ]] && echo "${deps[@]}" | sed 's/ /, /g'
-    start_apt install -y -qq --no-install-suggests --no-install-recommends "${deps[@]}" > /dev/null || error_handler "There was an error doing dependency installation!"
-fi
+	if [ ! "${#deps[@]}" -ge "1" ]; then	# If nothing needs to get installed don't start apt.
+		[[ -n $verbose ]] && echo "All dependencies are fulfilled."	# Dependency array empty! Not running apt!
+	else
+		[[ -z $verbose ]] && echo "Starting dependency installation."
+		[[ -n $verbose ]] && echo "Then following dependencies are going to be installed:"	# Dependency array contains items. Running apt.
+		[[ -n $verbose ]] && echo "${deps[@]}" | sed 's/ /, /g'
+		start_apt install -y -qq --no-install-suggests --no-install-recommends "${deps[@]}" > /dev/null || error_handler "There was an error doing dependency installation!"
+	fi
 	[[ -n $verbose ]] && printf "\n"
 }
 
 start_apt(){
-    i="0"
+	i="0"
 	if command -v fuser &> /dev/null; then
 		while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
 			[ "$i" -eq "0" ] && printf "\nWaiting for other software managers to finish"
@@ -103,11 +111,43 @@ start_apt(){
 	DEBIAN_FRONTEND=noninteractive apt-get "$@"
 }
 
+deps_brew(){
+	# 'brew install' sometimes returns non-zero for some arcane reason. 
+	for dependency in "$@"; do
+		brew install "$dependency"
+	done
+	brew link --overwrite python
+}
+
 # Build targets and corresponding deployment.
 
 build-linux(){
-	[[ -n $install_deps ]] && install_dependencies "${dep_build_core[@]}"
+	[[ -n $install_deps ]] && deps_apt "${dep_build_core[@]}"
 	make full
+}
+
+build-osx(){
+	# OpenSSL is not a proper install due to some Apple bull, so provide additional locations via the environment...
+	# Additionally, newer versions of this "recipe" seem to use the name 'openssl@1.1' instead of plain 'openssl' and there seems to be
+	# no way to programmatically get the link and include paths. Genius! Hardcoding the new version for the time being...
+	export CFLAGS="$CFLAGS -I/usr/local/opt/openssl@1.1/include"
+	export LDFLAGS="$LDFLAGS -L/usr/local/opt/openssl@1.1/lib"
+	make full
+}
+
+build-windows(){
+	[[ -n $install_deps ]] && deps_apt "${dep_build_core[@]}" "${dep_build_win[@]}"
+	# Download libraries to link with for Windows
+	wget "https://downloads.sourceforge.net/project/luabinaries/5.3.5/Windows%20Libraries/Dynamic/lua-5.3.5_Win64_dllw6_lib.zip" -O lua53.zip
+	unzip lua53.zip lua53.dll
+	make windows
+	make -C backends lua.dll
+}
+
+build-debian(){
+	[[ -n $install_deps ]] && deps_apt "${dep_build_core[@]}" "${dep_build_debian[@]}"
+	git checkout debian/master
+	gbp buildpackage
 }
 
 build-linux-deploy(){
@@ -123,11 +163,6 @@ build-linux-deploy(){
 	filename="midimonster-$(git describe)-$OS.tgz"
 	touch "$filename" && tar --exclude=*.tgz -czf "$filename" "./"
 	find . ! -iname "*.zip" ! -iname "*.tgz" -delete
-}
-
-build-windows(){
-	[[ -n $install_deps ]] && install_dependencies "${dep_build_core[@]}" "${dep_build_win[@]}"
-	make windows
 }
 
 build-windows-deploy(){
@@ -146,12 +181,6 @@ build-windows-deploy(){
 	find . ! -iname "*.zip" ! -iname "*.tgz" -delete
 }
 
-build-debian(){
-	[[ -n $install_deps ]] && install_dependencies "${dep_build_core[@]}" "${dep_build_debian[@]}"
-	git checkout debian/master
-	gbp buildpackage
-}
-
 build-debian-deploy(){
 	#printf "\nDebian Package Deployment started..\n"
 	mkdir -p ./deployment/debian/
@@ -161,7 +190,7 @@ build-debian-deploy(){
 # Tests
 
 ckeck-spelling(){		# Check spelling.
-	[[ -n $install_deps ]] && install_dependencies "lintian"
+	[[ -n $install_deps ]] && deps_apt "lintian"
 	spellcheck_files=$(find . -type f | grep -v ".git/")	# Create list of files to be spellchecked.
 	sl_results=$(xargs spellintian 2>&1 <<< "$spellcheck_files")	# Run spellintian to find spelling errors
 	sl_errors=$(wc -l <<< "$sl_results")
@@ -178,7 +207,7 @@ ckeck-spelling(){		# Check spelling.
 }
 
 check-codespelling(){	# Check code for common misspellings.
-	[[ -n $install_deps ]] && install_dependencies "codespell"
+	[[ -n $install_deps ]] && deps_apt "codespell"
 	spellcheck_files=$(find . -type f | grep -v ".git/")	# Create list of files to be spellchecked.
 	cs_results=$(xargs codespell --quiet 2 <<< "$spellcheck_files" 2>&1)
 	cs_errors=$(wc -l <<< "$cs_results")
@@ -192,7 +221,7 @@ check-codespelling(){	# Check code for common misspellings.
 }
 
 analyze-complexity(){	# code complexity analyser.
-	[[ -n $install_deps ]] && install_dependencies "python3" "python3-pip"
+	[[ -n $install_deps ]] && deps_apt "python3" "python3-pip"
 	if [ -z "$(which ~/.local/bin/lizard)" ]; then
 		printf "Installing lizard...\n"
 		pip3 install lizard >/dev/null
@@ -205,7 +234,7 @@ analyze-complexity(){	# code complexity analyser.
 }
 
 analyze-shellscript(){	# Shellscript analysis tool.
-	[[ -n $install_deps ]] && install_dependencies "shellcheck"
+	[[ -n $install_deps ]] && deps_apt "shellcheck"
 	printf "Running shellcheck:\n"
 	shell_files="$(find . -type f -iname \*.sh)"
 	xargs shellcheck -Cnever -s bash <<< "$shell_files"
@@ -215,7 +244,7 @@ analyze-shellscript(){	# Shellscript analysis tool.
 }
 
 stats(){				# Code statistics.
-	[[ -n $install_deps ]] && install_dependencies "cloc"
+	[[ -n $install_deps ]] && deps_apt "cloc"
 	printf "Code statistics:\n"
 	cloc ./
 }
@@ -243,40 +272,40 @@ target_queue(){
 			build-linux|10)
 				OS="linux"
 				build-linux
-				[[ -n $deploy ]] && build-linux-deploy	# Deploy build artifacts if the deploy flag is set.
+				[[ -n $deploy ]] && build-linux-deploy
 			;;
 			build-windows|build-win|11)
 				build-windows
-				[[ -n $deploy ]] && build-windows-deploy	# Deploy build artifacts if the deploy flag is set.
+				[[ -n $deploy ]] && build-windows-deploy
 			;;
 			build-debian|build-deb|12)
 				build-debian
-				[[ -n $deploy ]] && build-debian-deploy	# Deploy build artifacts if the deploy flag is set.
+				[[ -n $deploy ]] && build-debian-deploy
 			;;
 			build-osx|13)
 				OS="osx"
-				printf "\nNot implemented yet!\n"
-				#build-linux
-				#[[ -n $deploy ]] && build-linux-deploy		# Deploy build artifacts if the deploy flag is set.
+				build-osx
+				[[ -n $deploy ]] && build-linux-deploy
 			;;
 			deps-linux)
 				# Target to install all needed dependencies for linux builds.
-				install_dependencies "${dep_build_core[@]}"
+				deps_apt "${dep_build_core[@]}"
 			;;
 			deps-windows|deps-win)
 				# Target to install all needed dependencies for windows builds.
-				install_dependencies "${dep_build_core[@]}" "${dep_build_win[@]}"
+				deps_apt "${dep_build_core[@]}" "${dep_build_win[@]}"
 			;;
 			deps-debian|deps-deb)
 				# Target to install all needed dependencies for debian packaging.
-				install_dependencies "${dep_build_core[@]}" "${dep_build_debian[@]}"
+				deps_apt "${dep_build_core[@]}" "${dep_build_debian[@]}"
 			;;
 			deps-osx)
 				# Target to install all needed dependencies for osx.
 				printf "\nNot implemented yet!\n"
+				deps_brew "${dep_build_osx[@]}"
 			;;
 			deps-tests)
-				install_dependencies "lintian" "codespell" "python3" "python3-pip" "shellcheck" "cloc"
+				deps_apt "lintian" "codespell" "python3" "python3-pip" "shellcheck" "cloc"
 				# Install lizard if not found.
 				if [ -z "$(which ~/.local/bin/lizard)" ]; then
 					pip3 install lizard >/dev/null
@@ -284,7 +313,7 @@ target_queue(){
 			;;
 			deps-all)
 				# Target to install all needed dependencies for this ci script.
-				install_dependencies "${dep_build_core[@]}" "${dep_build_win[@]}" "${dep_build_debian[@]}" "lintian" "codespell" "python3" "python3-pip" "shellcheck" "cloc"
+				deps_apt "${dep_build_core[@]}" "${dep_build_win[@]}" "${dep_build_debian[@]}" "lintian" "codespell" "python3" "python3-pip" "shellcheck" "cloc"
 			;;
 			*)
 				printf "Target '%s' not valid!\n" "$i"

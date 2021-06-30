@@ -4,9 +4,12 @@
 #include <string.h>
 #include <math.h>
 
-#ifndef _WIN32
+#ifdef __linux__
 	#include <sys/ioctl.h>
 	#include <asm/termbits.h>
+#elif __APPLE__
+	#include <sys/ioctl.h>
+	#include <IOKit/serial/ioss.h>
 #endif
 
 #include "visca.h"
@@ -89,9 +92,6 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 		LOG("Direct device connections are not possible on Windows");
 		return 1;
 		#else
-
-		struct termios2 device_config;
-
 		options = strchr(value, ' ');
 		if(options){
 			//terminate port name
@@ -108,6 +108,8 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 
 		//configure baudrate
 		if(options){
+			#ifdef __linux__
+			struct termios2 device_config;
 			//get current port config
 			if(ioctl(data->fd, TCGETS2, &device_config)){
 				LOGPF("Failed to get port configuration data for %s: %s", value, strerror(errno));
@@ -123,6 +125,12 @@ static int ptz_configure_instance(instance* inst, char* option, char* value){
 			if(ioctl(data->fd, TCSETS2, &device_config)){
 				LOGPF("Failed to set port configuration data for %s: %s", value, strerror(errno));
 			}
+			#elif __APPLE__
+			speed_t speed = strtoul(options, NULL, 10);
+			if(ioctl(data->fd, IOSSIOSPEED, &speed)){
+				LOGPF("Failed to set port configuration data for %s: %s", value, strerror(errno));
+			}
+			#endif
 		}
 		return 0;
 		#endif

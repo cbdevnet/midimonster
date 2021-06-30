@@ -613,7 +613,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 					}
 					else if(!inst && global_cfg.detect > 1){
 						//this will only happen with unicast input
-						LOGPF("Received data for unconfigured universe %d on descriptor %" PRIsize_t, be16toh(data->universe), ((uint64_t) fds[u].impl) & 0xFFFF);
+						LOGPF("Received data for unconfigured universe %d on descriptor %" PRIu64, be16toh(data->universe), ((uint64_t) fds[u].impl) & 0xFFFF);
 					}
 				}
 			}

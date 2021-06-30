@@ -78,7 +78,7 @@ configuration.
 #### Supported types & value ranges
 
 OSC allows controls to have individual value ranges and supports different parameter types.
-The following types are currently supported by the MIDImonster:
+The following types are currently supported by the MIDIMonster:
 
 * **i**: 32-bit signed integer
 * **f**: 32-bit IEEE floating point

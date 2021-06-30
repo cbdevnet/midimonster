@@ -29,13 +29,15 @@ static struct /*_sacn_global_config*/ {
 	sacn_fd* fd;
 	uint64_t last_announce;
 	uint32_t next_frame;
+	uint8_t detect;
 } global_cfg = {
 	.source_name = "MIDIMonster",
 	.cid = {'M', 'I', 'D', 'I', 'M', 'o', 'n', 's', 't', 'e', 'r'},
 	.fds = 0,
 	.fd = NULL,
 	.last_announce = 0,
-	.next_frame = 0
+	.next_frame = 0,
+	.detect = 0
 };
 
 MM_PLUGIN_API int init(){
@@ -130,6 +132,16 @@ static int sacn_configure(char* option, char* value){
 			global_cfg.cid[u] = (strtoul(next, &next, 0) & 0xFF);
 		}
 	}
+	else if(!strcmp(option, "detect")){
+		global_cfg.detect = 0;
+		if(!strcmp(value, "on")){
+			global_cfg.detect = 1;
+		}
+		else if(!strcmp(value, "verbose")){
+			global_cfg.detect = 2;
+		}
+		return 0;
+	}
 	else if(!strcmp(option, "bind")){
 		mmbackend_parse_hostspec(value, &host, &port, &next);
 
@@ -138,8 +150,13 @@ static int sacn_configure(char* option, char* value){
 			return 1;
 		}
 
-		if(next && !strncmp(next, "local", 5)){
-			flags = mcast_loop;
+		//parse additional socket options
+		if(next){
+			for(next = strtok(next, " "); next; next = strtok(NULL, " ")){
+				if(!strcmp(next, "local")){
+					flags |= mcast_loop;
+				}
+			}
 		}
 
 		if(sacn_listener(host, port ? port : SACN_PORT, flags)){
@@ -368,7 +385,7 @@ static int sacn_set(instance* inst, size_t num, channel** c, channel_value* v){
 
 	//send packet if required
 	if(mark){
-		//find output instance data
+		//find output control data for the instance
 		for(u = 0; u < global_cfg.fd[data->fd_index].universes; u++){
 			if(global_cfg.fd[data->fd_index].universe[u].universe == data->uni){
 				break;
@@ -401,6 +418,9 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 
 	//source filtering
 	if(inst_data->filter_enabled && memcmp(inst_data->cid_filter, frame->sender_cid, 16)){
+		if(global_cfg.detect > 1){
+			LOGPF("Discarding data for instance %s due to source filter rule", inst->name);
+		}
 		return 0;
 	}
 
@@ -418,10 +438,18 @@ static int sacn_process_frame(instance* inst, sacn_frame_root* frame, sacn_frame
 
 	//handle source priority (currently a 1-bit counter)
 	if(inst_data->data.last_priority > data->priority){
+		if(global_cfg.detect > 1){
+			LOGPF("Ignoring lower-priority (%d) source on %s, current source is %d", data->priority, inst->name, inst_data->data.last_priority);
+		}
 		inst_data->data.last_priority = data->priority;
 		return 0;
 	}
 	inst_data->data.last_priority = data->priority;
+
+	if(!inst_data->last_input && global_cfg.detect){
+		LOGPF("Valid data on instance %s (Universe %u): Source name %.*s, priority %d", inst->name, inst_data->uni, 64, data->source_name, data->priority);
+	}
+	inst_data->last_input = mm_timestamp();
 
 	//read data (except start code), mark changed channels
 	for(u = 1; u < be16toh(data->channels); u++){
@@ -583,6 +611,10 @@ static int sacn_handle(size_t num, managed_fd* fds){
 					if(inst && sacn_process_frame(inst, frame, data)){
 						LOG("Failed to process frame");
 					}
+					else if(!inst && global_cfg.detect > 1){
+						//this will only happen with unicast input
+						LOGPF("Received data for unconfigured universe %d on descriptor %" PRIsize_t, be16toh(data->universe), ((uint64_t) fds[u].impl) & 0xFFFF);
+					}
 				}
 			}
 		} while(bytes_read > 0);
@@ -604,15 +636,51 @@ static int sacn_handle(size_t num, managed_fd* fds){
 	return 0;
 }
 
+static int sacn_start_multicast(instance* inst){
+	sacn_instance_data* data = (sacn_instance_data*) inst->impl;
+	struct sockaddr_storage bound_name = {
+		0
+	};
+	#ifdef _WIN32
+	struct ip_mreq mcast_req = {
+		.imr_interface.s_addr = INADDR_ANY,
+	#else
+	struct ip_mreqn mcast_req = {
+		.imr_address.s_addr = INADDR_ANY,
+	#endif
+		.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni))
+	};
+	socklen_t bound_length = sizeof(bound_name);
+
+	//select the specific interface to join the mcast group on based on the bind address
+	if(getsockname(global_cfg.fd[data->fd_index].fd, (struct sockaddr*) &bound_name, &bound_length)){
+		LOGPF("Failed to read back local bind address on socket %" PRIsize_t, data->fd_index);
+		return 1;
+	}
+	else if(bound_name.ss_family != AF_INET || !((struct sockaddr_in*) &bound_name)->sin_addr.s_addr){
+		LOGPF("Socket %" PRIsize_t " not bound to a specific IPv4 address, joining multicast input group for instance %s (universe %u) on default interface", data->fd_index, inst->name, data->uni);
+	}
+	else{
+		#ifdef _WIN32
+		mcast_req.imr_interface = ((struct sockaddr_in*) &bound_name)->sin_addr;
+		#else
+		mcast_req.imr_address = ((struct sockaddr_in*) &bound_name)->sin_addr;
+		#endif
+	}
+
+	if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
+		LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst->name, mmbackend_socket_strerror(errno));
+	}
+
+	return 0;
+}
+
 static int sacn_start(size_t n, instance** inst){
 	size_t u, p;
 	int rv = 1;
 	sacn_instance_data* data = NULL;
 	sacn_instance_id id = {
 		.label = 0
-	};
-	struct ip_mreq mcast_req = {
-		.imr_interface = { INADDR_ANY }
 	};
 	struct sockaddr_in* dest_v4 = NULL;
 
@@ -641,11 +709,8 @@ static int sacn_start(size_t n, instance** inst){
 			}
 		}
 
-		if(!data->unicast_input){
-			mcast_req.imr_multiaddr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
-			if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
-				LOGPF("Failed to join Multicast group for universe %u on instance %s: %s", data->uni, inst[u]->name, mmbackend_socket_strerror(errno));
-			}
+		if(!data->unicast_input && sacn_start_multicast(inst[u])){
+			return 1;
 		}
 
 		if(data->xmit_prio){
@@ -667,7 +732,7 @@ static int sacn_start(size_t n, instance** inst){
 				dest_v4 = (struct sockaddr_in*) (&data->dest_addr);
 				dest_v4->sin_family = AF_INET;
 				dest_v4->sin_port = htobe16(strtoul(SACN_PORT, NULL, 10));
-				dest_v4->sin_addr = mcast_req.imr_multiaddr;
+				dest_v4->sin_addr.s_addr = htobe32(((uint32_t) 0xefff0000) | ((uint32_t) data->uni));
 			}
 		}
 	}

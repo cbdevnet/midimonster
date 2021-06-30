@@ -1,0 +1,73 @@
+#!/usr/bin/env groovy
+
+/*
+ * This Jenkinsfile is intended to run on https://ci.spacecdn.de and may fail anywhere else.
+ * It makes assumptions about plugins being installed, labels mapping to nodes that can build what is needed, etc.
+ */
+
+def buildTypes = ['linux', 'windows']
+def builds = [:]
+
+//if(env.TAG_NAME) {
+//	buildTypes.add("debian")
+//}
+
+buildTypes.each{
+	builds["$it"] = {
+		node() {
+			skipDefaultCheckout()
+			stage('Checkout') {
+				checkout scm
+			}
+
+			stage("$it Build"){
+				sh label: "Build", script: "./assets/ci.sh --target=build-$it --deploy"
+			}
+
+			stage('Stash artifacts') {
+				stash includes: "deployment/$it/*", name: "$it", allowEmpty: 'false'
+			}
+		}
+	}
+}
+
+def deploy = {
+	node(){
+		skipDefaultCheckout()
+		stage('Deploy') {
+			buildTypes.each{
+				unstash "$it"
+			}
+			archiveArtifacts artifacts: 'deployment/*/*', onlyIfSuccessful: true, fingerprint: true
+		}
+	}
+}
+
+builds.Test = {
+	node() {
+		skipDefaultCheckout()
+		stage('Checkout') {
+			checkout scm
+		}
+		stage('Test') {
+			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+				sh label: "Check Spelling", script: './assets/ci.sh --target=check-spelling'
+			}
+			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+				sh label: "Check Codespelling", script: './assets/ci.sh --target=check-codespelling'
+			}
+			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+				sh label: "Analyze Complexity", script: './assets/ci.sh --target=analyze-complexity'
+			}
+			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+				sh label: "Analyze Shellscripts", script: './assets/ci.sh --target=analyze-shellscript'
+			}
+			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+				sh label: "Code Statistics", script: './assets/ci.sh --target=stats'
+			}
+		}
+	}
+}
+
+parallel builds
+deploy.call()

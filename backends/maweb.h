@@ -100,4 +100,6 @@ typedef struct /*_maweb_instance_data*/ {
 	size_t offset;
 	size_t allocated;
 	uint8_t* buffer;
+
+	uint64_t updates_inflight;
 } maweb_instance_data;

@@ -4,17 +4,17 @@
 #include <errno.h>
 #include <time.h>
 #ifndef _WIN32
-#include <sys/select.h>
-#define MM_API __attribute__((visibility("default")))
+	#include <sys/select.h>
+	#define MM_API __attribute__((visibility("default")))
 #else
-#define MM_API __attribute__((dllexport))
+	#define MM_API __attribute__((dllexport))
 #endif
 #define BACKEND_NAME "core"
 #define MM_SWAP_LIMIT 20
 #include "midimonster.h"
-#include "config.h"
-#include "backend.h"
-#include "plugin.h"
+#include "core/config.h"
+#include "core/backend.h"
+#include "core/plugin.h"
 
 /* Core-internal structures */
 typedef struct /*_event_collection*/ {
@@ -263,7 +263,7 @@ static fd_set fds_collect(int* max_fd){
 		*max_fd = -1;
 	}
 
-	DBGPF("Building selector set from %lu FDs registered to core\n", fds);
+	DBGPF("Building selector set from %" PRIsize_t " FDs registered to core", fds);
 	FD_ZERO(&rv_fds);
 	for(u = 0; u < fds; u++){
 		if(fd[u].fd >= 0){
@@ -346,7 +346,7 @@ static int core_process(size_t nfds, managed_fd* signaled_fds){
 	size_t u, swaps = 0;
 
 	//run backend processing, collect events
-	DBGPF("%lu backend FDs signaled\n", nfds);
+	DBGPF("%" PRIsize_t " backend FDs signaled", nfds);
 	if(backends_handle(nfds, signaled_fds)){
 		return 1;
 	}
@@ -354,7 +354,7 @@ static int core_process(size_t nfds, managed_fd* signaled_fds){
 	//limit number of collector swaps per iteration to prevent complete deadlock
 	while(routing.events->n && swaps < MM_SWAP_LIMIT){
 		//swap primary and secondary event collectors
-		DBGPF("Swapping event collectors, %lu events in primary\n", routing.events->n);
+		DBGPF("Swapping event collectors, %" PRIsize_t " events in primary", routing.events->n);
 		for(u = 0; u < sizeof(routing.pool) / sizeof(routing.pool[0]); u++){
 			if(routing.events != routing.pool + u){
 				secondary = routing.events;
@@ -472,6 +472,7 @@ int main(int argc, char** argv){
 		return EXIT_FAILURE;
 	}
 
+	version();
 	if(platform_initialize()){
 		fprintf(stderr, "Failed to perform platform-specific initialization\n");
 		return EXIT_FAILURE;

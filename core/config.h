@@ -1,4 +1,12 @@
 /*
+ * Channel glob type
+ */
+enum /*_mm_channel_glob_type */ {
+	glob_range,
+	glob_list
+};
+
+/*
  * Channel specification glob
  */
 typedef struct /*_mm_channel_glob*/ {
@@ -7,6 +15,7 @@ typedef struct /*_mm_channel_glob*/ {
 		void* impl;
 		uint64_t u64[2];
 	} limits;
+	uint8_t type;
 	uint64_t values;
 } channel_glob;
 

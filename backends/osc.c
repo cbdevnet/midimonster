@@ -1,4 +1,5 @@
 #define BACKEND_NAME "osc"
+//#define DEBUG
 
 #include <string.h>
 #include <ctype.h>
@@ -629,7 +630,7 @@ static channel* osc_map_channel(instance* inst, char* spec, uint8_t flags){
 			data->channel[u].out = calloc(data->channel[u].params, sizeof(osc_parameter_value));
 		}
 		else if(data->patterns){
-			LOGPF("No pattern match found for %s", spec);
+			LOGPF("No preconfigured pattern match found for %s", spec);
 		}
 
 		if(!data->channel[u].path

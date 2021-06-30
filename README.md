@@ -1,8 +1,8 @@
 # The MIDIMonster
-<img align="right" src="/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
+<img align="right" src="/assets/MIDIMonster.svg?raw=true&sanitize=true" alt="MIDIMonster Logo" width="20%">
 
-[![Build Status](https://travis-ci.com/cbdevnet/midimonster.svg?branch=master)](https://travis-ci.com/cbdevnet/midimonster)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/15168/badge.svg)](https://scan.coverity.com/projects/15168)
+[![CI Pipeline Status](https://ci.spacecdn.de/buildStatus/icon?job=midimonster%2Fmaster)](https://ci.spacecdn.de/blue/organizations/jenkins/midimonster/activity)
 [![IRC Channel](https://static.midimonster.net/hackint-badge.svg)](https://webirc.hackint.org/#irc://irc.hackint.org/#midimonster)
 
 Named for its scary math, the MIDIMonster is a universal control and translation
@@ -16,12 +16,14 @@ Currently, the MIDIMonster supports the following protocols:
 | ArtNet			| Linux, Windows, OSX	| Version 4			| [`artnet`](backends/artnet.md)	|
 | Streaming ACN (sACN / E1.31)	| Linux, Windows, OSX	|				| [`sacn`](backends/sacn.md)		|
 | OpenSoundControl (OSC)	| Linux, Windows, OSX	|				| [`osc`](backends/osc.md)		|
+| MQTT				| Linux, Windows, OSX	| Protocol versions 5 and 3.1.1	| [`mqtt`](backends/mqtt.md)		|
 | RTP-MIDI			| Linux, Windows, OSX	| AppleMIDI sessions supported	| [`rtpmidi`](backends/rtpmidi.md)	|
 | OpenPixelControl		| Linux, Windows, OSX	| 8 Bit & 16 Bit modes		| [`openpixelcontrol`](backends/openpixelcontrol.md)	|
-| evdev input devices		| Linux			| Virtual output supported	| [`evdev`](backends/evdev.md)		|
+| Input devices (Mouse, Keyboard, etc)| Linux, Windows	|				| [`evdev`](backends/evdev.md), [`wininput`](backends/wininput.md) |
 | Open Lighting Architecture	| Linux, OSX		|				| [`ola`](backends/ola.md)		|
 | MA Lighting Web Remote	| Linux, Windows, OSX	| GrandMA2 and dot2 (incl. OnPC)	| [`maweb`](backends/maweb.md)	|
 | JACK/LV2 Control Voltage (CV)	| Linux, OSX		|				| [`jack`](backends/jack.md)		|
+| VISCA				| Linux, Windows, OSX	| PTZ Camera control over TCP/UDP	| [`visca`](backends/visca.md)	|
 | Lua Scripting			| Linux, Windows, OSX	|				| [`lua`](backends/lua.md)		|
 | Python Scripting		| Linux, OSX		|				| [`python`](backends/python.md)	|
 | Loopback			| Linux, Windows, OSX	|				| [`loopback`](backends/loopback.md)	|
@@ -122,18 +124,25 @@ The last line is a shorter way to create a bi-directional mapping.
 
 ### Multi-channel mapping
 
-To make mapping large contiguous sets of channels easier, channel names may contain
-expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers
-delimiting a range of channels. Multiple such expressions may be used in one channel
-specification, with the rightmost expression being incremented (or decremented) first for
-evaluation.
+To make mapping large contiguous sets of channels easier, channel names may contain certain
+types of expressions specifying multiple channels at once.
+
+Expressions of the form `{<start>..<end>}`, with *start* and *end* being positive integers,
+expand to a range of channels, with the expression replaced by the incrementing or decrementing
+value.
+
+Expressions of the form `{value1,value2,value3}` (with any number of values separated by commas)
+are replaced with each of the specified values in sequence.
+
+Multiple such expressions may be used in one channel specification, with the rightmost expression
+being evaluated first.
 
 Both sides of a multi-channel assignment need to have the same number of channels, or one
 side must have exactly one channel.
 
 Example multi-channel mapping:
 ```
-instance-a.channel{1..10} > instance-b.{10..1}
+instance-a.channel{1..5} > instance-b.{a,b,c,d,e}
 ```
 
 ## Backend documentation
@@ -152,10 +161,12 @@ special information. These documentation files are located in the `backends/` di
 * [`loopback` backend documentation](backends/loopback.md)
 * [`ola` backend documentation](backends/ola.md)
 * [`osc` backend documentation](backends/osc.md)
+* [`mqtt` backend documentation](backends/mqtt.md)
 * [`openpixelcontrol` backend documentation](backends/openpixelcontrol.md)
 * [`lua` backend documentation](backends/lua.md)
 * [`python` backend documentation](backends/python.md)
 * [`maweb` backend documentation](backends/maweb.md)
+* [`wininput` backend documentation](backends/wininput.md)
 
 ## Installation
 

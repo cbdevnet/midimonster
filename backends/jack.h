@@ -16,22 +16,29 @@ static int mmjack_shutdown(size_t n, instance** inst);
 #define JACK_DEFAULT_SERVER_NAME "default"
 #define JACK_MIDIQUEUE_CHUNK 10
 
+#define EPN_NRPN 8
+#define EPN_PARAMETER_HI 4
+#define EPN_PARAMETER_LO 2
+#define EPN_VALUE_HI 1
+
 enum /*mmjack_midi_channel_type*/ {
 	midi_none = 0,
 	midi_note = 0x90,
-	midi_cc = 0xB0,
 	midi_pressure = 0xA0,
+	midi_cc = 0xB0,
+	midi_program = 0xC0,
 	midi_aftertouch = 0xD0,
-	midi_pitchbend = 0xE0
+	midi_pitchbend = 0xE0,
+	midi_rpn = 0xF1,
+	midi_nrpn = 0xF2
 };
 
 typedef union {
 	struct {
 		uint32_t port;
-		uint8_t pad;
 		uint8_t sub_type;
 		uint8_t sub_channel;
-		uint8_t sub_control;
+		uint16_t sub_control;
 	} fields;
 	uint64_t label;
 } mmjack_channel_ident;
@@ -58,9 +65,14 @@ typedef struct /*_mmjack_port_data*/ {
 	double min;
 	uint8_t mark;
 	double last;
+
 	size_t queue_len;
 	size_t queue_alloc;
 	mmjack_midiqueue* queue;
+
+	uint16_t epn_control[16];
+	uint16_t epn_value[16];
+	uint8_t epn_status[16];
 
 	pthread_mutex_t lock;
 } mmjack_port;
@@ -69,6 +81,8 @@ typedef struct /*_jack_instance_data*/ {
 	char* server_name;
 	char* client_name;
 	int fd;
+
+	uint8_t midi_epn_tx_short;
 
 	jack_client_t* client;
 	size_t ports;

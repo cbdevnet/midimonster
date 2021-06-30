@@ -113,12 +113,14 @@ static int evdev_attach(instance* inst, evdev_instance_data* data, char* node){
 static char* evdev_find(char* name){
 	int fd = -1;
 	struct dirent* file = NULL;
-	char file_path[PATH_MAX * 2];
+	char file_path[PATH_MAX * 2], *result = calloc(PATH_MAX * 2, sizeof(char));
 	DIR* nodes = opendir(INPUT_NODES);
-	char device_name[UINPUT_MAX_NAME_SIZE], *result = NULL;
+	char device_name[UINPUT_MAX_NAME_SIZE];
+	size_t min_distance = -1, distance = 0;
 
 	if(!nodes){
 		LOGPF("Failed to query input device nodes in %s: %s", INPUT_NODES, strerror(errno));
+		free(result);
 		return NULL;
 	}
 
@@ -141,20 +143,23 @@ static char* evdev_find(char* name){
 			close(fd);
 
 			if(!strncmp(device_name, name, strlen(name))){
-				LOGPF("Matched name %s for %s: %s", device_name, name, file_path);
-				break;
+				distance = strlen(device_name) - strlen(name);
+				LOGPF("Matched name %s as candidate (distance %" PRIsize_t ") for %s: %s", device_name, distance, name, file_path);
+				if(distance < min_distance){
+					strncpy(result, file_path, (PATH_MAX * 2) - 1);
+					min_distance = distance;
+				}
 			}
 		}
 	}
 
-	if(file){
-		result = calloc(strlen(file_path) + 1, sizeof(char));
-		if(result){
-			strncpy(result, file_path, strlen(file_path));
-		}
-	}
-
 	closedir(nodes);
+
+	if(!result[0]){
+		free(result);
+		return NULL;
+	}
+	LOGPF("Using %s for input name %s", result, name);
 	return result;
 }
 
@@ -206,6 +211,7 @@ static int evdev_configure_instance(instance* inst, char* option, char* value) {
 		else if(data->relative_axis[data->relative_axes].max == 0){
 			LOGPF("Relative axis configuration for %s.%s has invalid range", inst->name, option + 8);
 		}
+		//this does not crash on single-integer `value`s because strtoll sets `next_token` to the terminator
 		data->relative_axis[data->relative_axes].current = strtoul(next_token, NULL, 0);
 		if(data->relative_axis[data->relative_axes].code < 0){
 			LOGPF("Failed to configure relative axis extents for %s.%s", inst->name, option + 8);
@@ -366,7 +372,9 @@ static int evdev_handle(size_t num, managed_fd* fds){
 
 		data = (evdev_instance_data*) inst->impl;
 
-		for(read_status = libevdev_next_event(data->input_ev, read_flags, &ev); read_status >= 0; read_status = libevdev_next_event(data->input_ev, read_flags, &ev)){
+		for(read_status = libevdev_next_event(data->input_ev, read_flags, &ev);
+				read_status == LIBEVDEV_READ_STATUS_SUCCESS || read_status == LIBEVDEV_READ_STATUS_SYNC;
+				read_status = libevdev_next_event(data->input_ev, read_flags, &ev)){
 			read_flags = LIBEVDEV_READ_FLAG_NORMAL;
 			if(read_status == LIBEVDEV_READ_STATUS_SYNC){
 				read_flags = LIBEVDEV_READ_FLAG_SYNC;
@@ -381,6 +389,11 @@ static int evdev_handle(size_t num, managed_fd* fds){
 			if(evdev_push_event(inst, data, ev)){
 				return 1;
 			}
+		}
+
+		if(read_status != -EAGAIN){
+			LOGPF("Failed to handle events: %s\n", strerror(-read_status));
+			return 1;
 		}
 	}
 

@@ -76,7 +76,7 @@ static ssize_t getline(char** line, size_t* alloc, FILE* stream){
 		}
 
 		//input broken
-		if(ferror(stream) || c < 0){
+		if(ferror(stream)){
 			return -1;
 		}
 
@@ -99,9 +99,10 @@ static char* config_trim_line(char* in){
 	return in;
 }
 
-static int config_glob_parse(channel_glob* glob, char* spec, size_t length){
-	char* parse_offset = NULL;
+static int config_glob_parse_range(channel_glob* glob, char* spec, size_t length){
 	//FIXME might want to allow negative delimiters at some point
+	char* parse_offset = NULL;
+	glob->type = glob_range;
 
 	//first interval member
 	glob->limits.u64[0] = strtoul(spec, &parse_offset, 10);
@@ -128,6 +129,39 @@ static int config_glob_parse(channel_glob* glob, char* spec, size_t length){
 	}
 
 	return 0;
+}
+
+static int config_glob_parse_list(channel_glob* glob, char* spec, size_t length){
+	size_t u = 0;
+	glob->type = glob_list;
+	glob->values = 1;
+
+	//count number of values in list
+	for(u = 0; u < length; u++){
+		if(spec[u] == ','){
+			glob->values++;
+		}
+	}
+	return 0;
+}
+
+static int config_glob_parse(channel_glob* glob, char* spec, size_t length){
+	size_t u = 0;
+
+	//detect glob type
+	for(u = 0; u < length; u++){
+		if(length - u > 2 && !strncmp(spec + u, "..", 2)){
+			DBGPF("Detected glob %.*s as range type", (int) length, spec);
+			return config_glob_parse_range(glob, spec, length);
+		}
+		else if(spec[u] == ','){
+			DBGPF("Detected glob %.*s as list type", (int) length, spec);
+			return config_glob_parse_list(glob, spec, length);
+		}
+	}
+
+	LOGPF("Failed to detect glob type for spec %.*s", (int) length, spec);
+	return 1;
 }
 
 static int config_glob_scan(instance* inst, channel_spec* spec){
@@ -182,50 +216,89 @@ static int config_glob_scan(instance* inst, channel_spec* spec){
 	return 0;
 }
 
+static ssize_t config_glob_resolve_range(char* spec, size_t length, channel_glob* glob, uint64_t n){
+	uint64_t current_value = glob->limits.u64[0] + (n % glob->values);
+	//if counting down
+	if(glob->limits.u64[0] > glob->limits.u64[1]){
+		current_value = glob->limits.u64[0] - (n % glob->values);
+	}
+
+	//write out value
+	return snprintf(spec, length, "%" PRIu64, current_value);
+}
+
+static ssize_t config_glob_resolve_list(char* spec, size_t length, channel_glob* glob, uint64_t n){
+	uint64_t current_replacement = 0;
+	size_t replacement_length = 0;
+	char* source = spec + 1;
+	n %= glob->values;
+
+	//find start of replacement value
+	DBGPF("Searching instance %" PRIu64 " of spec %.*s", n, (int) length, spec);
+	for(current_replacement = 0; current_replacement < n; current_replacement++){
+		for(; source[0] != ','; source++){
+		}
+		source++;
+	}
+
+	//calculate replacement length
+	for(; source[replacement_length] != ',' && source[replacement_length] != '}'; replacement_length++){
+	}
+
+	//write out new value
+	memmove(spec, source, replacement_length);
+	return replacement_length;
+}
+
 static channel* config_glob_resolve(instance* inst, channel_spec* spec, uint64_t n, uint8_t map_direction){
 	size_t glob = 0, glob_length;
 	ssize_t bytes = 0;
-	uint64_t current_value = 0;
 	channel* result = NULL;
 	char* resolved_spec = strdup(spec->spec);
 
 	if(!resolved_spec){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
 	//TODO if not internal, try to resolve externally
-
 	//iterate and resolve globs
 	for(glob = spec->globs; glob > 0; glob--){
-		current_value = spec->glob[glob - 1].limits.u64[0] + (n % spec->glob[glob - 1].values);
-		if(spec->glob[glob - 1].limits.u64[0] > spec->glob[glob - 1].limits.u64[1]){
-			current_value = spec->glob[glob - 1].limits.u64[0] - (n % spec->glob[glob - 1].values);
-		}
 		glob_length = spec->glob[glob - 1].offset[1] - spec->glob[glob - 1].offset[0];
+
+		switch(spec->glob[glob - 1].type){
+			case glob_range:
+				bytes = config_glob_resolve_range(resolved_spec + spec->glob[glob - 1].offset[0],
+						glob_length,
+						spec->glob + (glob - 1),
+						n);
+				break;
+			case glob_list:
+				bytes = config_glob_resolve_list(resolved_spec + spec->glob[glob - 1].offset[0],
+						glob_length,
+						spec->glob + (glob - 1),
+						n);
+				break;
+		}
+
 		n /= spec->glob[glob - 1].values;
 
-		//write out value
-		bytes = snprintf(resolved_spec + spec->glob[glob - 1].offset[0],
-				glob_length,
-				"%" PRIu64,
-				current_value);
-		if(bytes > glob_length){
-			fprintf(stderr, "Internal error resolving glob %s\n", spec->spec);
-			goto bail;
-		}
-
 		//move trailing data
-		if(bytes < glob_length){
+		if(bytes > 0 && bytes < glob_length){
 			memmove(resolved_spec + spec->glob[glob - 1].offset[0] + bytes,
 					resolved_spec + spec->glob[glob - 1].offset[1] + 1,
 					strlen(spec->spec) - spec->glob[glob - 1].offset[1]);
 		}
+		else{
+			LOGPF("Failure parsing glob spec %s", resolved_spec);
+			goto bail;
+		}
 	}
 
+	DBGPF("Resolved spec %s to %s", spec->spec, resolved_spec);
 	result = inst->backend->channel(inst, resolved_spec, map_direction);
 	if(spec->globs && !result){
-		fprintf(stderr, "Failed to match multichannel evaluation %s to a channel\n", resolved_spec);
+		LOGPF("Failed to match multichannel evaluation %s to a channel", resolved_spec);
 	}
 
 bail:
@@ -472,7 +545,7 @@ static int config_line(char* line){
 		//find separator
 		separator = strchr(line, '=');
 		if(!separator){
-			fprintf(stderr, "Not an assignment: %s\n", line);
+			fprintf(stderr, "Not an assignment (currently expecting %s configuration): %s\n", line, (parser_state == backend_cfg) ? "backend" : "instance");
 			return 1;
 		}
 

@@ -51,7 +51,7 @@ int backends_handle(size_t nfds, managed_fd* fds){
 
 		//handle if there is data ready or the backend has active instances for polling
 		if(n || registry.instances[u]){
-			DBGPF("Notifying backend %s of %" PRIsize_t " waiting FDs\n", registry.backends[u].name, n);
+			DBGPF("Notifying backend %s of %" PRIsize_t " waiting FDs", registry.backends[u].name, n);
 			rv |= registry.backends[u].process(n, fds);
 			if(rv){
 				fprintf(stderr, "Backend %s failed to handle input\n", registry.backends[u].name);
@@ -85,7 +85,7 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 		}
 
 		//TODO eliminate duplicates
-		DBGPF("Calling handler for instance %s with %" PRIsize_t " events\n", c[u]->instance->name, n - u);
+		DBGPF("Calling handler for instance %s with %" PRIsize_t " events", c[u]->instance->name, n - u);
 		rv |= c[u]->instance->backend->handle(c[u]->instance, n - u, c + u, v + u);
 	}
 
@@ -94,20 +94,22 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 
 MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	size_t u, bucket = channelstore_hash(inst, ident);
+	DBGPF("\tSearching for inst %" PRIu64 " ident %" PRIu64, (uint64_t) inst, ident);
 	for(u = 0; u < channels.n[bucket]; u++){
+		DBGPF("\tBucket %" PRIsize_t " entry %" PRIsize_t " inst %" PRIu64 " ident %" PRIu64, bucket, u, (uint64_t) channels.entry[bucket][u]->instance, channels.entry[bucket][u]->ident);
 		if(channels.entry[bucket][u]->instance == inst
 				&& channels.entry[bucket][u]->ident == ident){
-			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing (%" PRIsize_t " search steps)\n", ident, inst->name, u);
+			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing (bucket %" PRIsize_t ", %" PRIsize_t " search steps)\n", ident, inst->name, bucket, u);
 			return channels.entry[bucket][u];
 		}
 	}
 
 	if(!create){
-		DBGPF("Requested unknown channel %" PRIu64 " on instance %s\n", ident, inst->name);
+		DBGPF("Requested unknown channel %" PRIu64 " (bucket %" PRIsize_t ") on instance %s", ident, bucket, inst->name);
 		return NULL;
 	}
 
-	DBGPF("Creating previously unknown channel %" PRIu64 " on instance %s, bucket %" PRIsize_t "\n", ident, inst->name, bucket);
+	DBGPF("Creating previously unknown channel %" PRIu64 " on instance %s, bucket %" PRIsize_t, ident, inst->name, bucket);
 	channels.entry[bucket] = realloc(channels.entry[bucket], (channels.n[bucket] + 1) * sizeof(channel*));
 	if(!channels.entry[bucket]){
 		fprintf(stderr, "Failed to allocate memory\n");
@@ -124,6 +126,49 @@ MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	channels.entry[bucket][channels.n[bucket]]->instance = inst;
 	channels.entry[bucket][channels.n[bucket]]->ident = ident;
 	return channels.entry[bucket][(channels.n[bucket]++)];
+}
+
+MM_API void mm_channel_update(channel* chan, uint64_t ident){
+	size_t bucket = channelstore_hash(chan->instance, chan->ident), new_bucket = channelstore_hash(chan->instance, ident);
+	size_t u;
+
+	DBGPF("Updating identifier for inst %" PRIu64 " ident %" PRIu64 " (bucket %" PRIsize_t " to %" PRIsize_t ") to %" PRIu64, (uint64_t) chan->instance, chan->ident, bucket, new_bucket, ident);
+
+	if(bucket == new_bucket){
+		chan->ident = ident;
+		return;
+	}
+
+	for(u = 0; u < channels.n[bucket]; u++){
+		if(channels.entry[bucket][u]->instance == chan->instance
+				&& channels.entry[bucket][u]->ident == chan->ident){
+			break;
+		}
+	}
+
+	if(u == channels.n[bucket]){
+		DBGPF("Failed to find channel to update in bucket %" PRIsize_t, bucket);
+		return;
+	}
+
+	DBGPF("Removing channel from slot %" PRIsize_t " of %" PRIsize_t " of bucket %" PRIsize_t, u, channels.n[bucket], bucket);
+	//remove channel from old bucket
+	for(; u < channels.n[bucket] - 1; u++){
+		channels.entry[bucket][u] = channels.entry[bucket][u + 1];
+	}
+
+	//add to new bucket
+	channels.entry[new_bucket] = realloc(channels.entry[new_bucket], (channels.n[new_bucket] + 1) * sizeof(channel*));
+	if(!channels.entry[new_bucket]){
+		fprintf(stderr, "Failed to allocate memory\n");
+		channels.n[new_bucket] = 0;
+		return;
+	}
+
+	channels.entry[new_bucket][channels.n[new_bucket]] = chan;
+	chan->ident = ident;
+	channels.n[bucket]--;
+	channels.n[new_bucket]++;
 }
 
 instance* mm_instance(backend* b){
@@ -234,12 +279,12 @@ struct timeval backend_timeout(){
 		//only call interval if backend has instances
 		if(registry.instances[u] && registry.backends[u].interval){
 			res = registry.backends[u].interval();
-			if((res / 1000) < secs){
+			if(res && (res / 1000) < secs){
 				DBGPF("Updating interval to %" PRIu32 " msecs by request from %s", res, registry.backends[u].name);
 				secs = res / 1000;
 				msecs = res % 1000;
 			}
-			else if(res / 1000 == secs && (res % 1000) < msecs){
+			else if(res && res / 1000 == secs && (res % 1000) < msecs){
 				DBGPF("Updating interval to %" PRIu32 " msecs by request from %s", res, registry.backends[u].name);
 				msecs = res % 1000;
 			}
@@ -308,7 +353,7 @@ static void channels_free(){
 	for(u = 0; u < sizeof(channels.n) / sizeof(channels.n[0]); u++){
 		DBGPF("Cleaning up channel registry bucket %" PRIsize_t " with %" PRIsize_t " channels", u, channels.n[u]);
 		for(p = 0; p < channels.n[u]; p++){
-			DBGPF("Destroying channel %" PRIu64 " on instance %s\n", channels.entry[u][p]->ident, channels.entry[u][p]->instance->name);
+			DBGPF("Destroying channel %" PRIu64 " on instance %s", channels.entry[u][p]->ident, channels.entry[u][p]->instance->name);
 			//call the channel_free function if the backend supports it
 			if(channels.entry[u][p]->impl && channels.entry[u][p]->instance->backend->channel_free){
 				channels.entry[u][p]->instance->backend->channel_free(channels.entry[u][p]);

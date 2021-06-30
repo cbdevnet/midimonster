@@ -137,6 +137,8 @@ static int lua_update_timerfd(){
 }
 
 static void lua_thread_resume(size_t current_thread){
+	int thread_status = 0;
+
 	//push coroutine reference
 	lua_pushstring(thread[current_thread].thread, LUA_REGISTRY_CURRENT_THREAD);
 	lua_pushnumber(thread[current_thread].thread, current_thread);
@@ -144,9 +146,23 @@ static void lua_thread_resume(size_t current_thread){
 
 	//call thread main
 	DBGPF("Resuming thread %" PRIsize_t " on %s", current_thread, thread[current_thread].instance->name);
-	if(lua_resume(thread[current_thread].thread, NULL, 0) != LUA_YIELD){
-		DBGPF("Thread %" PRIsize_t " on %s terminated", current_thread, thread[current_thread].instance->name);
+	//the lua_resume API has changed with lua5.4
+	#if LUA_VERSION_NUM > 503
+	int results = 0;
+	thread_status = lua_resume(thread[current_thread].thread, NULL, 0, &results);
+	#else
+	thread_status = lua_resume(thread[current_thread].thread, NULL, 0);
+	#endif
+
+	if(thread_status == LUA_YIELD){
+		DBGPF("Thread %" PRIsize_t " on %s yielded execution", current_thread, thread[current_thread].instance->name);
+	}
+	else{
 		thread[current_thread].timeout = 0;
+		LOGPF("Thread %" PRIsize_t " on %s terminated", current_thread, thread[current_thread].instance->name);
+		if(thread_status){
+			LOGPF("Last error message: %s", lua_tostring(thread[current_thread].thread, -1));
+		}
 	}
 
 	//remove coroutine reference
@@ -164,6 +180,30 @@ static instance* lua_fetch_instance(lua_State* interpreter){
 	inst = (instance*) lua_touserdata(interpreter, -1);
 	lua_pop(interpreter, 1);
 	return inst;
+}
+
+static int lua_callback_channels(lua_State* interpreter){
+	size_t u;
+	instance* inst = lua_fetch_instance(interpreter);
+	lua_instance_data* data = (lua_instance_data*) inst->impl;
+
+	if(!last_timestamp){
+		LOG("The channels() API will not return usable results before the configuration has been read completely");
+	}
+
+	//create a table for the return array
+	lua_createtable(interpreter, data->channels, 0);
+
+	for(u = 0; u < data->channels; u++){
+		//push the key
+		lua_pushnumber(interpreter, u + 1);
+		//push the value
+		lua_pushstring(interpreter, data->channel[u].name);
+		//settable pops key and value, leaving the table
+		lua_settable(interpreter, -3);
+	}
+
+	return 1;
 }
 
 static int lua_callback_thread(lua_State* interpreter){
@@ -467,6 +507,7 @@ static int lua_instance(instance* inst){
 	lua_register(data->interpreter, "thread", lua_callback_thread);
 	lua_register(data->interpreter, "sleep", lua_callback_sleep);
 	lua_register(data->interpreter, "cleanup_handler", lua_callback_cleanup_handler);
+	lua_register(data->interpreter, "channels", lua_callback_channels);
 
 	//store instance pointer to the lua state
 	lua_pushstring(data->interpreter, LUA_REGISTRY_KEY);
@@ -604,6 +645,7 @@ static int lua_resolve_symbol(lua_State* interpreter, char* symbol){
 			|| !strcmp(symbol, "input_channel")
 			|| !strcmp(symbol, "timestamp")
 			|| !strcmp(symbol, "cleanup_handler")
+			|| !strcmp(symbol, "channels")
 			|| !strcmp(symbol, "interval")){
 		return LUA_NOREF;
 	}
@@ -621,6 +663,10 @@ static int lua_start(size_t n, instance** inst){
 	lua_instance_data* data = NULL;
 	int default_handler;
 	channel_value v;
+
+	#ifdef LUA_VERSION_NUM
+	DBGPF("Lua backend built with %s (%d)", LUA_VERSION, LUA_VERSION_NUM);
+	#endif
 
 	//resolve channels to their handler functions
 	for(u = 0; u < n; u++){

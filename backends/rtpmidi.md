@@ -38,6 +38,7 @@ Common instance configuration parameters
 | `ssrc`	| `0xDEADBEEF`		| Randomly generated	| 32-bit synchronization source identifier |
 | `mode`	| `direct`		| none			| Instance session management mode (`direct` or `apple`) |
 | `peer`	| `10.1.2.3 9001`	| none			| MIDI session peer, may be specified multiple times. Bypasses session discovery (but still performs session negotiation) |
+| `epn-tx`	| `short`		| `full`		| Configure whether to clear the active parameter number after transmitting an `nrpn` or `rpn` parameter. |
 
 `direct` mode instance configuration parameters
 
@@ -63,15 +64,21 @@ The `rtpmidi` backend supports mapping different MIDI events to MIDIMonster chan
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
+* `program` - Channel program change messages
+* `rpn` - Registered parameter numbers (14-bit extension)
+* `nrpn` - Non-registered parameter numbers (14-bit extension)
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
 
-The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
+The `pitch`, `aftertouch` program messages/events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 
 MIDI channels range from `0` to `15`. Each MIDI channel consists of 128 notes (numbered `0` through `127`), which
 additionally each have a pressure control, 128 CC's (numbered likewise), a channel pressure control (also called
 'channel aftertouch') and a pitch control which may all be mapped to individual MIDIMonster channels.
+
+Every MIDI channel also provides `rpn` and `nrpn` controls, which are implemented on top of the MIDI protocol, using
+the CC controls 101/100/99/98/38/6. Both control types have 14-bit IDs and 14-bit values.
 
 Example mappings:
 
@@ -80,6 +87,8 @@ rmidi1.ch0.note9 > rmidi2.channel1.cc4
 rmidi1.channel15.pressure1 > rmidi1.channel0.note0
 rmidi1.ch1.aftertouch > rmidi2.ch2.cc0
 rmidi1.ch0.pitch > rmidi2.ch1.pitch
+rmidi2.ch15.note1 > rmidi2.ch2.program
+rmidi2.ch0.nrpn900 > rmidi1.ch1.rpn1
 ```
 
 #### Known bugs / problems
@@ -90,6 +99,12 @@ Critical feedback and tests across multiple devices are very welcome.
 The mDNS and DNS-SD implementations in this backend are extremely terse, to the point of violating the
 specifications in multiple cases. Due to the complexity involved in supporting these protocols, problems
 arising from this will be considered a bug only in cases where they hinder normal operation of the backend.
+
+Extended parameter numbers (EPNs, the `rpn` and `nrpn` control types) will also generate events on the controls (CC 101 through
+98, 38 and 6) that are used as the lower layer transport. When using EPNs, mapping those controls is probably not useful.
+
+EPN control types support only the full 14-bit transfer encoding, not the shorter variant transmitting only the 7
+high-order bits. This may be changed if there is sufficient interest in the functionality.
 
 mDNS discovery may announce flawed records when run on a host with multiple active interfaces.
 

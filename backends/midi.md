@@ -11,10 +11,11 @@ The MIDI backend provides read-write access to the MIDI protocol via virtual por
 
 #### Instance configuration
 
-| Option	| Example value		| Default value 	| Description		|
-|---------------|-----------------------|-----------------------|-----------------------|
-| `read`	| `20:0`		| none			| MIDI device to connect for input |
-| `write`	| `DeviceName`		| none			| MIDI device to connect for output |
+| Option		| Example value		| Default value 	| Description		|
+|-----------------------|-----------------------|-----------------------|-----------------------|
+| `read` / `source`	| `20:0`		| none			| MIDI device to connect for input |
+| `write` / `target`	| `DeviceName`		| none			| MIDI device to connect for output |
+| `epn-tx`		| `short`		| `full`		| Configures whether to clear the active parameter number after transmitting an `nrpn` or `rpn` parameter |
 
 MIDI device names may either be `client:port` portnames or prefixes of MIDI device names.
 Run `aconnect -i` to list input ports and `aconnect -o` to list output ports.
@@ -30,15 +31,21 @@ The MIDI backend supports mapping different MIDI events to MIDIMonster channels.
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages
+* `program` - Channel program change messages
+* `rpn` - Registered parameter numbers (14-bit extension)
+* `nrpn` - Non-registered parameter numbers (14-bit extension)
 
 A MIDIMonster channel is specified using the syntax `channel<channel>.<type><index>`. The shorthand `ch` may be
 used instead of the word `channel` (Note that `channel` here refers to the MIDI channel number).
 
-The `pitch` and `aftertouch` events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
+The `pitch`, `aftertouch` and `program` messages/events are channel-wide, thus they can be specified as `channel<channel>.<type>`.
 
 MIDI channels range from `0` to `15`. Each MIDI channel consists of 128 notes (numbered `0` through `127`), which
 additionally each have a pressure control, 128 CC's (numbered likewise), a channel pressure control (also called
 'channel aftertouch') and a pitch control which may all be mapped to individual MIDIMonster channels.
+
+Every MIDI channel also provides `rpn` and `nrpn` controls, which are implemented on top of the MIDI protocol, using
+the CC controls 101/100/99/98/38/6. Both control types have 14-bit IDs and 14-bit values.
 
 Example mappings:
 ```
@@ -46,8 +53,16 @@ midi1.ch0.note9 > midi2.channel1.cc4
 midi1.channel15.pressure1 > midi1.channel0.note0
 midi1.ch1.aftertouch > midi2.ch2.cc0
 midi1.ch0.pitch > midi2.ch1.pitch
+midi1.ch0.nrpn900 > midi2.ch0.rpn1
+midi2.ch15.note1 > midi1.ch2.program
 ```
 #### Known bugs / problems
+
+Extended parameter numbers (EPNs, the `rpn` and `nrpn` control types) will also generate events on the controls (CC 101 through
+98, 38 and 6) that are used as the lower layer transport. When using EPNs, mapping those controls is probably not useful.
+
+EPN control types support only the full 14-bit transfer encoding, not the shorter variant transmitting only the 7
+high-order bits. This may be changed if there is sufficient interest in the functionality.
 
 To access MIDI data, the user running MIDIMonster needs read & write access to the ALSA sequencer.
 This can usually be done by adding this user to the `audio` system group.

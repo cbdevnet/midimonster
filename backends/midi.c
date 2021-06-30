@@ -13,7 +13,10 @@ enum /*_midi_channel_type*/ {
 	cc,
 	pressure,
 	aftertouch,
-	pitchbend
+	pitchbend,
+	program,
+	rpn,
+	nrpn
 };
 
 static struct {
@@ -81,7 +84,7 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 	midi_instance_data* data = (midi_instance_data*) inst->impl;
 
 	//FIXME maybe allow connecting more than one device
-	if(!strcmp(option, "read")){
+	if(!strcmp(option, "read") || !strcmp(option, "source")){
 		//connect input device
 		if(data->read){
 			LOGPF("Instance %s was already connected to an input device", inst->name);
@@ -90,7 +93,7 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 		data->read = strdup(value);
 		return 0;
 	}
-	else if(!strcmp(option, "write")){
+	else if(!strcmp(option, "write") || !strcmp(option, "target")){
 		//connect output device
 		if(data->write){
 			LOGPF("Instance %s was already connected to an output device", inst->name);
@@ -99,8 +102,15 @@ static int midi_configure_instance(instance* inst, char* option, char* value){
 		data->write = strdup(value);
 		return 0;
 	}
+	else if(!strcmp(option, "epn-tx")){
+		data->epn_tx_short = 0;
+		if(!strcmp(value, "short")){
+			data->epn_tx_short = 1;
+		}
+		return 0;
+	}
 
-	LOGPF("Unknown instance option %s", option);
+	LOGPF("Unknown instance configuration option %s on instance %s", option, inst->name);
 	return 1;
 }
 
@@ -147,8 +157,19 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 		ident.fields.type = pressure;
 		channel += 8;
 	}
+	else if(!strncmp(channel, "rpn", 3)){
+		ident.fields.type = rpn;
+		channel += 3;
+	}
+	else if(!strncmp(channel, "nrpn", 4)){
+		ident.fields.type = nrpn;
+		channel += 4;
+	}
 	else if(!strncmp(channel, "pitch", 5)){
 		ident.fields.type = pitchbend;
+	}
+	else if(!strncmp(channel, "program", 7)){
+		ident.fields.type = program;
 	}
 	else if(!strncmp(channel, "aftertouch", 10)){
 		ident.fields.type = aftertouch;
@@ -167,9 +188,40 @@ static channel* midi_channel(instance* inst, char* spec, uint8_t flags){
 	return NULL;
 }
 
+static void midi_tx(int port, uint8_t type, uint8_t channel, uint8_t control, uint16_t value){
+	snd_seq_event_t ev;
+
+	snd_seq_ev_clear(&ev);
+	snd_seq_ev_set_source(&ev, port);
+	snd_seq_ev_set_subs(&ev);
+	snd_seq_ev_set_direct(&ev);
+
+	switch(type){
+		case note:
+			snd_seq_ev_set_noteon(&ev, channel, control, value);
+			break;
+		case cc:
+			snd_seq_ev_set_controller(&ev, channel, control, value);
+			break;
+		case pressure:
+			snd_seq_ev_set_keypress(&ev, channel, control, value);
+			break;
+		case pitchbend:
+			snd_seq_ev_set_pitchbend(&ev, channel, value);
+			break;
+		case aftertouch:
+			snd_seq_ev_set_chanpress(&ev, channel, value);
+			break;
+		case program:
+			snd_seq_ev_set_pgmchange(&ev, channel, value);
+			break;
+	}
+
+	snd_seq_event_output(sequencer, &ev);
+}
+
 static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 	size_t u;
-	snd_seq_event_t ev;
 	midi_instance_data* data = (midi_instance_data*) inst->impl;
 	midi_channel_ident ident = {
 		.label = 0
@@ -178,30 +230,29 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 	for(u = 0; u < num; u++){
 		ident.label = c[u]->ident;
 
-		snd_seq_ev_clear(&ev);
-		snd_seq_ev_set_source(&ev, data->port);
-		snd_seq_ev_set_subs(&ev);
-		snd_seq_ev_set_direct(&ev);
-
 		switch(ident.fields.type){
-			case note:
-				snd_seq_ev_set_noteon(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
-				break;
-			case cc:
-				snd_seq_ev_set_controller(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
-				break;
-			case pressure:
-				snd_seq_ev_set_keypress(&ev, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
+			case rpn:
+			case nrpn:
+				//transmit parameter number
+				midi_tx(data->port, cc, ident.fields.channel, (ident.fields.type == rpn) ? 101 : 99, (ident.fields.control >> 7) & 0x7F);
+				midi_tx(data->port, cc, ident.fields.channel, (ident.fields.type == rpn) ? 100 : 98, ident.fields.control & 0x7F);
+				//transmit parameter value
+				midi_tx(data->port, cc, ident.fields.channel, 6, (((uint16_t) (v[u].normalised * 16383.0)) >> 7) & 0x7F);
+				midi_tx(data->port, cc, ident.fields.channel, 38, ((uint16_t) (v[u].normalised * 16383.0)) & 0x7F);
+
+				if(!data->epn_tx_short){
+					//clear active parameter
+					midi_tx(data->port, cc, ident.fields.channel, 101, 127);
+					midi_tx(data->port, cc, ident.fields.channel, 100, 127);
+				}
 				break;
 			case pitchbend:
-				snd_seq_ev_set_pitchbend(&ev, ident.fields.channel, (v[u].normalised * 16383.0) - 8192);
+				//TODO check whether this actually works that well
+				midi_tx(data->port, ident.fields.type, ident.fields.channel, ident.fields.control, (v[u].normalised * 16383.0) - 8192);
 				break;
-			case aftertouch:
-				snd_seq_ev_set_chanpress(&ev, ident.fields.channel, v[u].normalised * 127.0);
-				break;
+			default:
+				midi_tx(data->port, ident.fields.type, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);
 		}
-
-		snd_seq_event_output(sequencer, &ev);
 	}
 
 	snd_seq_drain_output(sequencer);
@@ -216,21 +267,108 @@ static char* midi_type_name(uint8_t type){
 			return "note";
 		case cc:
 			return "cc";
+		case rpn:
+			return "rpn";
+		case nrpn:
+			return "nrpn";
 		case pressure:
 			return "pressure";
 		case aftertouch:
 			return "aftertouch";
 		case pitchbend:
 			return "pitch";
+		case program:
+			return "program";
 	}
 	return "unknown";
+}
+
+//this state machine is used more-or-less verbatim in the winmidi, rtpmidi and jack backends - fixes need to be applied there, too
+static void midi_handle_epn(instance* inst, uint8_t chan, uint16_t control, uint16_t value){
+	midi_instance_data* data = (midi_instance_data*) inst->impl;
+	midi_channel_ident ident = {
+		.label = 0
+	};
+	channel* changed = NULL;
+	channel_value val;
+	//check for 3-byte update TODO
+
+	//switching between nrpn and rpn clears all valid bits
+	if(((data->epn_status[chan] & EPN_NRPN) && (control == 101 || control == 100))
+				|| (!(data->epn_status[chan] & EPN_NRPN) && (control == 99 || control == 98))){
+		data->epn_status[chan] &= ~(EPN_NRPN | EPN_PARAMETER_LO | EPN_PARAMETER_HI);
+	}
+
+	//setting an address always invalidates the value valid bits
+	if(control >= 98 && control <= 101){
+		data->epn_status[chan] &= ~(EPN_VALUE_HI /*| EPN_VALUE_LO*/);
+	}
+
+	//parameter hi
+	if(control == 101 || control == 99){
+		data->epn_control[chan] &= 0x7F;
+		data->epn_control[chan] |= value << 7;
+		data->epn_status[chan] |= EPN_PARAMETER_HI | ((control == 99) ? EPN_NRPN : 0);
+		if(control == 101 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_HI;
+		}
+	}
+
+	//parameter lo
+	if(control == 100 || control == 98){
+		data->epn_control[chan] &= ~0x7F;
+		data->epn_control[chan] |= value & 0x7F;
+		data->epn_status[chan] |= EPN_PARAMETER_LO | ((control == 98) ? EPN_NRPN : 0);
+		if(control == 100 && value == 127){
+			data->epn_status[chan] &= ~EPN_PARAMETER_LO;
+		}
+	}
+
+	//value hi, clears low, mark as update candidate
+	if(control == 6
+			//check if parameter is set before accepting value update
+			&& ((data->epn_status[chan] & (EPN_PARAMETER_HI | EPN_PARAMETER_LO)) == (EPN_PARAMETER_HI | EPN_PARAMETER_LO))){
+		data->epn_value[chan] = value << 7;
+		data->epn_status[chan] |= EPN_VALUE_HI;
+	}
+
+	//FIXME is the update order for the value bits fixed?
+	//FIXME can there be standalone updates on CC 38?
+
+	//value lo, flush the value
+	if(control == 38
+			&& data->epn_status[chan] & EPN_VALUE_HI){
+		data->epn_value[chan] &= ~0x7F;
+		data->epn_value[chan] |= value & 0x7F;
+		//FIXME not clearing the valid bit would allow for fast low-order updates
+		data->epn_status[chan] &= ~EPN_VALUE_HI;
+
+		if(midi_config.detect){
+			LOGPF("Incoming EPN data on channel %s.ch%d.%s%d", inst->name, chan, data->epn_status[chan] & EPN_NRPN ? "nrpn" : "rpn", data->epn_control[chan]);
+		}
+
+		//find the updated channel
+		ident.fields.type = data->epn_status[chan] & EPN_NRPN ? nrpn : rpn;
+		ident.fields.channel = chan;
+		ident.fields.control = data->epn_control[chan];
+		val.normalised = (double) data->epn_value[chan] / 16383.0;
+
+		//push the new value
+		changed = mm_channel(inst, ident.label, 0);
+		if(changed){
+			mm_channel_event(changed, val);
+		}
+	}
 }
 
 static int midi_handle(size_t num, managed_fd* fds){
 	snd_seq_event_t* ev = NULL;
 	instance* inst = NULL;
+	midi_instance_data* data = NULL;
+
 	channel* changed = NULL;
 	channel_value val;
+
 	char* event_type = NULL;
 	midi_channel_ident ident = {
 		.label = 0
@@ -248,6 +386,14 @@ static int midi_handle(size_t num, managed_fd* fds){
 		ident.fields.control = ev->data.note.note;
 		val.normalised = (double) ev->data.note.velocity / 127.0;
 
+		//scan for the instance before parsing incoming data, instance state is required for the EPN state machine
+		inst = mm_instance_find(BACKEND_NAME, ev->dest.port);
+		if(!inst){
+			LOG("Delivered event did not match any instance");
+			continue;
+		}
+		data = (midi_instance_data*) inst->impl;
+
 		switch(ev->type){
 			case SND_SEQ_EVENT_NOTEON:
 			case SND_SEQ_EVENT_NOTEOFF:
@@ -263,18 +409,35 @@ static int midi_handle(size_t num, managed_fd* fds){
 			case SND_SEQ_EVENT_CHANPRESS:
 				ident.fields.type = aftertouch;
 				ident.fields.channel = ev->data.control.channel;
+				ident.fields.control = 0;
 				val.normalised = (double) ev->data.control.value / 127.0;
 				break;
 			case SND_SEQ_EVENT_PITCHBEND:
 				ident.fields.type = pitchbend;
+				ident.fields.control = 0;
 				ident.fields.channel = ev->data.control.channel;
 				val.normalised = ((double) ev->data.control.value + 8192) / 16383.0;
+				break;
+			case SND_SEQ_EVENT_PGMCHANGE:
+				ident.fields.type = program;
+				ident.fields.control = 0;
+				ident.fields.channel = ev->data.control.channel;
+				val.normalised = (double) ev->data.control.value / 127.0;
 				break;
 			case SND_SEQ_EVENT_CONTROLLER:
 				ident.fields.type = cc;
 				ident.fields.channel = ev->data.control.channel;
 				ident.fields.control = ev->data.control.param;
 				val.normalised = (double) ev->data.control.value / 127.0;
+
+				//check for EPN CCs and update the state machine
+				if((ident.fields.control <= 101 && ident.fields.control >= 98)
+						|| ident.fields.control == 6
+						|| ident.fields.control == 38
+						//if the high-order value bits are set, forward any control to the state machine for the short update form
+						|| data->epn_status[ident.fields.channel] & EPN_VALUE_HI){
+					midi_handle_epn(inst, ident.fields.channel, ident.fields.control, ev->data.control.value);
+				}
 				break;
 			default:
 				LOG("Ignored event of unsupported type");
@@ -282,13 +445,6 @@ static int midi_handle(size_t num, managed_fd* fds){
 		}
 
 		event_type = midi_type_name(ident.fields.type);
-		inst = mm_instance_find(BACKEND_NAME, ev->dest.port);
-		if(!inst){
-			//FIXME might want to return failure
-			LOG("Delivered event did not match any instance");
-			continue;
-		}
-
 		changed = mm_channel(inst, ident.label, 0);
 		if(changed){
 			if(mm_channel_event(changed, val)){
@@ -298,7 +454,7 @@ static int midi_handle(size_t num, managed_fd* fds){
 		}
 
 		if(midi_config.detect && event_type){
-			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch){
+			if(ident.fields.type == pitchbend || ident.fields.type == aftertouch || ident.fields.type == program){
 				LOGPF("Incoming data on channel %s.ch%d.%s", inst->name, ident.fields.channel, event_type);
 			}
 			else{

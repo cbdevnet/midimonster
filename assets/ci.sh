@@ -67,8 +67,8 @@ ARGS(){
 print_help() {
 	printf "Usage: %s [OPTIONS]\n\n" "$0"
 	printf -- "-t=<argument>, <argument>\t--target=<argument>, <argument>\n\n"
-	printf -- "--deploy\tPackage release/nightly versions to the ./deployment/\$target directory.\n"
-	printf -- "--deps\t\tCheck and install all dependencies needed for the specified target without the need to manualy run the dependency install targets/s.\n"
+	printf -- "--deploy\tPack releases to the ./deployment/\$target directory.\n"
+	printf -- "--deps\t\tCheck and install all dependencies needed for the specified target prior to target run.\n"
 	printf -- "-af, --allow-failure\tAlways exit with code 0.\n"
 	printf -- "-v, --verbose\tEnables detailed log output.\n\n"
 	printf "Valid test targets are: \t\"check-spelling\" - \"1\", \"check-codespelling\" - \"2\", \"analyze-complexity\" - \"3\", \"analyze-shellscript\" - \"4\", \"stats\" - \"5\".\n"

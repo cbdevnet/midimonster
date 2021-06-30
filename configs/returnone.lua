@@ -1,7 +1,7 @@
 -- ReturnOne by Paul Hedderly
 -- Sometimes you just want an on/off from linear pads
 -- For example I want to activate scenes in OBS from a Korg NanoPad2
--- But I dont want to have to thump the pads to get a 1.0 output
+-- But I don't want to have to thump the pads to get a 1.0 output
 --
 -- You could use this as:
 --      [midi nanoP]

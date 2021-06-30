@@ -111,11 +111,11 @@ static int request_comparator(const void * raw_a, const void * raw_b){
 
 	//joysticks need to be sorted by controller id first so we can query them once
 	if(a->ident.fields.type == joystick){
-		//joystick id is in the upper bits of control and we dont actually care about anything else
+		//joystick id is in the upper bits of control and we don't actually care about anything else
 		return a->ident.fields.control - b->ident.fields.control;
 	}
 
-	//the rest doesnt actually need to be sorted at all
+	//the rest doesn't actually need to be sorted at all
 	return 0;
 }
 

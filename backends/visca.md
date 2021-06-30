@@ -51,7 +51,7 @@ control.stick_x > visca.move.x
 control.stick_y > visca.move.y
 ```
 
-#### Compatability list
+#### Compatibility list
 
 | Manufacturer	| Exact model(s) tested		| Compatible models				| Result / Notes					|
 |---------------|-------------------------------|-----------------------------------------------|-------------------------------------------------------|

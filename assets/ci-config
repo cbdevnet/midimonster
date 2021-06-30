@@ -60,10 +60,10 @@ builds.Test = {
 				sh label: "Analyze Complexity", script: './assets/ci.sh --target=analyze-complexity'
 			}
 			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-				sh label: "Analyze Shellscripts", script: './assets/ci.sh--target=analyze-shellscript'
+				sh label: "Analyze Shellscripts", script: './assets/ci.sh --target=analyze-shellscript'
 			}
 			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-				sh label: "Code Statistics", script: '../assets/ci.sh --target=stats'
+				sh label: "Code Statistics", script: './assets/ci.sh --target=stats'
 			}
 		}
 	}

@@ -300,12 +300,16 @@ for detailed information).
 
 ## Development
 
-The architecture is split into the `midimonster` core, handling mapping
-and resource management, and the backends, which are shared objects loaded
-at start time, which provide a protocol mapping to instances / channels.
+The architecture is split into the `core`, handling mapping and resource management,
+the `frontends` which handle how the core is invoked and presented (ie. command line or graphical interface),
+and the `backends`, which are shared objects loaded at start time providing a protocol mapping to instances / channels.
 
-The API and structures are more-or-less documented in [midimonster.h](midimonster.h),
-more detailed documentation may follow.
+There is a general [developer information document](DEVELOPMENT.md) that outlines basic guidelines for
+contribution. The [MIDIMonster knowledge base](https://kb.midimonster.net/) has a section on development,
+containing additional helpful information and tutorials.
+
+The backend API, lifecycle and structures are documented in [midimonster.h](midimonster.h), the
+frontend API and lifecycle in [core/core.h](core/core.h).
 
 To build with `clang` sanitizers and even more warnings enabled, run `make sanitize`.
 This is useful to check for common errors and oversights.

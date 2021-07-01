@@ -37,7 +37,7 @@ static void core_timestamp(){
 	#else
 	struct timespec current;
 	if(clock_gettime(CLOCK_MONOTONIC_COARSE, &current)){
-		fprintf(stderr, "Failed to update global timestamp, time-based processing for some backends may be impaired: %s\n", strerror(errno));
+		LOGPF("Failed to update global timestamp, time-based processing for some backends may be impaired: %s", strerror(errno));
 		return;
 	}
 
@@ -72,7 +72,7 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	size_t u;
 
 	if(!b){
-		fprintf(stderr, "Unknown backend %s registered for managed fd\n", back);
+		LOGPF("Unknown backend %s registered for managed fd", back);
 		return 1;
 	}
 
@@ -104,13 +104,13 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	if(u == fds){
 		fd = realloc(fd, (fds + 1) * sizeof(managed_fd));
 		if(!fd){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 
 		signaled_fds = realloc(signaled_fds, (fds + 1) * sizeof(managed_fd));
 		if(!signaled_fds){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 		fds++;
@@ -188,11 +188,11 @@ int core_iteration(){
 		error = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
 		if(error < 0){
 			#ifndef _WIN32
-			fprintf(stderr, "select failed: %s\n", strerror(errno));
+			LOGPF("select failed: %s", strerror(errno));
 			#else
 			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 					NULL, WSAGetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error_message, 0, NULL);
-			fprintf(stderr, "select failed: %s\n", error_message);
+			LOGPF("select failed: %s", error_message);
 			LocalFree(error_message);
 			error_message = NULL;
 			#endif

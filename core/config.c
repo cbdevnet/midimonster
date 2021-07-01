@@ -45,7 +45,7 @@ static ssize_t getline(char** line, size_t* alloc, FILE* stream){
 		*alloc = GETLINE_BUFFER;
 		*line = calloc(GETLINE_BUFFER, sizeof(char));
 		if(!*line){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return -1;
 		}
 	}
@@ -60,7 +60,7 @@ static ssize_t getline(char** line, size_t* alloc, FILE* stream){
 			*alloc += GETLINE_BUFFER;
 			*line = realloc(*line, (*alloc) * sizeof(char));
 			if(!*line){
-				fprintf(stderr, "Failed to allocate memory\n");
+				LOG("Failed to allocate memory");
 				return -1;
 			}
 		}
@@ -175,13 +175,13 @@ static int config_glob_scan(instance* inst, channel_spec* spec){
 	for(glob_start = strchr(glob_start, '{'); glob_start; glob_start = strchr(glob_start, '{')){
 		glob_end = strchr(glob_start, '}');
 		if(!glob_end){
-			fprintf(stderr, "Failed to parse channel spec, unterminated glob: %s\n", spec->spec);
+			LOGPF("Failed to parse channel spec, unterminated glob: %s", spec->spec);
 			return 1;
 		}
 
 		spec->glob = realloc(spec->glob, (spec->globs + 1) * sizeof(channel_glob));
 		if(!spec->glob){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 
@@ -205,7 +205,7 @@ static int config_glob_scan(instance* inst, channel_spec* spec){
 	}
 	if(!spec->internal){
 		//TODO try to parse globs externally
-		fprintf(stderr, "Failed to parse glob %" PRIsize_t " in %s internally\n", u + 1, spec->spec);
+		LOGPF("Failed to parse glob %" PRIsize_t " in %s internally", u + 1, spec->spec);
 		return 1;
 	}
 
@@ -322,7 +322,7 @@ static int config_map(char* to_raw, char* from_raw){
 	if(!from || !to){
 		free(from);
 		free(to);
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return 1;
 	}
 
@@ -334,7 +334,7 @@ static int config_map(char* to_raw, char* from_raw){
 	}
 
 	if(!spec_from.spec[0] || !spec_to.spec[0]){
-		fprintf(stderr, "Mapping does not contain a proper instance specification\n");
+		LOG("Mapping does not contain a proper instance specification");
 		goto done;
 	}
 
@@ -348,7 +348,7 @@ static int config_map(char* to_raw, char* from_raw){
 	instance_from = instance_match(from);
 
 	if(!instance_to || !instance_from){
-		fprintf(stderr, "No such instance %s\n", instance_from ? to : from);
+		LOGPF("No such instance %s", instance_from ? to : from);
 		goto done;
 	}
 
@@ -361,7 +361,7 @@ static int config_map(char* to_raw, char* from_raw){
 	if((spec_to.channels != spec_from.channels && spec_from.channels != 1 && spec_to.channels != 1)
 			|| spec_to.channels == 0
 			|| spec_from.channels == 0){
-		fprintf(stderr, "Multi-channel specification size mismatch: %s.%s (%" PRIsize_t " channels) - %s.%s (%" PRIsize_t " channels)\n",
+		LOGPF("Multi-channel specification size mismatch: %s.%s (%" PRIsize_t " channels) - %s.%s (%" PRIsize_t " channels)",
 				instance_from->name,
 				spec_from.spec,
 				spec_from.channels,
@@ -410,7 +410,7 @@ static int config_line(char* line){
 			current_backend = backend_match(line + 9);
 
 			if(!current_backend){
-				fprintf(stderr, "Cannot configure unknown backend %s\n", line + 9);
+				LOGPF("Cannot configure unknown backend %s", line + 9);
 				return 1;
 			}
 
@@ -419,7 +419,7 @@ static int config_line(char* line){
 				if(!overrides[u].handled && overrides[u].type == override_backend
 					       && !strcmp(overrides[u].target, current_backend->name)){
 					if(current_backend->conf(overrides[u].option, overrides[u].value)){
-						fprintf(stderr, "Configuration override for %s failed for backend %s\n",
+						LOGPF("Configuration override for %s failed for backend %s",
 								overrides[u].option, current_backend->name);
 						return 1;
 					}
@@ -447,7 +447,7 @@ static int config_line(char* line){
 			for(separator = line; *separator && *separator != ' '; separator++){
 			}
 			if(!*separator){
-				fprintf(stderr, "No instance name specified for backend %s\n", line);
+				LOGPF("No instance name specified for backend %s", line);
 				return 1;
 			}
 			*separator = 0;
@@ -455,18 +455,18 @@ static int config_line(char* line){
 
 			current_backend = backend_match(line);
 			if(!current_backend){
-				fprintf(stderr, "No such backend %s\n", line);
+				LOGPF("No such backend %s", line);
 				return 1;
 			}
 
 			if(instance_match(separator)){
-				fprintf(stderr, "Duplicate instance name %s\n", separator);
+				LOGPF("Duplicate instance name %s", separator);
 				return 1;
 			}
 
 			//validate instance name
 			if(strchr(separator, ' ') || strchr(separator, '.')){
-				fprintf(stderr, "Invalid instance name %s\n", separator);
+				LOGPF("Invalid instance name %s", separator);
 				return 1;
 			}
 
@@ -476,20 +476,20 @@ static int config_line(char* line){
 			}
 
 			if(current_backend->create(current_instance)){
-				fprintf(stderr, "Failed to create %s instance %s\n", line, separator);
+				LOGPF("Failed to create %s instance %s", line, separator);
 				return 1;
 			}
 
 			current_instance->name = strdup(separator);
 			current_instance->backend = current_backend;
-			fprintf(stderr, "Created %s instance %s\n", line, separator);
+			LOGPF("Created %s instance %s", line, separator);
 
 			//apply overrides
 			for(u = 0; u < noverrides; u++){
 				if(!overrides[u].handled && overrides[u].type == override_instance
 					       && !strcmp(overrides[u].target, current_instance->name)){
 					if(current_backend->conf_instance(current_instance, overrides[u].option, overrides[u].value)){
-						fprintf(stderr, "Configuration override for %s failed for instance %s\n",
+						LOGPF("Configuration override for %s failed for instance %s",
 								overrides[u].option, current_instance->name);
 						return 1;
 					}
@@ -514,7 +514,7 @@ static int config_line(char* line){
 				break;
 			case 0:
 			default:
-				fprintf(stderr, "Not a channel mapping: %s\n", line);
+				LOGPF("Not a channel mapping: %s", line);
 				return 1;
 		}
 
@@ -529,13 +529,13 @@ static int config_line(char* line){
 
 		if(mapping_type == map_ltr || mapping_type == map_bidir){
 			if(config_map(separator, line)){
-				fprintf(stderr, "Failed to map channel %s to %s\n", line, separator);
+				LOGPF("Failed to map channel %s to %s", line, separator);
 				return 1;
 			}
 		}
 		if(mapping_type == map_rtl || mapping_type == map_bidir){
 			if(config_map(line, separator)){
-				fprintf(stderr, "Failed to map channel %s to %s\n", separator, line);
+				LOGPF("Failed to map channel %s to %s", separator, line);
 				return 1;
 			}
 		}
@@ -545,7 +545,7 @@ static int config_line(char* line){
 		//find separator
 		separator = strchr(line, '=');
 		if(!separator){
-			fprintf(stderr, "Not an assignment (currently expecting %s configuration): %s\n", line, (parser_state == backend_cfg) ? "backend" : "instance");
+			LOGPF("Not an assignment (currently expecting %s configuration): %s", line, (parser_state == backend_cfg) ? "backend" : "instance");
 			return 1;
 		}
 
@@ -555,11 +555,11 @@ static int config_line(char* line){
 		separator = config_trim_line(separator);
 
 		if(parser_state == backend_cfg && current_backend->conf(line, separator)){
-			fprintf(stderr, "Failed to configure backend %s\n", current_backend->name);
+			LOGPF("Failed to configure backend %s", current_backend->name);
 			return 1;
 		}
 		else if(parser_state == instance_cfg && current_backend->conf_instance(current_instance, line, separator)){
-			fprintf(stderr, "Failed to configure instance %s\n", current_instance->name);
+			LOGPF("Failed to configure instance %s", current_instance->name);
 			return 1;
 		}
 	}
@@ -583,7 +583,7 @@ int config_read(char* cfg_filepath){
 	#endif
 
 	if(!source_dir){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return 1;
 	}
 
@@ -594,12 +594,12 @@ int config_read(char* cfg_filepath){
 		source_file++;
 
 		if(!getcwd(original_dir, sizeof(original_dir))){
-			fprintf(stderr, "Failed to read current working directory: %s\n", strerror(errno));
+			LOGPF("Failed to read current working directory: %s", strerror(errno));
 			goto bail;
 		}
 
 		if(chdir(source_dir)){
-			fprintf(stderr, "Failed to change to configuration file directory %s: %s\n", source_dir, strerror(errno));
+			LOGPF("Failed to change to configuration file directory %s: %s", source_dir, strerror(errno));
 			goto bail;
 		}
 	}
@@ -607,11 +607,11 @@ int config_read(char* cfg_filepath){
 		source_file = source_dir;
 	}
 
-	fprintf(stderr, "Reading configuration file %s\n", cfg_filepath);
+	LOGPF("Reading configuration file %s", cfg_filepath);
 	source = fopen(source_file, "r");
 
 	if(!source){
-		fprintf(stderr, "Failed to open %s for reading\n", cfg_filepath);
+		LOGPF("Failed to open %s for reading", cfg_filepath);
 		goto bail;
 	}
 
@@ -644,7 +644,7 @@ int config_add_override(override_type type, char* data_raw){
 	char* data = strdup(data_raw);
 
 	if(!data){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		goto bail;
 	}
 
@@ -652,7 +652,7 @@ int config_add_override(override_type type, char* data_raw){
 	char* value = strchr(data, '=');
 
 	if(!option || !value){
-		fprintf(stderr, "Override %s is not a valid assignment\n", data_raw);
+		LOGPF("Override %s is not a valid assignment", data_raw);
 		goto bail;
 	}
 
@@ -672,14 +672,14 @@ int config_add_override(override_type type, char* data_raw){
 	};
 
 	if(!new.target || !new.option || !new.value){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		goto bail;
 	}
 
 	overrides = realloc(overrides, (noverrides + 1) * sizeof(config_override));
 	if(!overrides){
 		noverrides = 0;
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		goto bail;
 	}
 	overrides[noverrides] = new;

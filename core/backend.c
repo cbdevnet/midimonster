@@ -55,7 +55,7 @@ int backends_handle(size_t nfds, managed_fd* fds){
 			DBGPF("Notifying backend %s of %" PRIsize_t " waiting FDs", registry.backends[u].name, n);
 			rv |= registry.backends[u].process(n, fds);
 			if(rv){
-				fprintf(stderr, "Backend %s failed to handle input\n", registry.backends[u].name);
+				LOGPF("Backend %s failed to handle input", registry.backends[u].name);
 			}
 		}
 	}
@@ -100,7 +100,7 @@ MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 		DBGPF("\tBucket %" PRIsize_t " entry %" PRIsize_t " inst %" PRIu64 " ident %" PRIu64, bucket, u, (uint64_t) channels.entry[bucket][u]->instance, channels.entry[bucket][u]->ident);
 		if(channels.entry[bucket][u]->instance == inst
 				&& channels.entry[bucket][u]->ident == ident){
-			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing (bucket %" PRIsize_t ", %" PRIsize_t " search steps)\n", ident, inst->name, bucket, u);
+			DBGPF("Requested channel %" PRIu64 " on instance %s already exists, reusing (bucket %" PRIsize_t ", %" PRIsize_t " search steps)", ident, inst->name, bucket, u);
 			return channels.entry[bucket][u];
 		}
 	}
@@ -113,14 +113,14 @@ MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create){
 	DBGPF("Creating previously unknown channel %" PRIu64 " on instance %s, bucket %" PRIsize_t, ident, inst->name, bucket);
 	channels.entry[bucket] = realloc(channels.entry[bucket], (channels.n[bucket] + 1) * sizeof(channel*));
 	if(!channels.entry[bucket]){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		channels.n[bucket] = 0;
 		return NULL;
 	}
 
 	channels.entry[bucket][channels.n[bucket]] = calloc(1, sizeof(channel));
 	if(!channels.entry[bucket][channels.n[bucket]]){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return NULL;
 	}
 
@@ -161,7 +161,7 @@ MM_API void mm_channel_update(channel* chan, uint64_t ident){
 	//add to new bucket
 	channels.entry[new_bucket] = realloc(channels.entry[new_bucket], (channels.n[new_bucket] + 1) * sizeof(channel*));
 	if(!channels.entry[new_bucket]){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		channels.n[new_bucket] = 0;
 		return;
 	}
@@ -184,14 +184,14 @@ instance* mm_instance(backend* b){
 			//extend
 			registry.instances[u] = realloc(registry.instances[u], (n + 2) * sizeof(instance*));
 			if(!registry.instances[u]){
-				fprintf(stderr, "Failed to allocate memory\n");
+				LOG("Failed to allocate memory");
 				return NULL;
 			}
 			//sentinel
 			registry.instances[u][n + 1] = NULL;
 			registry.instances[u][n] = calloc(1, sizeof(instance));
 			if(!registry.instances[u][n]){
-				fprintf(stderr, "Failed to allocate memory\n");
+				LOG("Failed to allocate memory");
 			}
 			registry.instances[u][n]->backend = b;
 			return registry.instances[u][n];
@@ -238,7 +238,7 @@ MM_API int mm_backend_instances(char* name, size_t* ninst, instance*** inst){
 
 			*inst = calloc(i, sizeof(instance*));
 			if(!*inst){
-				fprintf(stderr, "Failed to allocate memory\n");
+				LOG("Failed to allocate memory");
 				return 1;
 			}
 
@@ -304,7 +304,7 @@ MM_API int mm_backend_register(backend b){
 		registry.backends = realloc(registry.backends, (registry.n + 1) * sizeof(backend));
 		registry.instances = realloc(registry.instances, (registry.n + 1) * sizeof(instance**));
 		if(!registry.backends || !registry.instances){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			registry.n = 0;
 			return 1;
 		}
@@ -312,7 +312,7 @@ MM_API int mm_backend_register(backend b){
 		registry.instances[registry.n] = NULL;
 		registry.n++;
 
-		fprintf(stderr, "Registered backend %s\n", b.name);
+		LOGPF("Registered backend %s", b.name);
 		return 0;
 	}
 	return 1;
@@ -331,14 +331,14 @@ int backends_start(){
 
 		//fetch list of instances
 		if(mm_backend_instances(registry.backends[u].name, &n, &inst)){
-			fprintf(stderr, "Failed to fetch instance list for initialization of backend %s\n", registry.backends[u].name);
+			LOGPF("Failed to fetch instance list for initialization of backend %s", registry.backends[u].name);
 			return 1;
 		}
 
 		//start the backend
 		current = registry.backends[u].start(n, inst);
 		if(current){
-			fprintf(stderr, "Failed to start backend %s\n", registry.backends[u].name);
+			LOGPF("Failed to start backend %s", registry.backends[u].name);
 		}
 
 		//clean up
@@ -378,7 +378,7 @@ int backends_stop(){
 	for(u = 0; u < registry.n; u++){
 		//fetch list of instances
 		if(mm_backend_instances(registry.backends[u].name, &n, &inst)){
-			fprintf(stderr, "Failed to fetch instance list for shutdown of backend %s\n", registry.backends[u].name);
+			LOGPF("Failed to fetch instance list for shutdown of backend %s", registry.backends[u].name);
 			inst = NULL;
 			n = 0;
 		}

@@ -15,6 +15,8 @@
 #include <dlfcn.h>
 #endif
 
+#define BACKEND_NAME "core/pl"
+#include "midimonster.h"
 #include "plugin.h"
 
 static size_t plugins = 0;
@@ -31,13 +33,13 @@ static int plugin_attach(char* path, char* file){
 	#endif
 
 	if(!path || !file || !strlen(path)){
-		fprintf(stderr, "Invalid plugin loader path\n");
+		LOG("Invalid plugin loader path");
 		return 1;
 	}
 
 	lib = calloc(strlen(path) + strlen(file) + 2, sizeof(char));
 	if(!lib){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return 1;
 	}
 	snprintf(lib, strlen(path) + strlen(file) + 2, "%s%s%s",
@@ -51,10 +53,10 @@ static int plugin_attach(char* path, char* file){
 		char* error = NULL;
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-		fprintf(stderr, "Failed to load plugin %s, check that all supporting libraries are present: %s\n", lib, error);
+		LOGPF("Failed to load plugin %s, check that all supporting libraries are present: %s", lib, error);
 		LocalFree(error);
 		#else
-		fprintf(stderr, "Failed to load plugin %s: %s\n", lib, dlerror());
+		LOGPF("Failed to load plugin %s: %s", lib, dlerror());
 		#endif
 		free(lib);
 		return 0;
@@ -63,7 +65,7 @@ static int plugin_attach(char* path, char* file){
 	init = (plugin_init) dlsym(handle, "init");
 	if(init){
 		if(init()){
-			fprintf(stderr, "Plugin %s failed to initialize\n", lib);
+			LOGPF("Plugin %s failed to initialize", lib);
 			dlclose(handle);
 			free(lib);
 			return 1;
@@ -78,7 +80,7 @@ static int plugin_attach(char* path, char* file){
 
 	plugin_handle = realloc(plugin_handle, (plugins + 1) * sizeof(void*));
 	if(!plugin_handle){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		dlclose(handle);
 		return 1;
 	}
@@ -95,7 +97,7 @@ int plugins_load(char* path){
 #ifdef _WIN32
 	char* search_expression = calloc(strlen(path) + strlen("*.dll") + 1, sizeof(char));
 	if(!search_expression){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		return -1;
 	}
 	snprintf(search_expression, strlen(path) + strlen("*.dll"), "%s*.dll", path);
@@ -107,7 +109,7 @@ int plugins_load(char* path){
 		LPVOID lpMsgBuf = NULL;
 		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &lpMsgBuf, 0, NULL);
-		fprintf(stderr, "Failed to search for backend plugin files in %s: %s\n", path, lpMsgBuf);
+		LOGPF("Failed to search for backend plugin files in %s: %s", path, lpMsgBuf);
 		LocalFree(lpMsgBuf);
 		return -1;
 	}
@@ -128,7 +130,7 @@ load_done:
 	struct stat file_stat;
 	DIR* directory = opendir(path);
 	if(!directory){
-		fprintf(stderr, "Failed to open plugin search path %s: %s\n", path, strerror(errno));
+		LOGPF("Failed to open plugin search path %s: %s", path, strerror(errno));
 		return 1;
 	}
 
@@ -138,7 +140,7 @@ load_done:
 		}
 
 		if(fstatat(dirfd(directory), entry->d_name, &file_stat, 0) < 0){
-			fprintf(stderr, "Failed to stat %s: %s\n", entry->d_name, strerror(errno));
+			LOGPF("Failed to stat %s: %s", entry->d_name, strerror(errno));
 			continue;
 		}
 
@@ -154,7 +156,7 @@ load_done:
 
 load_done:
 	if(closedir(directory) < 0){
-		fprintf(stderr, "Failed to close plugin directory %s: %s\n", path, strerror(errno));
+		LOGPF("Failed to close plugin directory %s: %s", path, strerror(errno));
 		return -1;
 	}
 	return rv;
@@ -171,12 +173,12 @@ int plugins_close(){
 		if(!FreeLibrary(plugin_handle[u])){
 			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 				NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &error, 0, NULL);
-			fprintf(stderr, "Failed to unload plugin: %s\n", error);
+			LOGPF("Failed to unload plugin: %s", error);
 			LocalFree(error);
 		}
 #else
 		if(dlclose(plugin_handle[u])){
-			fprintf(stderr, "Failed to unload plugin: %s\n", dlerror());
+			LOGPF("Failed to unload plugin: %s", dlerror());
 		}
 #endif
 	}

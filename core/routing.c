@@ -62,7 +62,7 @@ int mm_map_channel(channel* from, channel* to){
 		routing.map[bucket] = realloc(routing.map[bucket], (routing.entries[bucket] + 1) * sizeof(channel_mapping));
 		if(!routing.map[bucket]){
 			routing.entries[bucket] = 0;
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			return 1;
 		}
 
@@ -81,7 +81,7 @@ int mm_map_channel(channel* from, channel* to){
 	//add a mapping target
 	routing.map[bucket][u].to = realloc(routing.map[bucket][u].to, (routing.map[bucket][u].destinations + 1) * sizeof(channel*));
 	if(!routing.map[bucket][u].to){
-		fprintf(stderr, "Failed to allocate memory\n");
+		LOG("Failed to allocate memory");
 		routing.map[bucket][u].destinations = 0;
 		return 1;
 	}
@@ -112,7 +112,7 @@ MM_API int mm_channel_event(channel* c, channel_value v){
 		routing.events->value = realloc(routing.events->value, (routing.events->alloc + routing.map[bucket][u].destinations) * sizeof(channel_value));
 
 		if(!routing.events->channel || !routing.events->value){
-			fprintf(stderr, "Failed to allocate memory\n");
+			LOG("Failed to allocate memory");
 			routing.events->alloc = 0;
 			routing.events->n = 0;
 			return 1;
@@ -163,7 +163,7 @@ int routing_iteration(){
 
 		//push collected events to target backends
 		if(secondary->n && backends_notify(secondary->n, secondary->channel, secondary->value)){
-			fprintf(stderr, "Backends failed to handle output\n");
+			LOG("Backends failed to handle output");
 			return 1;
 		}
 

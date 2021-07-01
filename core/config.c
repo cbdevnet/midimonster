@@ -3,7 +3,10 @@
 #include <unistd.h>
 #include <errno.h>
 #ifndef _WIN32
-#include <limits.h>
+	#include <limits.h>
+	#define MM_API __attribute__((visibility ("default")))
+#else
+	#define MM_API __attribute__((dllexport))
 #endif
 
 #define BACKEND_NAME "core/cfg"

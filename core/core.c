@@ -7,6 +7,7 @@
 	#include <sys/select.h>
 	#define MM_API __attribute__((visibility ("default")))
 #else
+	#include <fcntl.h>
 	#define MM_API __attribute__((dllexport))
 #endif
 
@@ -223,7 +224,7 @@ int core_iteration(){
 	}
 
 	//run backend processing to collect events
-	DBGPF("%" PRIsize_t " backend FDs signaled", nfds);
+	DBGPF("%" PRIsize_t " backend FDs signaled", n);
 	if(backends_handle(n, signaled_fds)){
 		return 1;
 	}

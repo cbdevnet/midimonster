@@ -1,5 +1,6 @@
 #include <string.h>
 #include <signal.h>
+#include <stdarg.h>
 #ifndef _WIN32
 	#define MM_API __attribute__((visibility("default")))
 #else
@@ -12,6 +13,16 @@
 #include "core/config.h"
 
 volatile static sig_atomic_t shutdown_requested = 0;
+
+MM_API int log_printf(int level, char* module, char* fmt, ...){
+	int rv = 0;
+	va_list args;
+	va_start(args, fmt);
+	fprintf(stderr, "%s%s\t", level ? "debug/" : "", module);
+	rv = vfprintf(stderr, fmt, args);
+	va_end(args);
+	return rv;
+}
 
 static void signal_handler(int signum){
 	shutdown_requested = 1;

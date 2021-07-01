@@ -7,12 +7,14 @@
 #include <dirent.h>
 #include "portability.h"
 #ifdef _WIN32
-#define dlclose FreeLibrary
-#define dlsym GetProcAddress
-#define dlerror() "Failed"
-#define dlopen(lib,ig) LoadLibrary(lib)
+	#define dlclose FreeLibrary
+	#define dlsym GetProcAddress
+	#define dlerror() "Failed"
+	#define dlopen(lib,ig) LoadLibrary(lib)
+	#define MM_API __attribute__((dllexport))
 #else
-#include <dlfcn.h>
+	#include <dlfcn.h>
+	#define MM_API __attribute__((visibility ("default")))
 #endif
 
 #define BACKEND_NAME "core/pl"

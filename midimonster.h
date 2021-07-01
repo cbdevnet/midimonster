@@ -40,16 +40,19 @@
 /* Clamp a value to a range */
 #define clamp(val,max,min) (((val) > (max)) ? (max) : (((val) < (min)) ? (min) : (val)))
 
+/* Log function prototype - do not use directly. Use the LOG/LOGPF/DBGPF macros below instead */
+MM_API __attribute__((format(printf, 3, 4))) int log_printf(int level, char* module, char* fmt, ...);
+
 /* Debug messages only compile in when DEBUG is set */
 #ifdef DEBUG
-	#define DBGPF(format, ...) fprintf(stderr, "debug/%s\t" format "\n", (BACKEND_NAME), __VA_ARGS__)
+	#define DBGPF(format, ...) log_printf(1, (BACKEND_NAME), format "\n", __VA_ARGS__)
 #else
 	#define DBGPF(format, ...)
 #endif
 
 /* Log messages should be routed through these macros to ensure interoperability with different core implementations */
-#define LOGPF(format, ...) fprintf(stderr, "%s\t" format "\n", (BACKEND_NAME), __VA_ARGS__)
-#define LOG(message) fprintf(stderr, "%s\t%s\n", (BACKEND_NAME), (message))
+#define LOGPF(format, ...) log_printf(0, (BACKEND_NAME), format "\n", __VA_ARGS__)
+#define LOG(message) log_printf(0, (BACKEND_NAME), message "\n")
 
 /* Stop compilation if the build system reports an error */
 #ifdef BUILD_ERROR

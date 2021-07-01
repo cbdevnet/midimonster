@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2001,SC2181
+# shellcheck disable=SC2001,SC2181,SC1117
 
 ################################################ SETUP ################################################
 dep_build_core=(

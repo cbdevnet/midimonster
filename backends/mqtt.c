@@ -414,7 +414,7 @@ static int mqtt_configure_channel(instance* inst, char* option, char* value){
 	if(!configure
 			//if configuring scale, no other config is possible
 			|| (!config.discrete && data->channel[configure->ident].values)
-			//if configuring discrete, the previous one can't be a a scale
+			//if configuring discrete, the previous one can't be a scale
 			|| (config.discrete && data->channel[configure->ident].values && !data->channel[configure->ident].value[0].discrete)){
 		LOGPF("Failed to configure topic %s.%s", inst->name, option);
 		free(config.discrete);

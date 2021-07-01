@@ -19,14 +19,19 @@
 #include "plugin.h"
 #include "config.h"
 
-static size_t fds = 0;
-static int max_fd = -1;
-static managed_fd* fd = NULL;
-static managed_fd* signaled_fds = NULL;
+static struct {
+	//static size_t fds = 0;
+	size_t n;
+	int max;
+	managed_fd* fd;
+	managed_fd* signaled;
+	fd_set read;
+} fds = {
+	.max = -1
+};
+
 static volatile sig_atomic_t fd_set_dirty = 1;
 static uint64_t global_timestamp = 0;
-
-static fd_set all_fds;
 
 MM_API uint64_t mm_timestamp(){
 	return global_timestamp;
@@ -56,11 +61,11 @@ static fd_set core_collect(int* max_fd){
 
 	DBGPF("Building selector set from %" PRIsize_t " FDs registered to core", fds);
 	FD_ZERO(&rv_fds);
-	for(u = 0; u < fds; u++){
-		if(fd[u].fd >= 0){
-			FD_SET(fd[u].fd, &rv_fds);
+	for(u = 0; u < fds.n; u++){
+		if(fds.fd[u].fd >= 0){
+			FD_SET(fds.fd[u].fd, &rv_fds);
 			if(max_fd){
-				*max_fd = max(*max_fd, fd[u].fd);
+				*max_fd = max(*max_fd, fds.fd[u].fd);
 			}
 		}
 	}
@@ -78,13 +83,13 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	}
 
 	//find exact match
-	for(u = 0; u < fds; u++){
-		if(fd[u].fd == new_fd && fd[u].backend == b){
-			fd[u].impl = impl;
+	for(u = 0; u < fds.n; u++){
+		if(fds.fd[u].fd == new_fd && fds.fd[u].backend == b){
+			fds.fd[u].impl = impl;
 			if(!manage){
-				fd[u].fd = -1;
-				fd[u].backend = NULL;
-				fd[u].impl = NULL;
+				fds.fd[u].fd = -1;
+				fds.fd[u].backend = NULL;
+				fds.fd[u].impl = NULL;
 				fd_set_dirty = 1;
 			}
 			return 0;
@@ -96,41 +101,41 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	}
 
 	//find free slot
-	for(u = 0; u < fds; u++){
-		if(fd[u].fd < 0){
+	for(u = 0; u < fds.n; u++){
+		if(fds.fd[u].fd < 0){
 			break;
 		}
 	}
 	//if necessary expand
-	if(u == fds){
-		fd = realloc(fd, (fds + 1) * sizeof(managed_fd));
-		if(!fd){
+	if(u == fds.n){
+		fds.fd = realloc(fds.fd, (fds.n + 1) * sizeof(managed_fd));
+		if(!fds.fd){
 			LOG("Failed to allocate memory");
 			return 1;
 		}
 
-		signaled_fds = realloc(signaled_fds, (fds + 1) * sizeof(managed_fd));
-		if(!signaled_fds){
+		fds.signaled = realloc(fds.signaled, (fds.n + 1) * sizeof(managed_fd));
+		if(!fds.signaled){
 			LOG("Failed to allocate memory");
 			return 1;
 		}
-		fds++;
+		fds.n++;
 	}
 
 	//store new fd
-	fd[u].fd = new_fd;
-	fd[u].backend = b;
-	fd[u].impl = impl;
+	fds.fd[u].fd = new_fd;
+	fds.fd[u].backend = b;
+	fds.fd[u].impl = impl;
 	fd_set_dirty = 1;
 	return 0;
 }
 
 int core_initialize(){
-	FD_ZERO(&all_fds);
+	FD_ZERO(&(fds.read));
 
 	//load initial timestamp
 	core_timestamp();
-	
+
 	#ifdef _WIN32
 	WSADATA wsa;
 	WORD version = MAKEWORD(2, 2);
@@ -156,7 +161,7 @@ int core_start(){
 
 	routing_stats();
 
-	if(!fds){
+	if(!fds.n){
 		LOG("No descriptors registered for multiplexing");
 	}
 
@@ -175,18 +180,18 @@ int core_iteration(){
 	#endif
 
 	//rebuild fd set if necessary
-	if(fd_set_dirty || !signaled_fds){
-		all_fds = core_collect(&max_fd);
+	if(fd_set_dirty || !fds.signaled){
+		fds.read = core_collect(&(fds.max));
 		fd_set_dirty = 0;
 	}
 
 	//wait for & translate events
-	read_fds = all_fds;
+	read_fds = fds.read;
 	tv = backend_timeout();
 
 	//check whether there are any fds active, windows does not like select() without descriptors
-	if(max_fd >= 0){
-		error = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
+	if(fds.max >= 0){
+		error = select(fds.max + 1, &read_fds, NULL, NULL, &tv);
 		if(error < 0){
 			#ifndef _WIN32
 			LOGPF("select failed: %s", strerror(errno));
@@ -216,16 +221,16 @@ int core_iteration(){
 
 	//find all signaled fds
 	n = 0;
-	for(u = 0; u < fds; u++){
-		if(fd[u].fd >= 0 && FD_ISSET(fd[u].fd, &read_fds)){
-			signaled_fds[n] = fd[u];
+	for(u = 0; u < fds.n; u++){
+		if(fds.fd[u].fd >= 0 && FD_ISSET(fds.fd[u].fd, &read_fds)){
+			fds.signaled[n] = fds.fd[u];
 			n++;
 		}
 	}
 
 	//run backend processing to collect events
 	DBGPF("%" PRIsize_t " backend FDs signaled", n);
-	if(backends_handle(n, signaled_fds)){
+	if(backends_handle(n, fds.signaled)){
 		return 1;
 	}
 
@@ -235,22 +240,24 @@ int core_iteration(){
 
 static void fds_free(){
 	size_t u;
-	for(u = 0; u < fds; u++){
-		if(fd[u].fd >= 0){
-			close(fd[u].fd);
-			fd[u].fd = -1;
+	for(u = 0; u < fds.n; u++){
+		if(fds.fd[u].fd >= 0){
+			close(fds.fd[u].fd);
+			fds.fd[u].fd = -1;
 		}
 	}
-	free(fd);
-	fds = 0;
-	fd = NULL;
+
+	fds.max = -1;
+	free(fds.signaled);
+	fds.signaled = NULL;
+	free(fds.fd);
+	fds.fd = NULL;
+	fds.n = 0;
 }
 
 void core_shutdown(){
 	backends_stop();
 	routing_cleanup();
-	free(signaled_fds);
-	signaled_fds = NULL;
 	fds_free();
 	plugins_close();
 	config_free();

@@ -52,6 +52,6 @@ typedef struct /*_mm_config_override*/ {
 /* Internal API */
 void config_free();
 
-/* Frontent API */
+/* Frontend API */
 int config_read(char* file);
 int config_add_override(override_type type, char* data);

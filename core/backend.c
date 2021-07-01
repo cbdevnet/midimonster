@@ -1,9 +1,10 @@
 #include <string.h>
 #ifndef _WIN32
-#define MM_API __attribute__((visibility ("default")))
+	#define MM_API __attribute__((visibility ("default")))
 #else
-#define MM_API __attribute__((dllexport))
+	#define MM_API __attribute__((dllexport))
 #endif
+
 #define BACKEND_NAME "core/be"
 #include "midimonster.h"
 #include "backend.h"

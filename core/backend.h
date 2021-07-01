@@ -10,7 +10,7 @@ int backends_start();
 int backends_stop();
 instance* mm_instance(backend* b);
 
-/* Backend API */
+/* Public backend API */
 MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create);
 MM_API void mm_channel_update(channel* chan, uint64_t ident);
 MM_API instance* mm_instance_find(char* name, uint64_t ident);

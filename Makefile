@@ -1,5 +1,5 @@
 .PHONY: all clean run sanitize backends windows full backends-full install
-OBJS = core/config.o core/backend.o core/plugin.o
+OBJS = core/core.o core/config.o core/backend.o core/plugin.o core/routing.o
 
 PREFIX ?= /usr
 PLUGIN_INSTALL = $(PREFIX)/lib/midimonster
@@ -38,7 +38,7 @@ ifdef DEFAULT_CFG
 midimonster: CFLAGS += -DDEFAULT_CFG=\"$(DEFAULT_CFG)\"
 endif
 ifdef PLUGINS
-midimonster: CFLAGS += -DPLUGINS=\"$(PLUGINS)\"
+core/core.o: CFLAGS += -DPLUGINS=\"$(PLUGINS)\"
 PLUGIN_INSTALL = $(PLUGINS)
 endif
 

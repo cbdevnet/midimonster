@@ -9,6 +9,8 @@
 #include "midimonster.h"
 #include "backend.h"
 
+static uint32_t default_interval = 1000;
+
 static struct {
 	size_t n;
 	backend* backends;
@@ -272,9 +274,15 @@ instance* instance_match(char* name){
 	return NULL;
 }
 
+void mm_default_interval(uint32_t interval, uint8_t force){
+	if(interval < default_interval || force){
+		default_interval = interval;
+	}
+}
+
 struct timeval backend_timeout(){
 	size_t u;
-	uint32_t res, secs = 1, msecs = 0;
+	uint32_t res, secs = default_interval / 1000, msecs = default_interval % 1000;
 
 	for(u = 0; u < registry.n; u++){
 		//only call interval if backend has instances

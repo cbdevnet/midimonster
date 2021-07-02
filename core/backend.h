@@ -10,6 +10,9 @@ int backends_start();
 int backends_stop();
 instance* mm_instance(backend* b);
 
+/* Frontend API */
+void mm_default_interval(uint32_t interval, uint8_t force);
+
 /* Public backend API */
 MM_API channel* mm_channel(instance* inst, uint64_t ident, uint8_t create);
 MM_API void mm_channel_update(channel* chan, uint64_t ident);

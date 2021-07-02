@@ -20,7 +20,6 @@
 #include "config.h"
 
 static struct {
-	//static size_t fds = 0;
 	size_t n;
 	int max;
 	managed_fd* fd;

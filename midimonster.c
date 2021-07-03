@@ -39,7 +39,6 @@ static int usage(char* fn){
 	return EXIT_FAILURE;
 }
 
-
 static int platform_initialize(){
 	#ifdef _WIN32
 	unsigned error_mode = SetErrorMode(0);

@@ -1,5 +1,5 @@
 .PHONY: all clean run sanitize backends windows full backends-full install
-OBJS = core/core.o core/config.o core/backend.o core/plugin.o core/routing.o
+CORE_OBJS = core/core.o core/config.o core/backend.o core/plugin.o core/routing.o
 
 PREFIX ?= /usr
 PLUGIN_INSTALL = $(PREFIX)/lib/midimonster
@@ -20,17 +20,17 @@ core/%: CFLAGS += -I./
 midimonster: LDLIBS = -ldl
 # Replace version string with current git-describe if possible
 ifneq "$(GITVERSION)" ""
-midimonster: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
-midimonster.exe: CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
-assets/resource.o: RCCFLAGS += -DMIDIMONSTER_VERSION=\\\"$(GITVERSION)\\\"
+CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
 endif
 
 # Work around strange linker passing convention differences in Linux and OSX
 ifeq ($(SYSTEM),Linux)
 midimonster: LDFLAGS += -Wl,-export-dynamic
+midimonster_gui: LDFLAGS += -Wl,-export-dynamic
 endif
 ifeq ($(SYSTEM),Darwin)
 midimonster: LDFLAGS += -Wl,-export_dynamic
+midimonster_gui: LDFLAGS += -Wl,-export_dynamic
 endif
 
 # Allow overriding the locations for backend plugins and default configuration
@@ -56,8 +56,16 @@ backends-full:
 	$(MAKE) -C backends full
 
 # This rule can not be the default rule because OSX the target prereqs are not exactly the build prereqs
-midimonster: midimonster.c portability.h $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) $(LDLIBS) -o $@
+midimonster: midimonster.c portability.h $(CORE_OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(CORE_OBJS) $(LDLIBS) -o $@
+
+# The minimal GUI works reasonably well with both gtk+-2.0 and gtk+-3.0
+midimonster_gui: GTK_VERSION ?= gtk+-3.0
+midimonster_gui: LDLIBS = -ldl
+midimonster_gui: GTK_CFLAGS ?= -Wno-pedantic $(shell pkg-config --cflags $(GTK_VERSION))
+midimonster_gui: GTK_LDLIBS ?= $(shell pkg-config --libs $(GTK_VERSION))
+midimonster_gui: midimonster_gui.c portability.h $(CORE_OBJS)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) $(LDFLAGS) $< $(CORE_OBJS) $(LDLIBS) $(GTK_LDLIBS) -o $@
 
 assets/resource.o: assets/midimonster.rc assets/midimonster.ico
 	$(RCC) $(RCCFLAGS) $< -o $@ --output-format=coff
@@ -70,15 +78,15 @@ midimonster.exe: RCC ?= x86_64-w64-mingw32-windres
 midimonster.exe: CFLAGS += -Wno-format
 midimonster.exe: LDLIBS = -lws2_32
 midimonster.exe: LDFLAGS += -Wl,--out-implib,libmmapi.a
-midimonster.exe: midimonster.c portability.h $(OBJS) assets/resource.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(OBJS) assets/resource.o $(LDLIBS) -o $@
+midimonster.exe: midimonster.c portability.h $(CORE_OBJS) assets/resource.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(CORE_OBJS) assets/resource.o $(LDLIBS) -o $@
 
 clean:
-	$(RM) midimonster
+	$(RM) midimonster midimonster_gui
 	$(RM) midimonster.exe
 	$(RM) libmmapi.a
 	$(RM) assets/resource.o
-	$(RM) $(OBJS)
+	$(RM) $(CORE_OBJS)
 	$(MAKE) -C backends clean
 
 run:

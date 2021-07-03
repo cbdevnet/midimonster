@@ -109,6 +109,9 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 	if(u == fds.n){
 		fds.fd = realloc(fds.fd, (fds.n + 1) * sizeof(managed_fd));
 		if(!fds.fd){
+			free(fds.signaled);
+			fds.signaled = NULL;
+			fds.n = 0;
 			LOG("Failed to allocate memory");
 			return 1;
 		}
@@ -116,6 +119,9 @@ MM_API int mm_manage_fd(int new_fd, char* back, int manage, void* impl){
 		fds.signaled = realloc(fds.signaled, (fds.n + 1) * sizeof(managed_fd));
 		if(!fds.signaled){
 			LOG("Failed to allocate memory");
+			free(fds.fd);
+			fds.fd = NULL;
+			fds.n = 0;
 			return 1;
 		}
 		fds.n++;
@@ -179,7 +185,7 @@ int core_iteration(){
 	#endif
 
 	//rebuild fd set if necessary
-	if(fd_set_dirty || !fds.signaled){
+	if(fd_set_dirty){
 		fds.read = core_collect(&(fds.max));
 		fd_set_dirty = 0;
 	}

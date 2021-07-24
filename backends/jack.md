@@ -65,7 +65,7 @@ used instead of the word `channel` (Note that `channel` here refers to the MIDI 
 The following values are recognized for `type`:
 
 * `cc` - Control Changes
-* `note` - Note On/Off messages
+* `note` - Note On/Off messages (also known as note velocity)
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages

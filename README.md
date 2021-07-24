@@ -122,6 +122,12 @@ output eachothers events.
 
 The last line is a shorter way to create a bi-directional mapping.
 
+You can map input channels to as many outputs as you like. This will deliver incoming
+events for each mapped output.
+You can also map multiple input channels to one common output channel.
+This will forward all events on the mapped inputs to the output channel (experienced
+show-control technicians call this a "latest takes precedence" bus).
+
 ### Multi-channel mapping
 
 To make mapping large contiguous sets of channels easier, channel names may contain certain

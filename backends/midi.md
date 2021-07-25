@@ -27,7 +27,7 @@ Each instance also provides a virtual port, so MIDI devices can also be connecte
 The MIDI backend supports mapping different MIDI events to MIDIMonster channels. The currently supported event types are
 
 * `cc` - Control Changes
-* `note` - Note On/Off messages
+* `note` - Note On/Off messages (also known as note velocity)
 * `pressure` - Note pressure/aftertouch messages
 * `aftertouch` - Channel-wide aftertouch messages
 * `pitch` - Channel pitchbend messages

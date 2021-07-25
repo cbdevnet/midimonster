@@ -17,7 +17,6 @@ CFLAGS += -fvisibility=hidden
 RCCFLAGS += -I./
 core/%: CFLAGS += -I./
 
-midimonster: LDLIBS = -ldl
 # Replace version string with current git-describe if possible
 ifneq "$(GITVERSION)" ""
 CFLAGS += -DMIDIMONSTER_VERSION=\"$(GITVERSION)\"
@@ -56,6 +55,7 @@ backends-full:
 	$(MAKE) -C backends full
 
 # This rule can not be the default rule because OSX the target prereqs are not exactly the build prereqs
+midimonster: LDLIBS = -ldl
 midimonster: midimonster.c portability.h $(CORE_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(CORE_OBJS) $(LDLIBS) -o $@
 

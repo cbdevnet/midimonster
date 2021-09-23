@@ -121,7 +121,7 @@ static int mqtt_generate_instanceid(instance* inst){
 	mqtt_instance_data* data = (mqtt_instance_data*) inst->impl;
 	char clientid[24] = "";
 
-	snprintf(clientid, sizeof(clientid), "MIDIMonster-%d-%s", (uint32_t) time(NULL), inst->name);
+	snprintf(clientid, sizeof(clientid) - 1, "MM-%s-%d", inst->name, (uint32_t) time(NULL));
 	return mmbackend_strdup(&(data->client_id), clientid);
 }
 
@@ -284,6 +284,11 @@ static int mqtt_reconnect(instance* inst){
 
 	if(!data->host){
 		LOGPF("No host specified for instance %s", inst->name);
+		return 2;
+	}
+
+	if(!data->client_id && mqtt_generate_instanceid(inst)){
+		LOGPF("Failed to generate instance ID for %s", inst->name);
 		return 2;
 	}
 
@@ -456,9 +461,6 @@ static int mqtt_configure_instance(instance* inst, char* option, char* value){
 			mmbackend_strdup(&(data->client_id), value);
 			return 0;
 		}
-		else{
-			return mqtt_generate_instanceid(inst);
-		}
 	}
 	else if(!strcmp(option, "protocol")){
 		data->mqtt_version = MQTT_VERSION_DEFAULT;
@@ -518,9 +520,6 @@ static int mqtt_instance(instance* inst){
 	data->current_alias = 1;
 	inst->impl = data;
 
-	if(mqtt_generate_instanceid(inst)){
-		return 1;
-	}
 	return 0;
 }
 

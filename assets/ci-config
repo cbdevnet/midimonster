@@ -17,7 +17,7 @@ buildTypes.each{
 		node() {
 			skipDefaultCheckout()
 			stage('Checkout') {
-				checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false], [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true]], userRemoteConfigs: [[credentialsId: 'github_mm_key', url: 'https://github.com/cbdevnet/midimonster.git']]])
+				checkout([$class: 'GitSCM', branches: [[name: '**']], extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false], [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true]], userRemoteConfigs: [[credentialsId: 'github_mm_key', url: 'https://github.com/cbdevnet/midimonster.git']]])
 			}
 
 			stage("$it Build"){
@@ -47,7 +47,7 @@ builds.Test = {
 	node() {
 		skipDefaultCheckout()
 		stage('Checkout') {
-			checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false], [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true]], userRemoteConfigs: [[credentialsId: 'github_mm_key', url: 'https://github.com/cbdevnet/midimonster.git']]])
+			checkout([$class: 'GitSCM', branches: [[name: '**']], extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false], [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true]], userRemoteConfigs: [[credentialsId: 'github_mm_key', url: 'https://github.com/cbdevnet/midimonster.git']]])
 		}
 		stage('Test') {
 			catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {

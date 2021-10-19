@@ -95,7 +95,7 @@ static int sacn_listener(char* host, char* port, uint8_t flags){
 		return -1;
 	}
 
-	LOGPF("Interface %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
+	LOGPF("Socket %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].universes = 0;
 	global_cfg.fd[global_cfg.fds].universe = NULL;
@@ -160,7 +160,7 @@ static int sacn_configure(char* option, char* value){
 		}
 
 		if(sacn_listener(host, port ? port : SACN_PORT, flags)){
-			LOGPF("Failed to bind descriptor: %s", value);
+			LOGPF("Failed to bind socket: %s", value);
 			return 1;
 		}
 
@@ -613,7 +613,7 @@ static int sacn_handle(size_t num, managed_fd* fds){
 					}
 					else if(!inst && global_cfg.detect > 1){
 						//this will only happen with unicast input
-						LOGPF("Received data for unconfigured universe %d on descriptor %" PRIu64, be16toh(data->universe), ((uint64_t) fds[u].impl) & 0xFFFF);
+						LOGPF("Received data for unconfigured universe %d on socket %" PRIu64, be16toh(data->universe), ((uint64_t) fds[u].impl) & 0xFFFF);
 					}
 				}
 			}
@@ -641,6 +641,8 @@ static int sacn_start_multicast(instance* inst){
 	struct sockaddr_storage bound_name = {
 		0
 	};
+	char mcast_ifaddr[INET_ADDRSTRLEN] = "";
+
 	#ifdef _WIN32
 	struct ip_mreq mcast_req = {
 		.imr_interface.s_addr = INADDR_ANY,
@@ -661,11 +663,15 @@ static int sacn_start_multicast(instance* inst){
 		LOGPF("Socket %" PRIsize_t " not bound to a specific IPv4 address, joining multicast input group for instance %s (universe %u) on default interface", data->fd_index, inst->name, data->uni);
 	}
 	else{
+		//this relies on the previous check for the socket family (AF_INET / IPv4)
 		#ifdef _WIN32
 		mcast_req.imr_interface = ((struct sockaddr_in*) &bound_name)->sin_addr;
 		#else
 		mcast_req.imr_address = ((struct sockaddr_in*) &bound_name)->sin_addr;
 		#endif
+
+		mmbackend_sockaddr_ntop((struct sockaddr*) &bound_name, mcast_ifaddr, sizeof(mcast_ifaddr));
+		LOGPF("Joining multicast input group for instance %s (universe %u) on interface for socket %" PRIsize_t " (%s)", inst->name, data->uni, data->fd_index, mcast_ifaddr);
 	}
 
 	if(setsockopt(global_cfg.fd[data->fd_index].fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (uint8_t*) &mcast_req, sizeof(mcast_req))){
@@ -685,7 +691,7 @@ static int sacn_start(size_t n, instance** inst){
 	struct sockaddr_in* dest_v4 = NULL;
 
 	if(!global_cfg.fds){
-		LOG("Failed to start, no descriptors bound");
+		LOG("Failed to start, no sockets bound");
 		return 1;
 	}
 

@@ -22,7 +22,7 @@ static struct {
 static int artnet_listener(char* host, char* port){
 	int fd;
 	if(global_cfg.fds >= MAX_FDS){
-		LOG("Backend descriptor limit reached");
+		LOG("Backend socket limit reached");
 		return -1;
 	}
 
@@ -40,7 +40,7 @@ static int artnet_listener(char* host, char* port){
 		return -1;
 	}
 
-	LOGPF("Interface %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
+	LOGPF("Socket %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].output_instances = 0;
 	global_cfg.fd[global_cfg.fds].output_instance = NULL;
@@ -98,7 +98,7 @@ static int artnet_configure(char* option, char* value){
 		}
 
 		if(artnet_listener(host, (port ? port : ARTNET_PORT))){
-			LOGPF("Failed to bind descriptor: %s", value);
+			LOGPF("Failed to bind socket: %s", value);
 			return 1;
 		}
 		return 0;
@@ -429,7 +429,7 @@ static int artnet_handle(size_t num, managed_fd* fds){
 						LOG("Failed to process frame");
 					}
 					else if(!inst && global_cfg.detect > 1){
-						LOGPF("Received data for unconfigured universe %d (net %d) on descriptor %" PRIu64, frame->universe, frame->net, (((uint64_t) fds[u].impl) & 0xFF));
+						LOGPF("Received data for unconfigured universe %d (net %d) on socket %" PRIu64, frame->universe, frame->net, (((uint64_t) fds[u].impl) & 0xFF));
 					}
 				}
 			}
@@ -461,7 +461,7 @@ static int artnet_start(size_t n, instance** inst){
 	};
 
 	if(!global_cfg.fds){
-		LOG("Failed to start backend: no descriptors bound");
+		LOG("Failed to start backend: no sockets bound");
 		return 1;
 	}
 

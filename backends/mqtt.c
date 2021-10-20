@@ -314,11 +314,11 @@ static int mqtt_reconnect(instance* inst){
 
 	//prepare CONNECT message header
 	variable_header[6] = data->mqtt_version;
-	variable_header[7] = 0x02 /*clean start*/ | (data->user ? 0x80 : 0x00) | (data->user ? 0x40 : 0x00);
+	variable_header[7] = 0x02 /*clean start*/ | (data->user ? 0x80 : 0x00) | (data->password ? 0x40 : 0x00);
 
 	if(data->mqtt_version == 0x05){ //mqtt v5 has additional options
 		//push number of option bytes (as a varint, no less) before actually pushing the option data.
-		//obviously someone thought saving 3 whole bytes in exchange for not being able to sequentially creating the package was smart..
+		//obviously someone thought saving 3 whole bytes in exchange for not being able to sequentially create the package was smart..
 		variable_header[vh_offset++] = 8;
 		//push maximum packet size option
 		variable_header[vh_offset++] = 0x27;

@@ -30,7 +30,9 @@
 	#include <winsock2.h>
 
 	#define htobe16(x) htons(x)
+	#define htole16(x) (x)
 	#define be16toh(x) ntohs(x)
+	#define letoh16(x) (x)
 
 	#define htobe32(x) htonl(x)
 	#define be32toh(x) ntohl(x)

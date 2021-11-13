@@ -1,9 +1,13 @@
 midimonster
 midimonster.exe
 libmmapi.a
+*.tgz
+*.zip
 *.swp
 *.o
 *.so
 *.dll
 __pycache__
 .vscode/
+deployment/
+local-configs/

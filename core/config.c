@@ -208,7 +208,7 @@ static int config_glob_scan(instance* inst, channel_spec* spec){
 	}
 	if(!spec->internal){
 		//TODO try to parse globs externally
-		LOGPF("Failed to parse glob %" PRIsize_t " in %s internally", u + 1, spec->spec);
+		LOGPF("Failed to parse glob %" PRIsize_t " in %s internally - this may indicate a typing error", u + 1, spec->spec);
 		return 1;
 	}
 

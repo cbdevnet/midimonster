@@ -1,15 +1,62 @@
-keepalive channels per backend?
-Note source in channel value struct
-udp backends may ignore MTU
-make event collectors threadsafe to stop marshalling data...
-collect & check backend API version
-move all connection establishment to _start to be able to hot-stop/start all backends
-event deduplication in core?
-move all typenames to _t
+Misc
+	- keepalive channels per backend?
+	- Note source in channel value struct
+	- Support raw value passthru
+	- udp backends may ignore MTU
+	- make event collectors threadsafe to stop marshalling data...
+	- collect & check backend API version
+	- move all connection establishment to _start to be able to hot-stop/start all backends
+	- move all typenames to type_t
 
-per-channel filters
-	* invert
-	* edge detection
+Core roadmap
+	- Event deduplication in core - cc filters
+		- [channelconfig] / [filter]
+	- Per-channel settings / filtering
+		- dedup (in/out)
+		- invert
+		- edge detection
+		- debounce
+		- toggle
+	- libmmbackend: interface bind
+	- gtk ui
 
-channel discovery / enumeration
-note exit condition/reconnection details for backends
+Backend internals
+	- Backend properties API
+		- Streaming input vs Event input (ie Artnet/MIDI)
+		- Enumerable channels vs Freeform channels (ie Artnet/OSC)
+		- Discoverable channels
+	- Store bind/connect details for config reload
+
+Backend features
+	- OSC
+		- Bundle transmit
+		- data->fd elimination
+	- Lua
+		- Standard Library (fade, etc)
+		- Move to Lua 5.4
+		- Separate load/execute steps
+	- Visca
+		- Connection recovery
+	- Python
+		- Separate load/execute steps
+
+Backends roadmap
+	- http
+		-> vlc
+		-> vmix
+	- kinet
+	- atem
+	- tcl
+	- globalcache
+
+Documentation
+	- Indicate optional / required backend options
+	- Document exit condition/reconnection details
+
+CI & Distribution
+	- arm64 build
+	- debian
+	- brew
+
+Xref
+	- check gx7/notes/MIDIMonster

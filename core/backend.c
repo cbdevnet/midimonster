@@ -87,7 +87,10 @@ int backends_notify(size_t nev, channel** c, channel_value* v){
 			}
 		}
 
-		//TODO eliminate duplicates
+		/*
+		 * Do not eliminate duplicates here. There are legitimate uses for a channel occuring multiple times
+		 * in one loop iteration, e.g. stateful OSC layer selectors.
+		 */
 		DBGPF("Calling handler for instance %s with %" PRIsize_t " events", c[u]->instance->name, n - u);
 		rv |= c[u]->instance->backend->handle(c[u]->instance, n - u, c + u, v + u);
 	}

@@ -122,7 +122,11 @@ MM_API int mm_channel_event(channel* c, channel_value v){
 	}
 
 	//enqueue channel events
-	//FIXME this might lead to one channel being mentioned multiple times in an apply call
+	/*
+	 * This might lead to one channel being mentioned multiple times in an apply call.
+	 * That effect should not be eliminated as there are legitimate uses for one channel
+	 * being set multiple times in one core iteration (e.g. for stateful layer selection messages)
+	 */
 	memcpy(routing.events->channel + routing.events->n, routing.map[bucket][u].to, routing.map[bucket][u].destinations * sizeof(channel*));
 	for(p = 0; p < routing.map[bucket][u].destinations; p++){
 		routing.events->value[routing.events->n + p] = v;

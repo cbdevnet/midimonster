@@ -35,7 +35,13 @@ static void version(){
 static int usage(char* fn){
 	version();
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "\t%s <configfile>\n", fn);
+	fprintf(stderr, "\t%s [<options>] <configfile>\n", fn);
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "\t-v,--version  - show version\n");
+	fprintf(stderr, "\t-b <backend>  - override backend options (can be used multiple times)\n");
+	fprintf(stderr, "\t-i <instance> - override instance options (can be used multiple times)\n");
+	fprintf(stderr, "\nInstance/Backend options format:\n");
+	fprintf(stderr, "<instance/backend>.<option>=<value>\n");
 	return EXIT_FAILURE;
 }
 

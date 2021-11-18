@@ -40,6 +40,7 @@ static int usage(char* fn){
 	fprintf(stderr, "\t-v,--version  - show version\n");
 	fprintf(stderr, "\t-b <backend>  - override backend options (can be used multiple times)\n");
 	fprintf(stderr, "\t-i <instance> - override instance options (can be used multiple times)\n");
+	fprintf(stderr, "\t-h,--help     - show this usage info\n");
 	fprintf(stderr, "\nInstance/Backend options format:\n");
 	fprintf(stderr, "<instance/backend>.<option>=<value>\n");
 	return EXIT_FAILURE;
@@ -72,6 +73,10 @@ static int args_parse(int argc, char** argv, char** cfg_file){
 	for(u = 1; u < argc; u++){
 		if(!strcmp(argv[u], "-v") || !strcmp(argv[u], "--version")){
 			version();
+			return 1;
+		}
+		else if(!strcmp(argv[u], "-h") || !strcmp(argv[u], "--help")){
+			usage(argv[0]);
 			return 1;
 		}
 		else if(!strcmp(argv[u], "-i")){

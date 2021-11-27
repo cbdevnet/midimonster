@@ -16,6 +16,8 @@ static int artnet_shutdown(size_t n, instance** inst);
 
 #define ARTNET_PORT "6454"
 #define ARTNET_VERSION 14
+#define ARTNET_ESTA_MANUFACTURER 0x4653 //"FS" as registered with ESTA
+#define ARTNET_OEM 0x2B93 //as registered with artistic license
 #define ARTNET_RECV_BUF 4096
 
 #define ARTNET_KEEPALIVE_INTERVAL 1000
@@ -70,6 +72,7 @@ typedef struct /*_artnet_fd*/ {
 	int fd;
 	size_t output_instances;
 	artnet_output_universe* output_instance;
+	struct sockaddr_storage announce_addr; //used for pollreplies if ss_family == AF_INET, port is always valid
 } artnet_descriptor;
 
 #pragma pack(push, 1)
@@ -79,7 +82,7 @@ typedef struct /*_artnet_hdr*/ {
 	uint16_t version;
 } artnet_hdr;
 
-typedef struct /*_artnet_pkt*/ {
+typedef struct /*_artnet_dmx*/ {
 	uint8_t magic[8];
 	uint16_t opcode;
 	uint16_t version;
@@ -89,9 +92,53 @@ typedef struct /*_artnet_pkt*/ {
 	uint8_t net;
 	uint16_t length;
 	uint8_t data[512];
-} artnet_pkt;
+} artnet_dmx;
+
+typedef struct /*_artnet_poll*/ {
+	uint8_t magic[8];
+	uint16_t opcode;
+	uint16_t version;
+	uint8_t flags;
+	uint8_t priority;
+} artnet_poll;
+
+typedef struct /*_artnet_poll_reply*/ {
+	uint8_t magic[8];
+	uint16_t opcode; //little-endian
+	uint8_t ip4[4]; //stop including l2/3 addresses in the payload, just use the sender address ffs
+	uint16_t port; //little-endian, who does that?
+	uint16_t firmware; //big-endian
+	uint16_t port_address; //big-endian
+	uint16_t oem; //big-endian
+	uint8_t bios_version;
+	uint8_t status;
+	uint16_t manufacturer; //little-endian
+	uint8_t shortname[18];
+	uint8_t longname[64];
+	uint8_t report[64];
+	uint16_t ports; //big-endian
+	uint8_t port_types[4]; //only use the first member, we report every universe in it's own reply
+	uint8_t port_in[4];
+	uint8_t port_out[4];
+	uint8_t subaddr_in[4];
+	uint8_t subaddr_out[4];
+	uint8_t video; //deprecated
+	uint8_t macro; //deprecatd
+	uint8_t remote; //deprecated
+	uint8_t spare[3];
+	uint8_t style;
+	uint8_t mac[6]; //come on
+	uint8_t parent_ip[4]; //COME ON
+	uint8_t parent_index; //i don't even know
+	uint8_t status2;
+	uint8_t port_out_b[4];
+	uint8_t status3;
+	uint8_t spare2[21];
+} artnet_poll_reply;
 #pragma pack(pop)
 
 enum artnet_pkt_opcode {
+	OpPoll = 0x0020,
+	OpPollReply = 0x0021,
 	OpDmx = 0x0050
 };

@@ -19,8 +19,9 @@ static struct {
 	0
 };
 
-static int artnet_listener(char* host, char* port){
+static int artnet_listener(char* host, char* port, struct sockaddr_storage* announce){
 	int fd;
+	char announce_addr[INET_ADDRSTRLEN];
 	if(global_cfg.fds >= MAX_FDS){
 		LOG("Backend socket limit reached");
 		return -1;
@@ -40,10 +41,25 @@ static int artnet_listener(char* host, char* port){
 		return -1;
 	}
 
-	LOGPF("Socket %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
+	if(announce->ss_family != AF_INET){
+		LOGPF("Socket %" PRIsize_t " bound to %s port %s", global_cfg.fds, host, port);
+	}
+	else{
+		mmbackend_sockaddr_ntop((struct sockaddr*) announce, announce_addr, sizeof(announce_addr));
+		LOGPF("Socket %" PRIsize_t " bound to %s port %s, announced as %s",
+				global_cfg.fds, host, port, announce_addr);
+	}
+
+	//set announce port if no address is set
+	//this is used for artpollreply frames
+	if(!((struct sockaddr_in*) announce)->sin_port){
+		((struct sockaddr_in*) announce)->sin_port = htobe16(strtoul(port, NULL, 0));
+	}
+
 	global_cfg.fd[global_cfg.fds].fd = fd;
 	global_cfg.fd[global_cfg.fds].output_instances = 0;
 	global_cfg.fd[global_cfg.fds].output_instance = NULL;
+	memcpy(&global_cfg.fd[global_cfg.fds].announce_addr, announce, sizeof(global_cfg.fd[global_cfg.fds].announce_addr));
 	global_cfg.fds++;
 	return 0;
 }
@@ -84,6 +100,7 @@ static uint32_t artnet_interval(){
 
 static int artnet_configure(char* option, char* value){
 	char* host = NULL, *port = NULL, *fd_opts = NULL;
+	struct sockaddr_storage announce = {0};
 	if(!strcmp(option, "net")){
 		//configure default net
 		global_cfg.default_net = strtoul(value, NULL, 0);
@@ -97,7 +114,17 @@ static int artnet_configure(char* option, char* value){
 			return 1;
 		}
 
-		if(artnet_listener(host, (port ? port : ARTNET_PORT))){
+		if(fd_opts){
+			DBGPF("Parsing fd options %s", fd_opts);
+			//as there is currently only one additional option, parse only for that
+			if(!strncmp(fd_opts, "announce=", 9)){
+				if(mmbackend_parse_sockaddr(fd_opts + 9, port ? port : ARTNET_PORT, &announce, NULL)){
+					return 1;
+				}
+			}
+		}
+
+		if(artnet_listener(host, (port ? port : ARTNET_PORT), &announce)){
 			LOGPF("Failed to bind socket: %s", value);
 			return 1;
 		}
@@ -230,7 +257,7 @@ static int artnet_transmit(instance* inst, artnet_output_universe* output){
 	artnet_instance_data* data = (artnet_instance_data*) inst->impl;
 
 	//build output frame
-	artnet_pkt frame = {
+	artnet_dmx frame = {
 		.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
 		.opcode = htobe16(OpDmx),
 		.version = htobe16(ARTNET_VERSION),
@@ -323,7 +350,7 @@ static int artnet_set(instance* inst, size_t num, channel** c, channel_value* v)
 	return 0;
 }
 
-static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
+static inline int artnet_process_dmx(instance* inst, artnet_dmx* frame){
 	size_t p, max_mark = 0;
 	uint16_t wide_val = 0;
 	channel* chan = NULL;
@@ -381,17 +408,97 @@ static inline int artnet_process_frame(instance* inst, artnet_pkt* frame){
 	return 0;
 }
 
-static int artnet_handle(size_t num, managed_fd* fds){
-	size_t u, c;
-	uint64_t timestamp = mm_timestamp();
-	uint32_t synthesize_delta = 0;
-	ssize_t bytes_read;
-	char recv_buf[ARTNET_RECV_BUF];
+static int artnet_process_poll(uint8_t fd, struct sockaddr* source, socklen_t source_len){
+	size_t n = 0, u, i = 1;
+	instance** instances = NULL;
+	artnet_instance_data* data = NULL;
+	struct sockaddr_in* announce = (struct sockaddr_in*) &(global_cfg.fd[fd].announce_addr);
 	artnet_instance_id inst_id = {
 		.label = 0
 	};
+	artnet_poll_reply frame = {
+		.magic = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00},
+		.opcode = htobe16(OpPollReply),
+		.oem = htobe16(ARTNET_OEM),
+		.status = 0xD0, //indicators normal, address set by frontpanel
+		.manufacturer = htole16(ARTNET_ESTA_MANUFACTURER),
+		.longname = "MIDIMonster - ",
+		.ports = htobe16(1),
+		.video = 0x01, //deprecated, but mark as playing ethernet data
+		.status2 = 0x08, //supports 15bit port address
+		.port_out_b = {0xC0} //no rdm, delta output
+	};
+
+	//for some stupid reason, the standard insists on including the peer address not once
+	//but TWICE in the PollReply frame (instead of just using the sender address).
+	//it also completely ignores the existence of anything other than ipv4.
+	if(announce->sin_family == AF_INET){
+		memcpy(frame.ip4, &(announce->sin_addr.s_addr), 4);
+		memcpy(frame.parent_ip, &(announce->sin_addr.s_addr), 4);
+	}
+	//the announce port is always valid
+	frame.port = htole16(be16toh(announce->sin_port));
+
+	//prepare listing of all instances on this socket
+	if(mm_backend_instances(BACKEND_NAME, &n, &instances)){
+		LOG("Failed to query backend instances");
+		return 1;
+	}
+
+	for(u = 0; u < n; u++){
+		inst_id.label = instances[u]->ident;
+		if(inst_id.fields.fd_index == fd){
+			data = (artnet_instance_data*) instances[u]->impl;
+			DBGPF("Poll reply %" PRIsize_t " for socket %d: Instance %s net %d universe %d",
+					i, fd, instances[u]->name, inst_id.fields.net, inst_id.fields.uni);
+
+			frame.parent_index = i;
+			frame.port_address = htobe16(((inst_id.fields.net & 0x7F) << 8) | (inst_id.fields.uni >> 4));
+			//we can always do output (as seen by the artnet spec)
+			frame.port_types[0] = 0x80; //output from artnet network enabled
+			frame.subaddr_out[0] = inst_id.fields.uni & 0x0F;
+
+			//data output status as seen from artnet, ie. midimonster input status
+			frame.port_out[0] = data->last_input ? 0x82 /*transmitting, ltp*/ : 0x02 /*ltp*/;
+
+			//default artnet input (ie. midimonster output) state
+			frame.port_in[0] = 0x08 /*input disabled*/;
+
+			//if this instance is enabled for output (input in artnet spec terminology), announce that
+			if(data->dest_len){
+				frame.port_types[0] |= 0x40; //input to artnet network enabled
+				frame.subaddr_in[0] = inst_id.fields.uni & 0x0F;
+				frame.port_in[0] = 0x80 /*receiving - well, transmitting*/;
+			}
+
+			strncpy((char*) frame.shortname, instances[u]->name, sizeof(frame.shortname) - 1);
+			strncpy((char*) frame.longname + 14, instances[u]->name, sizeof(frame.longname) - 15);
+
+			//the most recent spec document says to always send ArtPollReply frames to the directed broadcast address, while earlier standards just unicast it to the sender
+			//we just do the latter because it is easier (and IMO makes more sense)
+			if(sendto(global_cfg.fd[fd].fd, (uint8_t*) &frame, sizeof(frame), 0, source, source_len) < 0){
+				#ifdef _WIN32
+				if(WSAGetLastError() != WSAEWOULDBLOCK){
+				#else
+				if(errno != EAGAIN){
+				#endif
+					LOGPF("Failed to send poll reply for instance %s: %s", instances[u]->name, mmbackend_socket_strerror(errno));
+					return 1;
+				}
+			}
+			i++;
+		}
+	}
+
+	free(instances);
+	return 0;
+}
+
+static int artnet_maintenance(){
+	size_t u, c;
+	uint64_t timestamp = mm_timestamp();
+	uint32_t synthesize_delta = 0;
 	instance* inst = NULL;
-	artnet_pkt* frame = (artnet_pkt*) recv_buf;
 
 	//transmit keepalive & synthesized frames
 	global_cfg.next_frame = 0;
@@ -414,22 +521,46 @@ static int artnet_handle(size_t num, managed_fd* fds){
 			}
 		}
 	}
+	return 0;
+}
+
+static int artnet_handle(size_t num, managed_fd* fds){
+	size_t u;
+	struct sockaddr_storage peer_addr;
+	socklen_t peer_len = sizeof(peer_addr);
+	ssize_t bytes_read;
+	char recv_buf[ARTNET_RECV_BUF];
+	artnet_instance_id inst_id = {
+		.label = 0
+	};
+	instance* inst = NULL;
+	artnet_dmx* frame = (artnet_dmx*) recv_buf;
+
+	if(artnet_maintenance()){
+		return 1;
+	}
 
 	for(u = 0; u < num; u++){
 		do{
-			bytes_read = recv(fds[u].fd, recv_buf, sizeof(recv_buf), 0);
-			if(bytes_read > 0 && bytes_read > sizeof(artnet_hdr)){
-				if(!memcmp(frame->magic, "Art-Net\0", 8) && be16toh(frame->opcode) == OpDmx){
+			bytes_read = recvfrom(fds[u].fd, recv_buf, sizeof(recv_buf), 0, (struct sockaddr*) &peer_addr, &peer_len);
+			if(bytes_read > 0 && bytes_read > sizeof(artnet_hdr) && !memcmp(frame->magic, "Art-Net\0", 8)){
+				//DBGPF("Frame with opcode %04X, size %" PRIsize_t " on socket %" PRIu64, be16toh(frame->opcode), bytes_read, ((uint64_t) fds[u].impl) & 0xFF);
+				if(be16toh(frame->opcode) == OpDmx && bytes_read >= (sizeof(artnet_dmx) - 512)){
 					//find matching instance
 					inst_id.fields.fd_index = ((uint64_t) fds[u].impl) & 0xFF;
 					inst_id.fields.net = frame->net;
 					inst_id.fields.uni = frame->universe;
 					inst = mm_instance_find(BACKEND_NAME, inst_id.label);
-					if(inst && artnet_process_frame(inst, frame)){
-						LOG("Failed to process frame");
+					if(inst && artnet_process_dmx(inst, frame)){
+						LOG("Failed to process DMX frame");
 					}
 					else if(!inst && global_cfg.detect > 1){
 						LOGPF("Received data for unconfigured universe %d (net %d) on socket %" PRIu64, frame->universe, frame->net, (((uint64_t) fds[u].impl) & 0xFF));
+					}
+				}
+				else if(be16toh(frame->opcode) == OpPoll && bytes_read >= sizeof(artnet_poll)){
+					if(artnet_process_poll(((uint64_t) fds[u].impl) & 0xFF, (struct sockaddr*) &peer_addr, peer_len)){
+						LOG("Failed to process discovery frame");
 					}
 				}
 			}

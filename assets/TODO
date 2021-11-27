@@ -18,6 +18,8 @@ Core roadmap
 		- debounce
 		- toggle
 	- libmmbackend: interface bind
+		- When binding an interface instead of an address, multicast and interface addressing should work naturally
+			-> ArtNet ArtPoll handling
 	- gtk ui
 
 Backend internals

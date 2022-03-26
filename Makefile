@@ -101,7 +101,7 @@ install:
 	install -m 0644 configs/* "$(DESTDIR)$(EXAMPLES)"
 ifdef DEFAULT_CFG
 # Only install the default configuration if it is not already present to avoid overwriting it
-ifeq (,$(wildcard $(DEFAULT_CFG)))
+ifeq (,$(wildcard $(DESTDIR)$(DEFAULT_CFG)))
 	install -Dm 0644 monster.cfg "$(DESTDIR)$(DEFAULT_CFG)"
 endif
 endif

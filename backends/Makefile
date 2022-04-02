@@ -18,11 +18,11 @@ SYSTEM := $(shell uname -s)
 
 # Generate debug symbols unless overridden
 CFLAGS ?= -g
-CPPFLAGS ?= -g
+CXXFLAGS ?= -g
 
 # All backends are shared libraries
 CFLAGS += -fPIC -I../ -Wall -Wpedantic
-CPPFLAGS += -fPIC -I../
+CXXFLAGS += -fPIC -I../
 LDFLAGS += -shared
 
 # Build Linux backends if possible
@@ -82,7 +82,7 @@ midi.so: LDLIBS = -lasound
 evdev.so: CFLAGS += $(shell pkg-config --cflags libevdev || echo "-DBUILD_ERROR=\"Missing pkg-config data for libevdev\"")
 evdev.so: LDLIBS = $(shell pkg-config --libs libevdev || echo "-DBUILD_ERROR=\"Missing pkg-config data for libevdev\"")
 ola.so: LDLIBS = -lola
-ola.so: CPPFLAGS += -Wno-write-strings
+ola.so: CXXFLAGS += -std=c++11 -Wno-write-strings
 
 # The pkg-config name for liblua5.3 is subject to discussion. I prefer 'lua5.3' (which works on Debian and OSX),
 # but Arch requires 'lua53' which works on Debian, too, but breaks on OSX.
@@ -108,7 +108,7 @@ python.dll: LDLIBS += -L../ -lpython3
 	$(CC) $(CFLAGS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
 
 %.so :: %.cpp %.h
-	$(CXX) $(CPPFLAGS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $< $(ADDITIONAL_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
 
 # This is the actual first named target, and thus the default
 all: $(BACKEND_LIB) $(BACKENDS)

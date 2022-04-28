@@ -102,7 +102,8 @@ int plugins_load(char* path){
 		LOG("Failed to allocate memory");
 		return -1;
 	}
-	snprintf(search_expression, strlen(path) + strlen("*.dll"), "%s*.dll", path);
+	snprintf(search_expression, strlen(path) + strlen("*.dll") + 1, "%s*.dll", path);
+	DBGPF("FindFirstFile search expression: %s", search_expression);
 
 	WIN32_FIND_DATA result;
 	HANDLE hSearch = FindFirstFile(search_expression, &result);

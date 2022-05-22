@@ -79,7 +79,7 @@ Input devices may synchronize logically connected event types (for example, X an
 events. The MIDIMonster also generates these events after processing channel events, but may not keep the original
 event grouping.
 
-`EV_KEY` key-down events are sent for normalized channel values over `0.9`.
+`EV_KEY` key-down events are sent for normalized channel values over `0.5`.
 
 Extended event type values such as `EV_LED`, `EV_SND`, etc are recognized in the MIDIMonster configuration file
 but may or may not work with the internal channel mapping and normalization code.

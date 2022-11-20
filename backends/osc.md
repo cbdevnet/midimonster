@@ -30,7 +30,7 @@ This is done by specifying *patterns* in the instance configuration using an ass
 ```
 
 The pattern will be matched only against the local part (that is, the path excluding any configured instance root).
-Patterns may contain the following expressions (conforming to the [OSC pattern matching specification](http://opensoundcontrol.org/spec-1_0)):
+Patterns may contain the following expressions (conforming to the [OSC pattern matching specification](https://opensoundcontrol.stanford.edu/spec-1_0.html)):
 * `?` matches any single legal character
 * `*` matches zero or more legal characters
 * A comma-separated list of strings inside curly braces `{}` matches any of the strings

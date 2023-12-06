@@ -247,8 +247,7 @@ static int midi_set(instance* inst, size_t num, channel** c, channel_value* v){
 				}
 				break;
 			case pitchbend:
-				//TODO check whether this actually works that well
-				midi_tx(data->port, ident.fields.type, ident.fields.channel, ident.fields.control, (v[u].normalised * 16383.0) - 8192);
+				midi_tx(data->port, ident.fields.type, ident.fields.channel, ident.fields.control, (int16_t) (v[u].normalised * 16383.0) - 8192);
 				break;
 			default:
 				midi_tx(data->port, ident.fields.type, ident.fields.channel, ident.fields.control, v[u].normalised * 127.0);

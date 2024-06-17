@@ -314,7 +314,7 @@ static int sacn_transmit(instance* inst, sacn_output_universe* output){
 			.sequence = data->data.last_seq++,
 			.options = 0,
 			.universe = htobe16(data->uni),
-			.flags = htobe16(0x7000 | 0x0205),
+			.flags = htobe16(0x7000 | 0x020b),
 			.vector = DMP_SET_PROPERTY,
 			.format = 0xA1,
 			.startcode_offset = 0,

@@ -478,7 +478,7 @@ static int evdev_set(instance* inst, size_t num, channel** c, channel_value* v) 
 			case EV_KEY:
 			case EV_SW:
 			default:
-				value = (v[evt].normalised > 0.9) ? 1 : 0;
+				value = (v[evt].normalised > 0.5) ? 1 : 0;
 				break;
 		}
 
